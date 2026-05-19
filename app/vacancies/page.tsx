@@ -4,6 +4,7 @@ import { VacanciesView } from "@/components/VacanciesView";
 import { getAllVacancies } from "@/app/actions/vacancies";
 import { db } from "@/lib/db/client";
 import { vacancyStages, applications, users } from "@/lib/db/schema";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 export default async function VacanciesPage() {
   const [vacancyRows, stageRows, appRows, userRows] = await Promise.all([
@@ -14,11 +15,13 @@ export default async function VacanciesPage() {
   ]);
 
   return (
-    <VacanciesView
-      vacancies={vacancyRows}
-      stages={stageRows}
-      applications={appRows}
-      users={userRows}
-    />
+    <ProtectedRoute>
+      <VacanciesView
+        vacancies={vacancyRows}
+        stages={stageRows}
+        applications={appRows}
+        users={userRows}
+      />
+    </ProtectedRoute>
   );
 }
