@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { getSession, toResponse, HttpError } from "@/lib/auth/session";
 import { hashPassword, verifyPassword, EMAIL_SCHEMA, PASSWORD_SCHEMA } from "@/lib/auth/password";
 import { audit } from "@/lib/auth/audit";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,6 @@ export async function GET(
       phone: user.phone,
       isActive: user.isActive,
       hasAccess: user.hasAccess,
-      adminPassword: user.adminPassword,
       roles,
       createdAt: user.createdAt,
     });
@@ -74,7 +74,7 @@ export async function PUT(
     }
 
     const parsed = PutBody.safeParse(await req.json());
-    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
     const { fullName, avatarUrl, phone, oldPassword, password, isActive, email } = parsed.data;
 
     const [user] = await db.select().from(users).where(eq(users.id, id));

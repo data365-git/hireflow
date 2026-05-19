@@ -3,13 +3,16 @@ import { db } from "@/lib/db/client";
 import {
   applications,
   candidates,
+  vacancies,
   vacancyStages,
   screeningQuestions,
   screeningAnswers,
 } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { getCurrentDataMode } from "@/lib/data-mode";
 
 export async function exportVacancyApplicationsCSV(vacancyId: string): Promise<string> {
+  const isDemo = await getCurrentDataMode();
   const rows = await db
     .select({
       app: applications,
@@ -17,7 +20,8 @@ export async function exportVacancyApplicationsCSV(vacancyId: string): Promise<s
       stage: vacancyStages,
     })
     .from(applications)
-    .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .where(eq(applications.vacancyId, vacancyId));
 

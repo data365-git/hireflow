@@ -19,13 +19,14 @@ export async function getApplicationsForVacancy(vacancyId: string) {
 }
 
 export async function getApplicationFull(applicationId: string) {
+  const isDemo = await getCurrentDataMode();
   const rows = await db
     .select({
       application: applications,
       candidate: candidates,
     })
     .from(applications)
-    .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
     .where(eq(applications.id, applicationId));
 
   if (!rows[0]) return null;

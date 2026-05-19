@@ -19,7 +19,6 @@ export const users = pgTable("users", {
   // Auth columns — NOT NULL enforced in migration 0003 after backfill
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  adminPassword: text("admin_password"),
   fullName: text("full_name"),
   avatarUrl: text("avatar_url"),
   phone: text("phone"),

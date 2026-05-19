@@ -1,7 +1,7 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { candidates, applications, vacancies, telegramMessages } from "@/lib/db/schema";
-import { eq, desc, isNotNull, and } from "drizzle-orm";
+import { eq, desc, isNotNull, and, inArray } from "drizzle-orm";
 import { getCurrentDataMode } from "@/lib/data-mode";
 
 export async function listLeads() {
@@ -11,29 +11,44 @@ export async function listLeads() {
     .from(candidates)
     .where(and(isNotNull(candidates.telegramUserId), eq(candidates.isDemo, isDemo)));
 
-  const results = [];
-  for (const c of allCandidates) {
-    const latestMsg = await db
-      .select()
-      .from(telegramMessages)
-      .where(eq(telegramMessages.candidateId, c.id))
-      .orderBy(desc(telegramMessages.sentAt))
-      .limit(1);
+  if (allCandidates.length === 0) return [];
 
-    const latestApp = await db
-      .select({ app: applications, vacancy: vacancies })
-      .from(applications)
-      .innerJoin(vacancies, eq(applications.vacancyId, vacancies.id))
-      .where(eq(applications.candidateId, c.id))
-      .orderBy(desc(applications.appliedAt))
-      .limit(1);
+  const candidateIds = allCandidates.map((c) => c.id);
 
-    results.push({
-      candidate: c,
-      lastMessageAt: latestMsg[0]?.sentAt ?? null,
-      latestApplication: latestApp[0] ?? null,
-    });
+  // Fetch all messages for these candidates in one query (ordered desc to get latest first)
+  const allMessages = await db
+    .select()
+    .from(telegramMessages)
+    .where(inArray(telegramMessages.candidateId, candidateIds))
+    .orderBy(desc(telegramMessages.sentAt));
+
+  // Fetch all applications for these candidates — only for demo-mode-matching vacancies
+  const allApps = await db
+    .select({ app: applications, vacancy: vacancies })
+    .from(applications)
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .where(inArray(applications.candidateId, candidateIds))
+    .orderBy(desc(applications.appliedAt));
+
+  // Build per-candidate maps (first occurrence = latest due to orderBy desc)
+  const latestMsgMap = new Map<string, Date | null>();
+  for (const m of allMessages) {
+    if (!latestMsgMap.has(m.candidateId)) {
+      latestMsgMap.set(m.candidateId, m.sentAt);
+    }
   }
+  const latestAppMap = new Map<string, typeof allApps[0] | null>();
+  for (const a of allApps) {
+    if (!latestAppMap.has(a.app.candidateId)) {
+      latestAppMap.set(a.app.candidateId, a);
+    }
+  }
+
+  const results = allCandidates.map((c) => ({
+    candidate: c,
+    lastMessageAt: latestMsgMap.get(c.id) ?? null,
+    latestApplication: latestAppMap.get(c.id) ?? null,
+  }));
 
   results.sort((a, b) => {
     const aT = a.lastMessageAt?.getTime() ?? 0;

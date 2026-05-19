@@ -37,6 +37,7 @@ export async function createApplicationFromBot(args: {
       .where(eq(candidates.id, candidateId));
   } else {
     candidateId = crypto.randomUUID();
+    // isDemo: false — Telegram bot always writes to Live data, never Demo
     await db.insert(candidates).values({
       id: candidateId,
       fullName: args.fullName,
@@ -152,6 +153,7 @@ export async function upsertCandidateFromTelegram(args: {
   }
 
   const candidateId = crypto.randomUUID();
+  // isDemo: false — Telegram bot always writes to Live data, never Demo
   await db.insert(candidates).values({
     id: candidateId,
     fullName: args.telegramFirstName,

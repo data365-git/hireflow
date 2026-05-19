@@ -1,17 +1,21 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { telegramMessages, applications, candidates } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { telegramMessages, applications, candidates, vacancies } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getCurrentDataMode } from "@/lib/data-mode";
 
 export async function sendMessageToCandidate(applicationId: string, text: string) {
   if (!text.trim()) return;
 
-  // 1. Get application → candidate → telegramUserId
+  const isDemo = await getCurrentDataMode();
+
+  // 1. Get application → candidate → telegramUserId, guarded by isDemo via vacancy join
   const rows = await db
     .select({ app: applications, cand: candidates })
     .from(applications)
-    .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
     .where(eq(applications.id, applicationId));
 
   const row = rows[0];

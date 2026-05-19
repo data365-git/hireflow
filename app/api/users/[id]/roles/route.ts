@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { toResponse, HttpError } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
 import { publish } from "@/lib/realtime/bus";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export async function PUT(
     const { id } = await params;
 
     const parsed = Body.safeParse(await req.json());
-    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
     const { roles: newRoles } = parsed.data;
 
     const [targetUser] = await db.select().from(users).where(eq(users.id, id));

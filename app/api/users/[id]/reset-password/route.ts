@@ -24,7 +24,7 @@ export async function POST(
     const temp = generateTempPassword();
 
     await db.update(users)
-      .set({ passwordHash: await hashPassword(temp), adminPassword: temp, updatedAt: new Date() })
+      .set({ passwordHash: await hashPassword(temp), updatedAt: new Date() })
       .where(eq(users.id, id));
 
     await db.delete(refreshTokens).where(eq(refreshTokens.userId, id));

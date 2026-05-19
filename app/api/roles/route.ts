@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { requirePermission } from "@/lib/auth/permissions";
 import { toResponse } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     const session = await requirePermission("settings", "write");
 
     const parsed = CreateBody.safeParse(await req.json());
-    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
     const { name, displayName, description, color } = parsed.data;
 
     const existing = await db.select().from(systemRoles).where(eq(systemRoles.name, name));

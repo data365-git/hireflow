@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { hashPassword, EMAIL_SCHEMA, PASSWORD_SCHEMA } from "@/lib/auth/password";
 import { audit } from "@/lib/auth/audit";
 import { toResponse } from "@/lib/auth/session";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,6 @@ export async function GET() {
       phone: u.phone,
       isActive: u.isActive,
       hasAccess: u.hasAccess,
-      adminPassword: u.adminPassword,
       roles: roleMap.get(u.id) ?? [],
       createdAt: u.createdAt,
     })));
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     const session = await requirePermission("settings", "write");
 
     const parsed = CreateBody.safeParse(await req.json());
-    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
     const { email, password, fullName, phone, role, isActive, hasAccess } = parsed.data;
 
     const existing = await db.select().from(users).where(eq(users.email, email));
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Password required when hasAccess=true" }, { status: 400 });
     } else {
       const valid = PASSWORD_SCHEMA.safeParse(password);
-      if (!valid.success) return Response.json({ error: valid.error.flatten() }, { status: 400 });
+      if (!valid.success) return Response.json({ error: zodMessage(valid.error) }, { status: 400 });
       pw = password;
     }
 
@@ -83,7 +83,6 @@ export async function POST(req: NextRequest) {
       role,
       email,
       passwordHash: await hashPassword(pw),
-      adminPassword: hasAccess ? pw : null,
       fullName,
       phone,
       isActive: isActive ?? true,

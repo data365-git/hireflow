@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { toResponse, HttpError } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
 import { publish } from "@/lib/realtime/bus";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +48,7 @@ export async function PUT(
     if (!role) throw new HttpError(404, "Role not found");
 
     const parsed = PutBody.safeParse(await req.json());
-    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
     const items = parsed.data;
 
     for (const item of items) {

@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { requirePermission } from "@/lib/auth/permissions";
 import { toResponse, HttpError } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function PATCH(
     }
 
     const parsed = Body.safeParse(await req.json());
-    if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
     const { hasAccess, reason } = parsed.data;
 
     const [targetUser] = await db.select().from(users).where(eq(users.id, id));

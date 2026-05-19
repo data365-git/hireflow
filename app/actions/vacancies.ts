@@ -1,7 +1,7 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, applications, users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getCurrentDataMode } from "@/lib/data-mode";
 
 export async function getAllVacancies() {
@@ -15,17 +15,25 @@ export async function getAllVacancies() {
 
 export async function getVacanciesPageData() {
   const isDemo = await getCurrentDataMode();
-  const [vacancyRows, stageRows, appRows, userRows] = await Promise.all([
+  const [vacancyRows, stageRows, userRows] = await Promise.all([
     db.select().from(vacancies).where(eq(vacancies.isDemo, isDemo)).orderBy(vacancies.createdAt),
     db.select().from(vacancyStages),
-    db.select().from(applications),
     db.select().from(users),
   ]);
+  const vacancyIds = vacancyRows.map((v) => v.id);
+  const appRows =
+    vacancyIds.length > 0
+      ? await db.select().from(applications).where(inArray(applications.vacancyId, vacancyIds))
+      : [];
   return { vacancies: vacancyRows, stages: stageRows, applications: appRows, users: userRows };
 }
 
 export async function getVacancyById(id: string) {
-  const rows = await db.select().from(vacancies).where(eq(vacancies.id, id));
+  const isDemo = await getCurrentDataMode();
+  const rows = await db
+    .select()
+    .from(vacancies)
+    .where(and(eq(vacancies.id, id), eq(vacancies.isDemo, isDemo)));
   return rows[0] ?? null;
 }
 

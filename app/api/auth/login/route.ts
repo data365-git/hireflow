@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword, EMAIL_SCHEMA } from "@/lib/auth/password"
 import { setAuthCookies } from "@/lib/auth/cookies";
 import { checkLoginRateLimit, recordLoginAttempt } from "@/lib/auth/rate-limit";
 import { audit } from "@/lib/auth/audit";
+import { zodMessage } from "@/lib/auth/zod-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429 });
 
   const parsed = Body.safeParse(await req.json());
-  if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
   const { email, password } = parsed.data;
 
   const [user] = await db.select().from(users).where(eq(users.email, email));

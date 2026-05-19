@@ -68,7 +68,6 @@ async function seed() {
     role: "admin",
     email,
     passwordHash: await hashPassword(password),
-    adminPassword: password,
     fullName: "Admin",
     isActive: true,
     hasAccess: true,

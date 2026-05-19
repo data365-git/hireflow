@@ -110,13 +110,12 @@ export function AddUserDialog({ open, onClose }: Props) {
         />
 
         <div>
-          <label className="block text-body-sm font-medium text-text mb-1">Role (optional)</label>
+          <label className="block text-body-sm font-medium text-text mb-1">Role</label>
           <select
             value={form.role}
             onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
             className="w-full rounded-lg border border-border px-3 py-2 text-body-sm bg-surface text-text outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           >
-            <option value="">— no role —</option>
             {roles.map((r) => (
               <option key={r.name} value={r.name}>
                 {r.displayName}
