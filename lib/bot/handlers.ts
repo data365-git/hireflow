@@ -28,7 +28,7 @@ export async function handleStart(ctx: Context) {
 }
 
 async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang) {
-  const rows = await db.select().from(vacancies).where(eq(vacancies.id, vacancyId));
+  const rows = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
   const vacancy = rows[0];
 
   if (!vacancy || vacancy.status !== "active") {
@@ -83,7 +83,7 @@ export async function handleCallbackQuery(ctx: Context) {
       const existingApp = await db.select().from(applications)
         .where(and(eq(applications.candidateId, existingCand[0].id), eq(applications.vacancyId, vacancyId)));
       if (existingApp[0]) {
-        const vacRow = await db.select().from(vacancies).where(eq(vacancies.id, vacancyId));
+        const vacRow = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
         return ctx.reply(tr(lang, "already_applied", { vacancy: vacRow[0]?.title ?? vacancyId }), { parse_mode: "Markdown" });
       }
     }
@@ -141,7 +141,7 @@ export async function handleCallbackQuery(ctx: Context) {
 // ---- /jobs ----
 export async function handleJobs(ctx: Context) {
   const lang = detectLang(ctx);
-  const activeVacancies = await db.select().from(vacancies).where(eq(vacancies.status, "active"));
+  const activeVacancies = await db.select().from(vacancies).where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
 
   if (!activeVacancies.length) {
     return ctx.reply(tr(lang, "no_jobs"), { parse_mode: "Markdown" });
@@ -173,7 +173,7 @@ export async function handleStatus(ctx: Context) {
     stage: vacancyStages,
   })
     .from(applications)
-    .innerJoin(vacancies, eq(applications.vacancyId, vacancies.id))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false)))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .where(eq(applications.candidateId, candRows[0].id));
 
@@ -432,7 +432,7 @@ async function askQuestion(
 }
 
 async function showReview(ctx: Context, vacancyId: string, data: Record<string, unknown>, lang: Lang) {
-  const vacRow = await db.select().from(vacancies).where(eq(vacancies.id, vacancyId));
+  const vacRow = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
   const vacancy = vacRow[0];
 
   const lines = [
@@ -493,7 +493,7 @@ async function handleSubmitConfirm(ctx: Context, lang: Lang) {
 
     await clearBotSession(telegramUserId);
 
-    const vacRow = await db.select().from(vacancies).where(eq(vacancies.id, session.vacancyId!));
+    const vacRow = await db.select().from(vacancies).where(and(eq(vacancies.id, session.vacancyId!), eq(vacancies.isDemo, false)));
 
     const id = appId ?? "unknown";
     await ctx.reply(

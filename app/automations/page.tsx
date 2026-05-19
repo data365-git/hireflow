@@ -32,11 +32,13 @@ export default function AutomationsPage() {
   const toggleAutomation = useStore((s) => s.toggleAutomation);
   const removeAutomation = useStore((s) => s.removeAutomation);
   const createAutomation = useStore((s) => s.createAutomation);
+  const updateAutomation = useStore((s) => s.updateAutomation);
 
   const [filterVacancyId, setFilterVacancyId] = useState<string>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const validationErrors = getValidationErrors();
   const canSave = validationErrors.length === 0;
@@ -75,16 +77,28 @@ export default function AutomationsPage() {
   function handleSave() {
     if (!canSave) return;
 
-    createAutomation(form.vacancyId, {
-      name: form.name.trim(),
-      isEnabled: true,
-      triggerType: form.triggerType,
-      triggerStageId: form.triggerType === "stage_entered" ? form.triggerStageId || undefined : undefined,
-      actionType: form.actionType,
-      actionStageId: form.actionType === "move_to_stage" ? form.actionStageId || undefined : undefined,
-      actionMessageText: form.actionType === "send_message" ? form.actionMessageText || undefined : undefined,
-    });
+    if (editingId) {
+      updateAutomation(editingId, {
+        name: form.name.trim(),
+        triggerType: form.triggerType,
+        triggerStageId: form.triggerType === "stage_entered" ? form.triggerStageId || undefined : undefined,
+        actionType: form.actionType,
+        actionStageId: form.actionType === "move_to_stage" ? form.actionStageId || undefined : undefined,
+        actionMessageText: form.actionType === "send_message" ? form.actionMessageText || undefined : undefined,
+      });
+    } else {
+      createAutomation(form.vacancyId, {
+        name: form.name.trim(),
+        isEnabled: true,
+        triggerType: form.triggerType,
+        triggerStageId: form.triggerType === "stage_entered" ? form.triggerStageId || undefined : undefined,
+        actionType: form.actionType,
+        actionStageId: form.actionType === "move_to_stage" ? form.actionStageId || undefined : undefined,
+        actionMessageText: form.actionType === "send_message" ? form.actionMessageText || undefined : undefined,
+      });
+    }
 
+    setEditingId(null);
     setForm(EMPTY_FORM);
     setFormOpen(false);
   }
@@ -106,7 +120,7 @@ export default function AutomationsPage() {
     }
 
     if (form.vacancyId) {
-      const duplicate = automations.some((rule) => (
+      const duplicate = automations.filter((rule) => rule.id !== editingId).some((rule) => (
         rule.vacancyId === form.vacancyId &&
         rule.triggerType === form.triggerType &&
         (rule.triggerStageId ?? "") === (form.triggerType === "stage_entered" ? form.triggerStageId : "") &&
@@ -200,6 +214,19 @@ export default function AutomationsPage() {
                       description={buildDescription(rule.id)}
                       vacancyName={vacancy?.title ?? ""}
                       onToggle={() => toggleAutomation(rule.id)}
+                      onEdit={() => {
+                        setForm({
+                          name: rule.name,
+                          vacancyId: rule.vacancyId,
+                          triggerType: rule.triggerType,
+                          triggerStageId: rule.triggerStageId ?? "",
+                          actionType: rule.actionType,
+                          actionStageId: rule.actionStageId ?? "",
+                          actionMessageText: rule.actionMessageText ?? "",
+                        });
+                        setEditingId(rule.id);
+                        setFormOpen(true);
+                      }}
                       onRemove={() => setConfirmRemoveId(rule.id)}
                     />
                   ))}
@@ -221,7 +248,7 @@ export default function AutomationsPage() {
           </button>
         ) : (
           <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-h3 text-text">New automation rule</h2>
+            <h2 className="text-h3 text-text">{editingId ? "Edit automation rule" : "New automation rule"}</h2>
 
             {/* Rule name */}
             <div className="space-y-1">
@@ -240,6 +267,7 @@ export default function AutomationsPage() {
               <label className="text-body-sm font-medium text-text">Vacancy</label>
               <select
                 value={form.vacancyId}
+                disabled={!!editingId}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
@@ -248,7 +276,7 @@ export default function AutomationsPage() {
                     actionStageId: "",
                   }))
                 }
-                className="w-full h-9 px-3 rounded-lg border border-border bg-surface-2 text-body-sm text-text focus:outline-none focus:border-primary"
+                className="w-full h-9 px-3 rounded-lg border border-border bg-surface-2 text-body-sm text-text focus:outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="">Select vacancy…</option>
                 {vacancies.map((v) => (
@@ -369,10 +397,11 @@ export default function AutomationsPage() {
                 disabled={!canSave}
                 className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-hover transition-colors"
               >
-                Save rule
+                {editingId ? "Save changes" : "Save rule"}
               </button>
               <button
                 onClick={() => {
+                  setEditingId(null);
                   setForm(EMPTY_FORM);
                   setFormOpen(false);
                 }}
@@ -396,14 +425,20 @@ type RuleCardProps = {
     name: string;
     isEnabled: boolean;
     vacancyId: string;
+    triggerType: string;
+    triggerStageId?: string;
+    actionType: string;
+    actionStageId?: string;
+    actionMessageText?: string;
   };
   description: string;
   vacancyName: string;
   onToggle: () => void;
+  onEdit: () => void;
   onRemove: () => void;
 };
 
-function RuleCard({ rule, description, vacancyName, onToggle, onRemove }: RuleCardProps) {
+function RuleCard({ rule, description, vacancyName, onToggle, onEdit, onRemove }: RuleCardProps) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -439,16 +474,23 @@ function RuleCard({ rule, description, vacancyName, onToggle, onRemove }: RuleCa
         <p className="text-body-sm text-subtle mt-0.5 truncate">{description}</p>
       </div>
 
-      {/* Right: remove button (visible on hover) */}
-      <button
-        onClick={onRemove}
-        aria-label="Remove rule"
-        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-subtle hover:text-danger hover:bg-danger-soft transition-all ${
-          hovered ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-      >
-        ✕
-      </button>
+      {/* Right: edit + remove buttons (visible on hover) */}
+      <div className={`shrink-0 flex items-center gap-1 transition-all ${hovered ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <button
+          onClick={onEdit}
+          aria-label="Edit rule"
+          className="w-7 h-7 flex items-center justify-center rounded-md text-subtle hover:text-primary hover:bg-accent-soft transition-colors"
+        >
+          ✎
+        </button>
+        <button
+          onClick={onRemove}
+          aria-label="Remove rule"
+          className="w-7 h-7 flex items-center justify-center rounded-md text-subtle hover:text-danger hover:bg-danger-soft transition-colors"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }

@@ -61,6 +61,7 @@ type Store = {
   addSource: (vacancyId: UUID, name: string) => void;
   removeSource: (sourceId: UUID) => void;
   createAutomation: (vacancyId: UUID, rule: Omit<AutomationRule, "id" | "vacancyId" | "createdAt">) => void;
+  updateAutomation: (id: UUID, patch: Partial<Omit<AutomationRule, "id" | "vacancyId" | "createdAt">>) => void;
   removeAutomation: (id: UUID) => void;
   toggleAutomation: (id: UUID) => void;
   createTestTask: (vacancyId: UUID, task: Omit<TestTask, "id" | "vacancyId">) => void;
@@ -654,6 +655,12 @@ export const useStore = create<Store>((set, get) => ({
       actionMessageText,
     };
     set((s) => ({ automations: [...s.automations, newRule] }));
+  },
+
+  updateAutomation(id, patch) {
+    set((s) => ({
+      automations: s.automations.map((a) => a.id === id ? { ...a, ...patch } : a),
+    }));
   },
 
   removeAutomation(id) {
