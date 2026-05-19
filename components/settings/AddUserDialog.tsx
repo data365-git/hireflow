@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
+import { PASSWORD_SCHEMA } from "@/lib/auth/password";
 
 interface Role {
   name: string;
@@ -24,6 +25,7 @@ export function AddUserDialog({ open, onClose }: Props) {
     hasAccess: true,
   });
   const [error, setError] = useState<string | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -37,12 +39,20 @@ export function AddUserDialog({ open, onClose }: Props) {
   const handleClose = () => {
     setForm({ email: "", password: "", fullName: "", phone: "", role: "", hasAccess: true });
     setError(null);
+    setPwError(null);
     onClose();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (form.hasAccess) {
+      const pwResult = PASSWORD_SCHEMA.safeParse(form.password);
+      if (!pwResult.success) {
+        setPwError(pwResult.error.issues[0].message);
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = {
@@ -92,14 +102,31 @@ export function AddUserDialog({ open, onClose }: Props) {
           placeholder="jane@example.com"
         />
         {form.hasAccess && (
-          <Input
-            label="Password"
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            required
-            placeholder="Min. 8 characters"
-          />
+          <>
+            <Input
+              label="Password"
+              type="password"
+              value={form.password}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, password: e.target.value }));
+                if (pwError) {
+                  const result = PASSWORD_SCHEMA.safeParse(e.target.value);
+                  setPwError(result.success ? null : result.error.issues[0].message);
+                }
+              }}
+              onBlur={() => {
+                if (!form.password) return;
+                const result = PASSWORD_SCHEMA.safeParse(form.password);
+                setPwError(result.success ? null : result.error.issues[0].message);
+              }}
+              required
+              placeholder="Min. 8 characters"
+            />
+            <p className="text-xs text-muted -mt-2">
+              Min 8 characters · uppercase · lowercase · number
+            </p>
+            {pwError && <p className="text-xs text-danger -mt-2">{pwError}</p>}
+          </>
         )}
         <Input
           label="Phone (optional)"

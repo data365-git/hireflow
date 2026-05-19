@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { PASSWORD_SCHEMA } from "@/lib/auth/password";
 
 export function ProfileForm() {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ export function ProfileForm() {
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -89,10 +91,25 @@ export function ProfileForm() {
             <input
               type="password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (pwError) {
+                  const result = PASSWORD_SCHEMA.safeParse(e.target.value);
+                  setPwError(result.success ? null : result.error.issues[0].message);
+                }
+              }}
+              onBlur={() => {
+                if (!newPassword) return;
+                const result = PASSWORD_SCHEMA.safeParse(newPassword);
+                setPwError(result.success ? null : result.error.issues[0].message);
+              }}
               required
               className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-primary"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Min 8 characters · uppercase · lowercase · number
+            </p>
+            {pwError && <p className="text-xs text-red-500 mt-1">{pwError}</p>}
           </div>
           <div>
             <label className="text-xs text-gray-500 block mb-1">Confirm new password</label>

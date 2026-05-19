@@ -1,12 +1,11 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
-export const PASSWORD_SCHEMA = z
-  .string()
-  .min(8, "min 8 chars")
-  .regex(/[A-Z]/, "1 uppercase")
-  .regex(/[a-z]/, "1 lowercase")
-  .regex(/[0-9]/, "1 digit");
+export const PASSWORD_SCHEMA = z.string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number");
 
 export const EMAIL_SCHEMA = z.string().email().transform((s) => s.toLowerCase().trim());
 

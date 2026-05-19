@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState } from "react";
 
 type DataMode = "demo" | "real";
 const DataModeContext = createContext<{
@@ -7,19 +7,33 @@ const DataModeContext = createContext<{
   toggle: () => void;
 } | null>(null);
 
+function setCookie(mode: DataMode) {
+  document.cookie = `hireflow-data-mode=${mode}; path=/; max-age=31536000; SameSite=Lax`;
+}
+
+function readInitialMode(): DataMode {
+  if (typeof window === "undefined") return "real";
+  const saved = localStorage.getItem("hireflow-data-mode");
+  return saved === "demo" ? "demo" : "real";
+}
+
+function readInitialModeAndSyncCookie(): DataMode {
+  const m = readInitialMode();
+  if (typeof window !== "undefined") {
+    // Set cookie synchronously during initialization — before any child effects fire
+    setCookie(m);
+    localStorage.setItem("hireflow-data-mode", m);
+  }
+  return m;
+}
+
 export function DataModeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<DataMode>("real");
-  useEffect(() => {
-    const saved = localStorage.getItem("hireflow-data-mode") as DataMode | null;
-    if (saved === "demo" || saved === "real") {
-      setMode(saved);
-      document.cookie = `hireflow-data-mode=${saved}; path=/; max-age=31536000`;
-    }
-  }, []);
+  const [mode, setMode] = useState<DataMode>(readInitialModeAndSyncCookie);
+
   const toggle = () => setMode(prev => {
     const next = prev === "demo" ? "real" : "demo";
     localStorage.setItem("hireflow-data-mode", next);
-    document.cookie = `hireflow-data-mode=${next}; path=/; max-age=31536000`;
+    setCookie(next);
     return next;
   });
   return <DataModeContext.Provider value={{ mode, toggle }}>{children}</DataModeContext.Provider>;

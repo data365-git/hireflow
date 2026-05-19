@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useDataMode } from "@/context/DataModeContext";
 import { useAuth } from "@/context/AuthContext";
 
 export function DemoControls() {
+  const router = useRouter();
   const { mode, toggle } = useDataMode();
   const { user, hasPermission } = useAuth();
   const canReset = user?.isSuperadmin || hasPermission("settings", "write");
@@ -22,6 +24,7 @@ export function DemoControls() {
       });
       if (r.ok) {
         setResetStatus("done");
+        router.refresh();
       } else {
         setResetStatus("error");
       }
@@ -77,7 +80,7 @@ export function DemoControls() {
           </div>
 
           {resetStatus === "done" && (
-            <p className="text-sm text-green-600">Not implemented yet — endpoint will be wired later.</p>
+            <p className="text-sm text-green-600">Demo data has been reset. Refresh to see the changes.</p>
           )}
           {resetStatus === "error" && (
             <p className="text-sm text-red-500">Reset failed. Please try again.</p>
