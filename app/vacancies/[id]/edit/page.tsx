@@ -6,6 +6,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/lib/hooks/useToast";
 import type { ScreeningQuestion, VacancyStage, Vacancy, User, Source, TestTask } from "@/lib/types";
+import {
+  getScreeningQuestions,
+  createScreeningQuestion,
+  updateScreeningQuestion,
+  deleteScreeningQuestion,
+  reorderScreeningQuestions,
+} from "@/app/actions/vacancies";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,20 +76,20 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
 
   const vacancy = useStore((s) => s.vacancies).find((v) => v.id === id);
   const users = useStore((s) => s.users);
-  const questions = useStore((s) => s.questions)
-    .filter((q) => q.vacancyId === id)
-    .sort((a, b) => a.orderIndex - b.orderIndex);
+  const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
   const getStagesForVacancy = useStore((s) => s.getStagesForVacancy);
   const getSourcesForVacancy = useStore((s) => s.getSourcesForVacancy);
   const stages = getStagesForVacancy(id);
   const sources = getSourcesForVacancy(id);
   const applications = useStore((s) => s.applications);
 
+  useEffect(() => {
+    getScreeningQuestions(id).then((rows) =>
+      setQuestions(rows as ScreeningQuestion[])
+    );
+  }, [id]);
+
   const updateVacancy = useStore((s) => s.updateVacancy);
-  const addQuestion = useStore((s) => s.addQuestion);
-  const removeQuestion = useStore((s) => s.removeQuestion);
-  const updateQuestion = useStore((s) => s.updateQuestion);
-  const reorderQuestions = useStore((s) => s.reorderQuestions);
   const addStage = useStore((s) => s.addStage);
   const removeStage = useStore((s) => s.removeStage);
   const reorderStages = useStore((s) => s.reorderStages);
@@ -234,10 +241,42 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
           <QuestionsTab
             questions={questions}
             vacancyId={id}
-            onAdd={(q) => addQuestion(id, q)}
-            onRemove={removeQuestion}
-            onUpdate={updateQuestion}
-            onReorder={(orderedIds) => reorderQuestions(id, orderedIds)}
+            onAdd={async (q) => {
+              const { id: newId } = await createScreeningQuestion({
+                vacancyId: id,
+                text: q.text,
+                type: q.type,
+                options: q.options,
+                orderIndex: questions.length,
+              });
+              setQuestions((qs) => [
+                ...qs,
+                {
+                  id: newId,
+                  vacancyId: id,
+                  text: q.text,
+                  type: q.type as ScreeningQuestion["type"],
+                  options: q.options ?? undefined,
+                  orderIndex: qs.length,
+                },
+              ]);
+            }}
+            onRemove={async (qId) => {
+              await deleteScreeningQuestion(qId);
+              setQuestions((qs) => qs.filter((q) => q.id !== qId));
+            }}
+            onUpdate={async (qId, patch) => {
+              await updateScreeningQuestion(qId, patch);
+              setQuestions((qs) =>
+                qs.map((q) => (q.id === qId ? { ...q, ...patch } : q))
+              );
+            }}
+            onReorder={async (orderedIds) => {
+              await reorderScreeningQuestions(id, orderedIds);
+              setQuestions((qs) =>
+                orderedIds.map((oid) => qs.find((q) => q.id === oid)!)
+              );
+            }}
           />
         )}
         {activeTab === "stages" && (

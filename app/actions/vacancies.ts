@@ -52,3 +52,49 @@ export async function getScreeningQuestions(vacancyId: string) {
     .where(eq(screeningQuestions.vacancyId, vacancyId))
     .orderBy(screeningQuestions.orderIndex);
 }
+
+// --- Screening Questions mutations ---
+
+export async function createScreeningQuestion(data: {
+  vacancyId: string;
+  text: string;
+  type: string;
+  options?: string[];
+  orderIndex: number;
+}): Promise<{ id: string }> {
+  const [row] = await db.insert(screeningQuestions).values({
+    id: `sq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    vacancyId: data.vacancyId,
+    text: data.text,
+    type: data.type,
+    options: data.options ?? null,
+    orderIndex: data.orderIndex,
+  }).returning({ id: screeningQuestions.id });
+  return row;
+}
+
+export async function updateScreeningQuestion(
+  id: string,
+  data: { text?: string; type?: string; options?: string[] | null; orderIndex?: number }
+): Promise<void> {
+  await db.update(screeningQuestions)
+    .set({ ...data })
+    .where(eq(screeningQuestions.id, id));
+}
+
+export async function deleteScreeningQuestion(id: string): Promise<void> {
+  await db.delete(screeningQuestions).where(eq(screeningQuestions.id, id));
+}
+
+export async function reorderScreeningQuestions(
+  vacancyId: string,
+  orderedIds: string[]
+): Promise<void> {
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      db.update(screeningQuestions)
+        .set({ orderIndex: index })
+        .where(and(eq(screeningQuestions.id, id), eq(screeningQuestions.vacancyId, vacancyId)))
+    )
+  );
+}
