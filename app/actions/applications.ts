@@ -93,6 +93,58 @@ export async function getApplicationFull(applicationId: string) {
   return { ...rows[0], answers: rawAnswers, timeline };
 }
 
+export type UnifiedApplication = {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  candidatePhone: string | null;
+  vacancyId: string;
+  vacancyTitle: string;
+  stageId: string | null;
+  stageName: string | null;
+  stageColor: string | null;
+  status: string;
+  hasUnread: boolean;
+  appliedAt: string;
+  lastActivityAt: string;
+};
+
+export async function getAllPipelineApplications(): Promise<UnifiedApplication[]> {
+  const isDemo = await getCurrentDataMode();
+
+  const rows = await db
+    .select({
+      id: applications.id,
+      candidateId: candidates.id,
+      candidateName: candidates.fullName,
+      candidatePhone: candidates.phone,
+      vacancyId: vacancies.id,
+      vacancyTitle: vacancies.title,
+      stageId: vacancyStages.id,
+      stageName: vacancyStages.name,
+      stageColor: vacancyStages.color,
+      status: applications.status,
+      lastActivityAt: applications.lastActivityAt,
+      appliedAt: applications.appliedAt,
+    })
+    .from(applications)
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .orderBy(desc(applications.lastActivityAt));
+
+  return rows.map((r) => ({
+    ...r,
+    candidatePhone: r.candidatePhone ?? null,
+    stageId: r.stageId ?? null,
+    stageName: r.stageName ?? null,
+    stageColor: r.stageColor ?? null,
+    hasUnread: false,
+    lastActivityAt: r.lastActivityAt?.toISOString() ?? new Date().toISOString(),
+    appliedAt: r.appliedAt?.toISOString() ?? new Date().toISOString(),
+  }));
+}
+
 export async function moveApplicationToStage(applicationId: string, toStageId: string) {
   const appRows = await db
     .select()

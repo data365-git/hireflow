@@ -1,0 +1,55 @@
+"use server";
+import { db } from "@/lib/db/client";
+import { vacancies, applications, vacancyStages, sources, timelineEvents, telegramMessages } from "@/lib/db/schema";
+import { getCurrentDataMode } from "@/lib/data-mode";
+import { eq, inArray } from "drizzle-orm";
+
+export type AnalyticsData = {
+  vacancies: (typeof vacancies.$inferSelect)[];
+  applications: (typeof applications.$inferSelect)[];
+  stages: (typeof vacancyStages.$inferSelect)[];
+  sources: (typeof sources.$inferSelect)[];
+  timeline: (typeof timelineEvents.$inferSelect)[];
+  messages: (typeof telegramMessages.$inferSelect)[];
+};
+
+export async function getAnalyticsData(): Promise<AnalyticsData> {
+  const isDemo = await getCurrentDataMode();
+
+  const allVacancies = await db
+    .select()
+    .from(vacancies)
+    .where(eq(vacancies.isDemo, isDemo));
+
+  const vacancyIds = allVacancies.map((v) => v.id);
+
+  if (vacancyIds.length === 0) {
+    return { vacancies: allVacancies, applications: [], stages: [], sources: [], timeline: [], messages: [] };
+  }
+
+  const [allApps, allStages, allSources] = await Promise.all([
+    db.select().from(applications).where(inArray(applications.vacancyId, vacancyIds)),
+    db.select().from(vacancyStages).where(inArray(vacancyStages.vacancyId, vacancyIds)),
+    db.select().from(sources).where(inArray(sources.vacancyId, vacancyIds)),
+  ]);
+
+  const appIds = allApps.map((a) => a.id);
+
+  if (appIds.length === 0) {
+    return { vacancies: allVacancies, applications: [], stages: allStages, sources: allSources, timeline: [], messages: [] };
+  }
+
+  const [allTimeline, allMessages] = await Promise.all([
+    db.select().from(timelineEvents).where(inArray(timelineEvents.applicationId, appIds)),
+    db.select().from(telegramMessages).where(inArray(telegramMessages.applicationId, appIds)),
+  ]);
+
+  return {
+    vacancies: allVacancies,
+    applications: allApps,
+    stages: allStages,
+    sources: allSources,
+    timeline: allTimeline,
+    messages: allMessages,
+  };
+}

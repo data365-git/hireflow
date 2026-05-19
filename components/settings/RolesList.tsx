@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { RoleRow } from "./RoleRow";
 import { RoleEditModal } from "./RoleEditModal";
+import { EditRoleDialog } from "./EditRoleDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type { PermRow } from "./PermissionsGrid";
 
@@ -28,6 +29,9 @@ export function RolesList() {
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [editingPerms, setEditingPerms] = useState<PermRow[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Meta-edit (display name / description / color) state
+  const [editingMeta, setEditingMeta] = useState<RoleWithPerms | null>(null);
 
   // Delete confirm state
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
@@ -118,6 +122,7 @@ export function RolesList() {
             permissions={role.permissions}
             onEdit={() => handleEditClick(role)}
             onDelete={() => handleDeleteClick(role)}
+            onEditMeta={() => setEditingMeta(role)}
           />
         ))}
       </div>
@@ -142,6 +147,16 @@ export function RolesList() {
         role={null}
         onClose={(changed) => {
           setShowCreate(false);
+          if (changed) load();
+        }}
+      />
+
+      {/* Edit role metadata (display name / description / color) */}
+      <EditRoleDialog
+        open={!!editingMeta}
+        role={editingMeta}
+        onClose={(changed) => {
+          setEditingMeta(null);
           if (changed) load();
         }}
       />

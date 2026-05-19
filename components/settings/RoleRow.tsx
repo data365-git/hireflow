@@ -24,9 +24,10 @@ interface Props {
   permissions: Permission[];
   onEdit: () => void;
   onDelete: () => void;
+  onEditMeta?: () => void;
 }
 
-export function RoleRow({ role, permissions, onEdit, onDelete }: Props) {
+export function RoleRow({ role, permissions, onEdit, onDelete, onEditMeta }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const permMap = new Map(permissions.map((p) => [p.screenName, p]));
@@ -71,10 +72,19 @@ export function RoleRow({ role, permissions, onEdit, onDelete }: Props) {
 
         {/* Action buttons — stop propagation so clicks don't toggle expand */}
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {!role.isSuperadmin && onEditMeta && (
+            <button
+              onClick={onEditMeta}
+              title="Edit role details"
+              className="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-3 transition-colors"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
           <button
             onClick={onEdit}
             disabled={isReadOnly}
-            title={isReadOnly ? "System roles cannot be edited" : "Edit role"}
+            title={isReadOnly ? "System roles cannot be edited" : "Edit permissions"}
             className="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-3 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <Pencil size={14} />

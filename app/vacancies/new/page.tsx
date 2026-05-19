@@ -1,10 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import type { CreateVacancyInput, ScreeningQuestion } from "@/lib/types";
+import { SaveAsTemplateDialog } from "@/components/settings/SaveAsTemplateDialog";
+
+type TemplateStage = {
+  id: string;
+  name: string;
+  color: string;
+  isFinal: boolean;
+  isRejected: boolean;
+  orderIndex: number;
+};
+
+type TemplateWithStages = {
+  id: string;
+  name: string;
+  description?: string | null;
+  stages: TemplateStage[];
+};
 
 const STEPS = [
   { label: "Basic Info" },
@@ -102,6 +119,32 @@ export default function NewVacancyPage() {
   ]);
   const [newStageName, setNewStageName] = useState("");
   const [newStageColor, setNewStageColor] = useState("new");
+
+  // Stage templates
+  const [templates, setTemplates] = useState<TemplateWithStages[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/stage-templates", { credentials: "include" })
+      .then((r) => r.json())
+      .then(setTemplates)
+      .catch(() => {});
+  }, []);
+
+  function applyTemplate() {
+    const tpl = templates.find((t) => t.id === selectedTemplateId);
+    if (!tpl) return;
+    const mapped: StageDraft[] = tpl.stages.map((s, i) => ({
+      id: `stpl_${i}_${Date.now()}`,
+      name: s.name,
+      color: s.color,
+      isFinal: s.isFinal,
+      isRejected: s.isRejected,
+    }));
+    setStages(mapped);
+    setSelectedTemplateId("");
+  }
 
   // Local draft state for sources (need per-item id)
   const [sources, setSources] = useState<SourceDraft[]>([{ id: "src0", name: "Telegram" }]);
@@ -506,6 +549,29 @@ export default function NewVacancyPage() {
       <div className="space-y-5">
         <p className={SECTION_HEADER_CLS}>Pipeline Stages</p>
 
+        {/* Template picker */}
+        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
+          <span className="text-body-sm text-muted shrink-0">Start from template:</span>
+          <select
+            value={selectedTemplateId}
+            onChange={(e) => setSelectedTemplateId(e.target.value)}
+            className="flex-1 h-8 px-2 rounded-lg border border-border bg-surface text-body-sm text-text outline-none focus:border-primary"
+          >
+            <option value="">— select —</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={applyTemplate}
+            disabled={!selectedTemplateId}
+            className="h-8 px-3 rounded-lg bg-primary text-primary-fg text-body-sm font-medium disabled:opacity-40"
+          >
+            Apply
+          </button>
+        </div>
+
         <div className="space-y-2">
           {stages.map((s, i) => (
             <div key={s.id} className="bg-surface-2 border border-border rounded-lg p-3">
@@ -609,6 +675,23 @@ export default function NewVacancyPage() {
             Add
           </button>
         </div>
+
+        {/* Save as template */}
+        <div className="pt-1 border-t border-border">
+          <button
+            type="button"
+            onClick={() => setSaveTemplateOpen(true)}
+            className="text-body-sm text-primary hover:opacity-80 transition-opacity"
+          >
+            💾 Save as template
+          </button>
+        </div>
+
+        <SaveAsTemplateDialog
+          open={saveTemplateOpen}
+          stages={stages}
+          onClose={() => setSaveTemplateOpen(false)}
+        />
       </div>
     );
   }

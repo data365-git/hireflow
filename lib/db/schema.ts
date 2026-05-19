@@ -303,3 +303,25 @@ export const loginAttempts = pgTable("login_attempts", {
 }, (t) => ({
   ipTimeIdx: index("login_attempts_ip_time_idx").on(t.ip, t.attemptedAt),
 }));
+
+// ─── Stage Templates ──────────────────────────────────────────────────────────
+
+export const stageTemplates = pgTable("stage_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const stageTemplateStages = pgTable("stage_template_stages", {
+  id: text("id").primaryKey(),
+  templateId: text("template_id").notNull().references(() => stageTemplates.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color").notNull(),
+  isFinal: boolean("is_final").notNull().default(false),
+  isRejected: boolean("is_rejected").notNull().default(false),
+  orderIndex: integer("order_index").notNull(),
+});

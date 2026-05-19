@@ -9,7 +9,6 @@ import {
   Briefcase,
   BarChart2,
   Settings,
-  Users,
 } from "lucide-react";
 
 function isActive(href: string, pathname: string): boolean {
@@ -80,8 +79,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
         {/* MY WORK */}
         <p className="text-micro text-subtle uppercase tracking-widest px-3 mb-1 mt-1">My Work</p>
-        <NavLink href="/" label="My Pipeline" Icon={LayoutDashboard} />
-        <NavLink href="/leads" label="Leads" Icon={Users} />
+        <NavLink href="/" label="Pipeline" Icon={LayoutDashboard} />
         <NavLink href="/inbox" label="Inbox" Icon={Inbox} badge={unreadCount > 0 ? unreadCount : undefined} />
 
         {/* MANAGE */}

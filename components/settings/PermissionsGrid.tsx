@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { SCREENS_CONFIG } from "@/lib/permissions/screens";
+import { useAuth } from "@/context/AuthContext";
 
 const SCREENS = SCREENS_CONFIG.map((s) => s.key);
 
@@ -281,15 +282,16 @@ export function PermissionsGrid({ open, role, onClose }: Props) {
     }
   };
 
-  const isReadOnly = role.isSystem || role.isSuperadmin;
+  const { user } = useAuth();
+  const isReadOnly = role.isSuperadmin || (role.isSystem && !user?.isSuperadmin);
 
   return (
     <Dialog open={open} onClose={onClose} title={`Permissions — ${role.displayName}`} size="lg">
       <div className="space-y-4">
-        {(role.isSuperadmin || role.isSystem) && (
+        {isReadOnly && (
           <div className="rounded-lg bg-warning-soft border border-warning/20 px-4 py-2 text-body-xs text-warning">
             {role.isSuperadmin
-              ? "This is a superadmin role — it has all permissions by default and cannot be restricted."
+              ? "The superadmin role bypasses all permission checks — its rows have no effect."
               : "This is a system role and its permissions cannot be edited."}
           </div>
         )}

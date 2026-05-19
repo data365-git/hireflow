@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useStore } from "@/lib/store";
-import type { Application, VacancyStage } from "@/lib/types";
+import { useMemo, useState, useEffect } from "react";
+import { useDataMode } from "@/context/DataModeContext";
+import { getAnalyticsData, type AnalyticsData } from "@/app/actions/analytics";
 
 function DeltaChip({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) return null;
@@ -26,39 +26,46 @@ const STAGE_BAR_COLORS: Record<string, string> = {
   rejected:   "bg-red-500",
 };
 
-function avgDaysInPipeline(apps: Application[]): string {
-  const hired = apps.filter((a) => {
-    // We don't have isFinal on Application; we need to check via stages — caller
-    // already pre-filters to hired apps.
-    return true;
-  });
-  if (hired.length === 0) return "N/A";
-  const totalMs = hired.reduce((sum, a) => {
+type DbApplication = AnalyticsData["applications"][number];
+
+function avgDaysInPipeline(apps: DbApplication[]): string {
+  // Caller pre-filters to hired apps.
+  if (apps.length === 0) return "N/A";
+  const totalMs = apps.reduce((sum, a) => {
     const start = new Date(a.appliedAt).getTime();
     const end   = new Date(a.lastActivityAt).getTime();
     return sum + (end - start);
   }, 0);
-  const avgMs   = totalMs / hired.length;
+  const avgMs   = totalMs / apps.length;
   const avgDays = Math.round(avgMs / 86_400_000);
   return `${avgDays}d`;
 }
 
 export default function AnalyticsPage() {
-  const vacancies = useStore((s) => s.vacancies);
-  const stages = useStore((s) => s.stages);
-  const applications = useStore((s) => s.applications);
-  const timeline = useStore((s) => s.timeline);
-  const messages = useStore((s) => s.messages);
+  const { mode } = useDataMode();
+  const [data, setData] = useState<AnalyticsData>({ vacancies: [], applications: [], stages: [], sources: [], timeline: [], messages: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getAnalyticsData().then((d) => { setData(d); setLoading(false); });
+  }, [mode]);
+
+  const vacancies = data.vacancies;
+  const stages = data.stages;
+  const applications = data.applications;
+  const timeline = data.timeline;
+  const messages = data.messages;
 
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("all");
 
   // ── Derived: filtered apps & stages ─────────────────────────────────────────
-  const filteredApps = useMemo<Application[]>(() => {
+  const filteredApps = useMemo(() => {
     if (selectedVacancyId === "all") return applications;
     return applications.filter((a) => a.vacancyId === selectedVacancyId);
   }, [applications, selectedVacancyId]);
 
-  const filteredStages = useMemo<VacancyStage[]>(() => {
+  const filteredStages = useMemo(() => {
     if (selectedVacancyId === "all") return stages;
     return stages
       .filter((s) => s.vacancyId === selectedVacancyId)
@@ -113,10 +120,9 @@ export default function AnalyticsPage() {
   const avgTime        = avgDaysInPipeline(hiredApps);
 
   // ── Section 2: Source Breakdown ──────────────────────────────────────────────
-  const allSources = useStore((s) => s.sources);
   const sources = useMemo(
-    () => (selectedVacancyId !== "all" ? allSources.filter((s) => s.vacancyId === selectedVacancyId) : []),
-    [allSources, selectedVacancyId],
+    () => (selectedVacancyId !== "all" ? data.sources.filter((s) => s.vacancyId === selectedVacancyId) : []),
+    [data.sources, selectedVacancyId],
   );
 
   // ── Section 3: Stage Conversion Rates ───────────────────────────────────────
@@ -277,6 +283,14 @@ export default function AnalyticsPage() {
 
   // ── Total candidates across all vacancies (for subtitle) ────────────────────
   const totalAllCandidates = applications.length;
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-body-sm text-subtle">Loading analytics…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[760px] mx-auto px-4 py-8 space-y-10">

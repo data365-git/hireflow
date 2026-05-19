@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Users, Shield, Zap, FlaskConical } from "lucide-react";
+import { User, Users, Shield, Zap, Layers, FlaskConical } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const tabs = [
@@ -10,6 +10,7 @@ const tabs = [
   { label: "Users", icon: Users, href: "/settings/users", gated: true },
   { label: "Roles", icon: Shield, href: "/settings/roles", gated: true },
   { label: "Automations", icon: Zap, href: "/settings/automations", gated: true },
+  { label: "Stage Templates", icon: Layers, href: "/settings/stage-templates", gated: true },
   { label: "Demo", icon: FlaskConical, href: "/settings/demo", gated: true },
 ];
 
