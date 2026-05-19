@@ -2,6 +2,7 @@
 import { db } from "@/lib/db/client";
 import { vacancies, applications, vacancyStages, sources, timelineEvents, telegramMessages } from "@/lib/db/schema";
 import { getCurrentDataMode } from "@/lib/data-mode";
+import { requirePermission } from "@/lib/auth/permissions";
 import { eq, inArray } from "drizzle-orm";
 
 export type AnalyticsData = {
@@ -14,6 +15,7 @@ export type AnalyticsData = {
 };
 
 export async function getAnalyticsData(): Promise<AnalyticsData> {
+  await requirePermission("analytics", "read");
   const isDemo = await getCurrentDataMode();
 
   const allVacancies = await db

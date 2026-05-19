@@ -128,7 +128,7 @@ export default function NewVacancyPage() {
   useEffect(() => {
     fetch("/api/stage-templates", { credentials: "include" })
       .then((r) => r.json())
-      .then(setTemplates)
+      .then((d) => setTemplates(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
 

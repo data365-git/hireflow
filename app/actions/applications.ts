@@ -5,6 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
 import { getCurrentDataMode } from "@/lib/data-mode";
+import { requirePermission } from "@/lib/auth/permissions";
 
 export type PipelineApplication = {
   id: string;
@@ -21,6 +22,7 @@ export type PipelineApplication = {
 };
 
 export async function getPipelineApplications(): Promise<PipelineApplication[]> {
+  await requirePermission("candidates", "read");
   const isDemo = await getCurrentDataMode();
 
   const rows = await db
@@ -51,6 +53,7 @@ export async function getPipelineApplications(): Promise<PipelineApplication[]> 
 }
 
 export async function getApplicationsForVacancy(vacancyId: string) {
+  await requirePermission("candidates", "read");
   const isDemo = await getCurrentDataMode();
   return db
     .select({
@@ -63,6 +66,7 @@ export async function getApplicationsForVacancy(vacancyId: string) {
 }
 
 export async function getApplicationFull(applicationId: string) {
+  await requirePermission("candidates", "read");
   const isDemo = await getCurrentDataMode();
   const rows = await db
     .select({
@@ -110,6 +114,7 @@ export type UnifiedApplication = {
 };
 
 export async function getAllPipelineApplications(): Promise<UnifiedApplication[]> {
+  await requirePermission("candidates", "read");
   const isDemo = await getCurrentDataMode();
 
   const rows = await db
@@ -146,6 +151,7 @@ export async function getAllPipelineApplications(): Promise<UnifiedApplication[]
 }
 
 export async function moveApplicationToStage(applicationId: string, toStageId: string) {
+  await requirePermission("candidates", "edit");
   const appRows = await db
     .select()
     .from(applications)
