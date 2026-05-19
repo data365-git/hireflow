@@ -79,7 +79,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
   const [users, setUsers] = useState(initialUsers);
 
   useEffect(() => {
-    getVacanciesPageData(mode === "demo").then((data) => {
+    getVacanciesPageData().then((data) => {
       setVacancies(data.vacancies);
       setStages(data.stages);
       setApplications(data.applications);

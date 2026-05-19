@@ -107,12 +107,12 @@ export function LeadsView({ initialLeads }: Props) {
 
   // Re-fetch when data mode changes
   useEffect(() => {
-    listLeads(mode === "demo").then((data) => setLeads(data));
+    listLeads().then((data) => setLeads(data));
   }, [mode]);
 
   // Auto-refresh every 5 seconds
   useEffect(() => {
-    const id = setInterval(() => listLeads(mode === "demo").then((data) => setLeads(data)), 5_000);
+    const id = setInterval(() => listLeads().then((data) => setLeads(data)), 5_000);
     return () => clearInterval(id);
   }, [router, mode]);
 

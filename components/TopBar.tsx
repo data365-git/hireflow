@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BellIcon } from "lucide-react";
+import { BellIcon, ChevronDownIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { initials, hashColor } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+import { useState, useEffect, useRef } from "react";
 
 function useBreadcrumb(pathname: string): string {
   const vacancies = useStore((s) => s.vacancies);
@@ -40,20 +41,41 @@ function useBreadcrumb(pathname: string): string {
   return segments[segments.length - 1];
 }
 
+function formatUserChip(name: string | undefined): string {
+  if (!name) return "User";
+  const parts = name.split(" ");
+  const first = parts[0] ?? "";
+  const lastInitial = parts[1]?.[0] ?? "";
+  return lastInitial ? `${first} ${lastInitial}.` : first;
+}
+
 export function TopBar() {
   const pathname = usePathname();
   const breadcrumb = useBreadcrumb(pathname);
   const getUnreadCount = useStore((s) => s.getUnreadCount);
-  const users = useStore((s) => s.users);
-  const currentUserId = useStore((s) => s.currentUserId);
+  const { user, signOut } = useAuth();
 
   const unreadCount = getUnreadCount();
-  const currentUser = users.find((u) => u.id === currentUserId);
-  const userName = currentUser?.name ?? "HR";
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
 
   function handleCmdK() {
     window.dispatchEvent(new CustomEvent("cmd-k"));
   }
+
+  const chipLabel = formatUserChip(user?.fullName ?? undefined);
 
   return (
     <header className="bg-surface border-b border-border h-11 px-6 flex items-center justify-between shrink-0">
@@ -86,13 +108,32 @@ export function TopBar() {
           )}
         </button>
 
-        {/* User avatar */}
-        <div
-          className="size-7 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0"
-          style={{ backgroundColor: hashColor(currentUserId) }}
-          title={userName}
-        >
-          {initials(userName)}
+        {/* User chip with dropdown */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setDropdownOpen((o) => !o)}
+            className="text-sm font-medium text-gray-700 hover:text-gray-900 flex items-center gap-1 cursor-pointer"
+          >
+            {chipLabel}
+            <ChevronDownIcon size={14} />
+          </button>
+          {dropdownOpen && (
+            <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1 min-w-[140px] z-50">
+              <Link
+                href="/settings/profile"
+                onClick={() => setDropdownOpen(false)}
+                className="block px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer text-gray-700"
+              >
+                Settings
+              </Link>
+              <button
+                onClick={() => { setDropdownOpen(false); signOut(); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer text-gray-700"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

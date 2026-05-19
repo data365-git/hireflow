@@ -46,6 +46,7 @@ export async function createApplicationFromBot(args: {
       phone: args.email ?? "",
       language: "en",
       city: "",
+      isDemo: false,
       createdAt: new Date(),
     });
   }
@@ -160,6 +161,7 @@ export async function upsertCandidateFromTelegram(args: {
     phone: "",
     language: "en",
     city: "",
+    isDemo: false,
     createdAt: new Date(),
   });
   return candidateId;

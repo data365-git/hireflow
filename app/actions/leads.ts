@@ -2,12 +2,14 @@
 import { db } from "@/lib/db/client";
 import { candidates, applications, vacancies, telegramMessages } from "@/lib/db/schema";
 import { eq, desc, isNotNull, and } from "drizzle-orm";
+import { getCurrentDataMode } from "@/lib/data-mode";
 
-export async function listLeads(isDemo?: boolean) {
+export async function listLeads() {
+  const isDemo = await getCurrentDataMode();
   const allCandidates = await db
     .select()
     .from(candidates)
-    .where(and(isNotNull(candidates.telegramUserId), eq(candidates.isDemo, isDemo ?? false)));
+    .where(and(isNotNull(candidates.telegramUserId), eq(candidates.isDemo, isDemo)));
 
   const results = [];
   for (const c of allCandidates) {
@@ -52,10 +54,11 @@ export async function getCandidateConversation(candidateId: string) {
 
 export async function getBrowsingLeadsCount(): Promise<number> {
   // Candidates with telegramUserId that have no applications (or only abandoned ones)
+  const isDemo = await getCurrentDataMode();
   const allCandidates = await db
     .select()
     .from(candidates)
-    .where(isNotNull(candidates.telegramUserId));
+    .where(and(isNotNull(candidates.telegramUserId), eq(candidates.isDemo, isDemo)));
 
   let count = 0;
   for (const c of allCandidates) {

@@ -2,20 +2,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   Inbox,
   Briefcase,
   BarChart2,
   Settings,
-  Zap,
   Users,
-  LogOut,
-  UserCog,
-  ShieldCheck,
 } from "lucide-react";
-import { DataModeToggle } from "@/components/DataModeToggle";
 
 function isActive(href: string, pathname: string): boolean {
   if (href === "/") return pathname === "/";
@@ -62,14 +56,9 @@ function NavLink({ href, label, Icon, badge }: NavItem) {
 }
 
 export function Sidebar() {
-  const users = useStore((s) => s.users);
-  const currentUserId = useStore((s) => s.currentUserId);
-  const simulateIncomingApplication = useStore((s) => s.simulateIncomingApplication);
   const getUnreadCount = useStore((s) => s.getUnreadCount);
-  const { user: authUser, signOut, hasPermission } = useAuth();
 
   const unreadCount = getUnreadCount();
-  const currentUser = users.find((u) => u.id === currentUserId);
 
   return (
     <aside className="w-60 shrink-0 bg-bg border-r border-border flex flex-col h-screen sticky top-0 z-40">
@@ -98,60 +87,9 @@ export function Sidebar() {
         <NavLink href="/analytics" label="Analytics" Icon={BarChart2} />
       </nav>
 
-      {/* Demo section */}
-      <div className="px-3 pb-2 border-t border-border pt-3 shrink-0">
-        <p className="text-micro text-subtle uppercase tracking-widest px-3 mb-1">Demo</p>
-        <div className="px-3 mb-2">
-          <DataModeToggle />
-        </div>
-        <button
-          onClick={() => simulateIncomingApplication("v1")}
-          className="w-full flex items-center gap-2.5 h-8 px-3 rounded-lg text-body-sm text-primary hover:bg-primary/10 transition-colors font-medium"
-        >
-          <Zap className="size-4 shrink-0" strokeWidth={2} />
-          Simulate application
-        </button>
-      </div>
-
-      {/* Settings */}
-      <div className="px-3 pb-2 shrink-0">
-        <NavLink href="/automations" label="Automations" Icon={Settings} />
-        {hasPermission("settings", "read") && (
-          <>
-            <p className="text-micro text-subtle uppercase tracking-widest px-3 mb-1 mt-3">Admin</p>
-            <NavLink href="/settings/users" label="Users" Icon={UserCog} />
-            <NavLink href="/settings/roles" label="Roles" Icon={ShieldCheck} />
-          </>
-        )}
-      </div>
-
-      {/* User profile */}
-      <div className="px-3 py-3 border-t border-border shrink-0">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer">
-          <div
-            className="size-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-            style={{ backgroundColor: "#7C3AED" }}
-          >
-            {currentUser?.avatarInitials ?? "?"}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-body-sm font-semibold text-text truncate">
-              {authUser?.fullName ?? currentUser?.name ?? "HR Manager"}
-            </p>
-            <p className="text-micro text-subtle capitalize truncate">
-              {authUser?.email ?? currentUser?.role ?? "hr"}
-            </p>
-          </div>
-          {authUser && (
-            <button
-              onClick={signOut}
-              title="Sign out"
-              className="shrink-0 text-subtle hover:text-danger transition-colors"
-            >
-              <LogOut className="size-4" strokeWidth={2} />
-            </button>
-          )}
-        </div>
+      {/* Settings pinned to bottom */}
+      <div className="px-3 pb-3 shrink-0">
+        <NavLink href="/settings" label="Settings" Icon={Settings} />
       </div>
     </aside>
   );

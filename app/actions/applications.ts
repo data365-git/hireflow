@@ -4,15 +4,17 @@ import { applications, candidates, vacancyStages, timelineEvents, screeningAnswe
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
+import { getCurrentDataMode } from "@/lib/data-mode";
 
-export async function getApplicationsForVacancy(vacancyId: string, isDemo?: boolean) {
+export async function getApplicationsForVacancy(vacancyId: string) {
+  const isDemo = await getCurrentDataMode();
   return db
     .select({
       application: applications,
       candidate: candidates,
     })
     .from(applications)
-    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo ?? false)))
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
     .where(eq(applications.vacancyId, vacancyId));
 }
 

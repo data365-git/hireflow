@@ -2,18 +2,21 @@
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, applications, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getCurrentDataMode } from "@/lib/data-mode";
 
-export async function getAllVacancies(isDemo?: boolean) {
+export async function getAllVacancies() {
+  const isDemo = await getCurrentDataMode();
   return db
     .select()
     .from(vacancies)
-    .where(eq(vacancies.isDemo, isDemo ?? false))
+    .where(eq(vacancies.isDemo, isDemo))
     .orderBy(vacancies.createdAt);
 }
 
-export async function getVacanciesPageData(isDemo?: boolean) {
+export async function getVacanciesPageData() {
+  const isDemo = await getCurrentDataMode();
   const [vacancyRows, stageRows, appRows, userRows] = await Promise.all([
-    db.select().from(vacancies).where(eq(vacancies.isDemo, isDemo ?? false)).orderBy(vacancies.createdAt),
+    db.select().from(vacancies).where(eq(vacancies.isDemo, isDemo)).orderBy(vacancies.createdAt),
     db.select().from(vacancyStages),
     db.select().from(applications),
     db.select().from(users),
