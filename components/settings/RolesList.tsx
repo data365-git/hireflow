@@ -51,26 +51,24 @@ export function RolesList() {
           <button
             key={role.name}
             onClick={() => setEditingRole(role)}
-            className="text-left bg-surface border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-sm transition-all group"
+            className="relative overflow-hidden text-left bg-surface border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-sm transition-all group"
           >
-            <div className="flex items-start gap-3">
-              <div
-                className="size-8 rounded-lg shrink-0 mt-0.5"
-                style={{ backgroundColor: role.color ?? "#3525CD" }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-body-sm font-semibold text-text group-hover:text-primary transition-colors">
-                    {role.displayName}
-                  </span>
-                  {role.isSuperadmin && <span title="Superadmin">👑</span>}
-                  {role.isSystem && <span title="System role">🔒</span>}
-                </div>
-                <p className="text-micro text-subtle mt-0.5">{role.name}</p>
-                {role.description && (
-                  <p className="text-body-xs text-muted mt-1 line-clamp-2">{role.description}</p>
-                )}
+            <div
+              className="absolute left-0 inset-y-0 w-1 rounded-l-2xl"
+              style={{ backgroundColor: role.color ?? "#3525CD" }}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-base font-semibold text-text group-hover:text-primary transition-colors">
+                  {role.displayName}
+                </span>
+                {role.isSuperadmin && <span title="Superadmin">👑</span>}
+                {role.isSystem && <span title="System role">🔒</span>}
               </div>
+              <p className="text-xs font-medium text-subtle mt-0.5">{role.name}</p>
+              {role.description && (
+                <p className="text-body-xs text-muted mt-1 line-clamp-2">{role.description}</p>
+              )}
             </div>
           </button>
         ))}

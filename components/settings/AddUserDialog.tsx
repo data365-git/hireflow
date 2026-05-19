@@ -47,10 +47,10 @@ export function AddUserDialog({ open, onClose }: Props) {
     try {
       const body: Record<string, unknown> = {
         email: form.email,
-        password: form.password,
         fullName: form.fullName,
         hasAccess: form.hasAccess,
       };
+      if (form.hasAccess) body.password = form.password;
       if (form.phone) body.phone = form.phone;
       if (form.role) body.role = form.role;
 
@@ -91,14 +91,16 @@ export function AddUserDialog({ open, onClose }: Props) {
           required
           placeholder="jane@example.com"
         />
-        <Input
-          label="Password"
-          type="password"
-          value={form.password}
-          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-          required
-          placeholder="Min. 8 characters"
-        />
+        {form.hasAccess && (
+          <Input
+            label="Password"
+            type="password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            required
+            placeholder="Min. 8 characters"
+          />
+        )}
         <Input
           label="Phone (optional)"
           type="tel"
@@ -127,7 +129,10 @@ export function AddUserDialog({ open, onClose }: Props) {
           <input
             type="checkbox"
             checked={form.hasAccess}
-            onChange={(e) => setForm((f) => ({ ...f, hasAccess: e.target.checked }))}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setForm((f) => ({ ...f, hasAccess: checked, password: checked ? f.password : "" }));
+            }}
             className="rounded border-border accent-primary"
           />
           <span className="text-body-sm text-text">Grant access on creation</span>

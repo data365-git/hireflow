@@ -1,11 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import { ProfileForm } from "@/components/settings/ProfileForm";
+import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 
 export default function ProfilePage() {
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-6">Profile</h1>
+      <SettingsPageHeader title="Profile" description="Your account information and password." />
       <ProfileForm />
     </div>
   );

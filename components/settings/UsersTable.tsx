@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AddUserDialog } from "./AddUserDialog";
 import { RoleAssignDialog } from "./RoleAssignDialog";
 import { ResetPasswordDialog } from "./ResetPasswordDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface User {
   id: string;
@@ -25,6 +26,13 @@ export function UsersTable() {
   const [editingRolesFor, setEditingRolesFor] = useState<User | null>(null);
   const [resettingFor, setResettingFor] = useState<User | null>(null);
 
+  // Modal state for actions
+  const [revokeTarget, setRevokeTarget] = useState<User | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [reactivateTarget, setReactivateTarget] = useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
     const r = await fetch("/api/users", { credentials: "include" });
@@ -36,38 +44,38 @@ export function UsersTable() {
     load();
   }, []);
 
-  const handleRevoke = async (user: User) => {
-    const reason = prompt("Reason for revoking access?");
-    if (reason === null) return;
-    await fetch(`/api/users/${user.id}/access`, {
+  const confirmRevoke = async () => {
+    await fetch(`/api/users/${revokeTarget!.id}/access`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hasAccess: false, reason }),
+      body: JSON.stringify({ hasAccess: false, reason: revokeReason }),
     });
+    setRevokeTarget(null);
+    setRevokeReason("");
     load();
   };
 
-  const handleReactivate = async (user: User) => {
-    if (!confirm(`Reactivate ${user.fullName}?`)) return;
-    await fetch(`/api/users/${user.id}/reactivate`, {
+  const confirmReactivate = async () => {
+    await fetch(`/api/users/${reactivateTarget!.id}/reactivate`, {
       method: "POST",
       credentials: "include",
     });
+    setReactivateTarget(null);
     load();
   };
 
-  const handleDelete = async (user: User) => {
-    if (!confirm(`PERMANENTLY delete ${user.fullName}? This cannot be undone.`)) return;
-    const r = await fetch(`/api/users/${user.id}/permanent`, {
+  const confirmDelete = async () => {
+    const r = await fetch(`/api/users/${deleteTarget!.id}/permanent`, {
       method: "DELETE",
       credentials: "include",
     });
     if (!r.ok) {
       const { error } = await r.json();
-      alert(error ?? "Delete failed");
+      setDeleteError(error ?? "Delete failed");
       return;
     }
+    setDeleteTarget(null);
     load();
   };
 
@@ -114,29 +122,29 @@ export function UsersTable() {
                     {u.roles.map((r) => (
                       <span
                         key={r}
-                        className="text-micro bg-primary/10 text-primary rounded-full px-2 py-0.5"
+                        className="text-xs font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5 inline-flex items-center"
                       >
                         {r}
                       </span>
                     ))}
                     {u.roles.length === 0 && (
-                      <span className="text-micro text-subtle">—</span>
+                      <span className="text-xs font-medium text-subtle">—</span>
                     )}
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   {u.hasAccess ? (
                     u.isActive ? (
-                      <span className="text-micro bg-success-soft text-success rounded-full px-2 py-0.5">
+                      <span className="text-xs font-medium bg-success-soft text-success rounded-full px-2 py-0.5 inline-flex items-center">
                         Active
                       </span>
                     ) : (
-                      <span className="text-micro bg-warning-soft text-warning rounded-full px-2 py-0.5">
+                      <span className="text-xs font-medium bg-warning-soft text-warning rounded-full px-2 py-0.5 inline-flex items-center">
                         Inactive
                       </span>
                     )
                   ) : (
-                    <span className="text-micro bg-danger-soft text-danger rounded-full px-2 py-0.5">
+                    <span className="text-xs font-medium bg-danger-soft text-danger rounded-full px-2 py-0.5 inline-flex items-center">
                       No access
                     </span>
                   )}
@@ -158,7 +166,7 @@ export function UsersTable() {
                       </button>
                       {u.hasAccess ? (
                         <button
-                          onClick={() => handleRevoke(u)}
+                          onClick={() => setRevokeTarget(u)}
                           className="text-warning hover:underline font-medium"
                         >
                           Revoke
@@ -166,14 +174,14 @@ export function UsersTable() {
                       ) : (
                         <>
                           <button
-                            onClick={() => handleReactivate(u)}
+                            onClick={() => setReactivateTarget(u)}
                             className="text-success hover:underline font-medium"
                           >
                             Reactivate
                           </button>
                           {hasPermission("settings", "delete") && (
                             <button
-                              onClick={() => handleDelete(u)}
+                              onClick={() => { setDeleteTarget(u); setDeleteError(null); }}
                               className="text-danger hover:underline font-medium"
                             >
                               Delete
@@ -216,6 +224,81 @@ export function UsersTable() {
             load();
           }}
         />
+      )}
+
+      {/* Revoke modal — needs a reason text area, so we build an inline modal */}
+      {revokeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setRevokeTarget(null); setRevokeReason(""); }} />
+          <div className="relative bg-surface border border-border rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 space-y-4">
+            <h2 className="text-h3 text-text">Revoke access</h2>
+            <p className="text-body-sm text-muted">
+              Revoking access for <span className="text-text font-medium">{revokeTarget.fullName}</span>.
+            </p>
+            <div className="space-y-1">
+              <label className="block text-body-sm font-medium text-text">Reason</label>
+              <textarea
+                value={revokeReason}
+                onChange={(e) => setRevokeReason(e.target.value)}
+                rows={3}
+                placeholder="Optional reason…"
+                className="w-full rounded-lg border border-border px-3 py-2 text-body-sm bg-surface text-text outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none"
+              />
+            </div>
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                onClick={() => { setRevokeTarget(null); setRevokeReason(""); }}
+                className="h-9 px-4 rounded-lg border border-border text-body-sm font-medium text-muted hover:bg-surface-2 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRevoke}
+                className="h-9 px-4 rounded-lg bg-warning text-white text-body-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                Revoke access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate modal */}
+      <ConfirmDialog
+        open={!!reactivateTarget}
+        title="Reactivate user"
+        message={`Reactivate ${reactivateTarget?.fullName ?? ""}?`}
+        confirmLabel="Reactivate"
+        onConfirm={confirmReactivate}
+        onCancel={() => setReactivateTarget(null)}
+      />
+
+      {/* Delete modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setDeleteTarget(null); setDeleteError(null); }} />
+          <div className="relative bg-surface border border-border rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 space-y-4">
+            <h2 className="text-h3 text-text">Permanently delete user</h2>
+            <p className="text-body-sm text-muted">
+              Delete <span className="text-text font-medium">{deleteTarget.fullName}</span>? This cannot be undone.
+            </p>
+            {deleteError && <p className="text-micro text-danger">{deleteError}</p>}
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteError(null); }}
+                className="h-9 px-4 rounded-lg border border-border text-body-sm font-medium text-muted hover:bg-surface-2 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="h-9 px-4 rounded-lg bg-danger text-white text-body-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

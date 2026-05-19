@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Checkbox } from "@/components/ui/Checkbox";
 
@@ -52,6 +52,22 @@ export function PermissionsGrid({ open, role, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  // Clear timer when dialog closes externally
+  useEffect(() => {
+    if (!open && timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -106,7 +122,7 @@ export function PermissionsGrid({ open, role, onClose }: Props) {
       }
 
       setSaved(true);
-      setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         setSaved(false);
         onClose();
       }, 1000);
