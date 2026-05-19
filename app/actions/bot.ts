@@ -290,6 +290,57 @@ export async function submitApplication(applicationId: string): Promise<void> {
   });
 }
 
+export async function finalizeApplicationDetails(args: {
+  applicationId: string;
+  fullName: string;
+  email?: string;
+  notes?: string;
+  cvFileId?: string;
+  cvFilename?: string;
+}): Promise<void> {
+  // Resolve candidateId from the application
+  const appRows = await db
+    .select()
+    .from(applications)
+    .where(eq(applications.id, args.applicationId));
+  const app = appRows[0];
+  if (!app) return;
+
+  // Update candidate's fullName; also store email in phone field if phone is blank
+  const candRows = await db
+    .select()
+    .from(candidates)
+    .where(eq(candidates.id, app.candidateId));
+  const cand = candRows[0];
+  if (!cand) return;
+
+  const updateSet: Record<string, unknown> = { fullName: args.fullName };
+  if (args.email && !cand.phone) {
+    updateSet.phone = args.email;
+  }
+  await db.update(candidates).set(updateSet).where(eq(candidates.id, cand.id));
+
+  // CV and notes go to timeline events
+  if (args.cvFileId) {
+    await db.insert(timelineEvents).values({
+      id: crypto.randomUUID(),
+      applicationId: args.applicationId,
+      type: "answer_submitted",
+      description: `CV attached: ${args.cvFilename ?? "cv.pdf"} (Telegram file_id: ${args.cvFileId})`,
+      createdAt: new Date(),
+    });
+  }
+  if (args.notes) {
+    await db.insert(timelineEvents).values({
+      id: crypto.randomUUID(),
+      applicationId: args.applicationId,
+      type: "answer_submitted",
+      description: `Candidate note: ${args.notes}`,
+      createdAt: new Date(),
+    });
+  }
+}
+
 export async function abandonApplication(applicationId: string): Promise<void> {
   await db
     .update(applications)

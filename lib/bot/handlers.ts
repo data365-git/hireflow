@@ -3,7 +3,7 @@ import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, applications, candidates, telegramMessages } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot } from "@/app/actions/bot";
+import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateInProgressApplication, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
 
 // ---- /start ----
@@ -93,8 +93,16 @@ export async function handleCallbackQuery(ctx: Context) {
       .orderBy(asc(screeningQuestions.orderIndex));
     const totalSteps = 2 + questions.length + 2;
 
+    // Create in_progress application immediately so the lead is visible
+    const candidateId = (ctx as any).state?.candidateId as string | undefined;
+    let applicationId: string | undefined;
+    if (candidateId) {
+      applicationId = await getOrCreateInProgressApplication({ candidateId, vacancyId });
+    }
+
     await saveBotSession(telegramUserId, {
       vacancyId,
+      applicationId: applicationId ?? null,
       state: "awaiting_name",
       currentQuestionIndex: 0,
       collectedData: { totalSteps },
@@ -108,11 +116,23 @@ export async function handleCallbackQuery(ctx: Context) {
   if (data === "my_applications") return handleStatus(ctx);
   if (data === "help") return handleHelp(ctx);
   if (data === "not_interested") {
+    const session = await getBotSession(String(ctx.from!.id));
+    if (session?.applicationId) {
+      await abandonApplication(session.applicationId).catch((err) => {
+        console.error("[handleCallbackQuery] abandonApplication failed:", err);
+      });
+    }
     await clearBotSession(String(ctx.from!.id));
     return ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
   }
   if (data === "submit_confirm") return handleSubmitConfirm(ctx, lang);
   if (data === "submit_cancel") {
+    const session = await getBotSession(String(ctx.from!.id));
+    if (session?.applicationId) {
+      await abandonApplication(session.applicationId).catch((err) => {
+        console.error("[handleCallbackQuery] abandonApplication (submit_cancel) failed:", err);
+      });
+    }
     await clearBotSession(String(ctx.from!.id));
     return ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
   }
@@ -183,6 +203,12 @@ export async function handleHelp(ctx: Context) {
 // ---- /cancel ----
 export async function handleCancel(ctx: Context) {
   const lang = detectLang(ctx);
+  const session = await getBotSession(String(ctx.from!.id));
+  if (session?.applicationId) {
+    await abandonApplication(session.applicationId).catch((err) => {
+      console.error("[handleCancel] abandonApplication failed:", err);
+    });
+  }
   await clearBotSession(String(ctx.from!.id));
   await ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
 }
@@ -318,8 +344,17 @@ export async function handleText(ctx: Context) {
     const q = questions[qIdx];
     const answers = (data.answers as Record<string, string>) ?? {};
 
-    answers[q.id] = text === "/skip" ? "" : text;
+    const answerText = text === "/skip" ? "" : text;
+    answers[q.id] = answerText;
     data.answers = answers;
+
+    // Live-save answer to DB immediately
+    const applicationId = (session as any).applicationId as string | undefined;
+    if (applicationId && answerText) {
+      await saveScreeningAnswerLive({ applicationId, questionId: q.id, answerText }).catch((err) => {
+        console.error("[handleText] saveScreeningAnswerLive failed:", err);
+      });
+    }
 
     const nextIdx = qIdx + 1;
     if (nextIdx >= questions.length) {
@@ -425,18 +460,36 @@ async function handleSubmitConfirm(ctx: Context, lang: Lang) {
   const data = (session.collectedData as Record<string, unknown>) ?? {};
 
   try {
-    const appId = await createApplicationFromBot({
-      telegramUserId,
-      telegramUsername: ctx.from!.username,
-      telegramFirstName: ctx.from!.first_name,
-      fullName: String(data.fullName ?? ctx.from!.first_name),
-      email: data.email ? String(data.email) : undefined,
-      notes: data.notes ? String(data.notes) : undefined,
-      cvFileId: data.cvFileId ? String(data.cvFileId) : undefined,
-      cvFilename: data.cvFilename ? String(data.cvFilename) : undefined,
-      vacancyId: session.vacancyId!,
-      answers: (data.answers as Record<string, string>) ?? {},
-    });
+    let appId: string | null;
+    const existingApplicationId = (session as any).applicationId as string | undefined;
+
+    if (existingApplicationId) {
+      // Phase 2A path: application already exists in_progress — finalize details then submit
+      await finalizeApplicationDetails({
+        applicationId: existingApplicationId,
+        fullName: String(data.fullName ?? ctx.from!.first_name),
+        email: data.email ? String(data.email) : undefined,
+        notes: data.notes ? String(data.notes) : undefined,
+        cvFileId: data.cvFileId ? String(data.cvFileId) : undefined,
+        cvFilename: data.cvFilename ? String(data.cvFilename) : undefined,
+      });
+      await submitApplication(existingApplicationId);
+      appId = existingApplicationId;
+    } else {
+      // Backward-compat path: no in_progress application (e.g. old session without applicationId)
+      appId = await createApplicationFromBot({
+        telegramUserId,
+        telegramUsername: ctx.from!.username,
+        telegramFirstName: ctx.from!.first_name,
+        fullName: String(data.fullName ?? ctx.from!.first_name),
+        email: data.email ? String(data.email) : undefined,
+        notes: data.notes ? String(data.notes) : undefined,
+        cvFileId: data.cvFileId ? String(data.cvFileId) : undefined,
+        cvFilename: data.cvFilename ? String(data.cvFilename) : undefined,
+        vacancyId: session.vacancyId!,
+        answers: (data.answers as Record<string, string>) ?? {},
+      });
+    }
 
     await clearBotSession(telegramUserId);
 
