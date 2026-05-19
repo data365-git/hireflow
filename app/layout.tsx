@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
-import { TopBar } from "@/components/TopBar";
+import { AuthProvider } from "@/context/AuthContext";
+import { AppShell } from "@/components/AppShell";
 import { ToastContainer } from "@/components/ui/ToastContainer";
 import { CommandMenu } from "@/components/CommandMenu";
 
@@ -28,15 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${manrope.variable} ${mono.variable}`}>
       <body className="flex h-screen overflow-hidden bg-bg">
-        <Sidebar />
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          <TopBar />
-          <main className="flex-1 min-w-0 overflow-y-auto">
-            {children}
-          </main>
-        </div>
-        <ToastContainer />
-        <CommandMenu />
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+          <ToastContainer />
+          <CommandMenu />
+        </AuthProvider>
       </body>
     </html>
   );

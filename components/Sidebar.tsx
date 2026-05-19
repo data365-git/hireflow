@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
+import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   Inbox,
@@ -10,6 +11,7 @@ import {
   Settings,
   Zap,
   Users,
+  LogOut,
 } from "lucide-react";
 
 function isActive(href: string, pathname: string): boolean {
@@ -61,6 +63,7 @@ export function Sidebar() {
   const currentUserId = useStore((s) => s.currentUserId);
   const simulateIncomingApplication = useStore((s) => s.simulateIncomingApplication);
   const getUnreadCount = useStore((s) => s.getUnreadCount);
+  const { user: authUser, signOut } = useAuth();
 
   const unreadCount = getUnreadCount();
   const currentUser = users.find((u) => u.id === currentUserId);
@@ -119,9 +122,22 @@ export function Sidebar() {
             {currentUser?.avatarInitials ?? "?"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-body-sm font-semibold text-text truncate">{currentUser?.name ?? "HR Manager"}</p>
-            <p className="text-micro text-subtle capitalize truncate">{currentUser?.role ?? "hr"}</p>
+            <p className="text-body-sm font-semibold text-text truncate">
+              {authUser?.fullName ?? currentUser?.name ?? "HR Manager"}
+            </p>
+            <p className="text-micro text-subtle capitalize truncate">
+              {authUser?.email ?? currentUser?.role ?? "hr"}
+            </p>
           </div>
+          {authUser && (
+            <button
+              onClick={signOut}
+              title="Sign out"
+              className="shrink-0 text-subtle hover:text-danger transition-colors"
+            >
+              <LogOut className="size-4" strokeWidth={2} />
+            </button>
+          )}
         </div>
       </div>
     </aside>
