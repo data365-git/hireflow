@@ -144,6 +144,20 @@ export async function getMessagesForApplication(applicationId: string) {
     .orderBy(telegramMessages.sentAt);
 }
 
+export async function getInboxUnreadCount(): Promise<number> {
+  const isDemo = await getCurrentDataMode();
+
+  const msgs = await db
+    .select({ readByUserIds: telegramMessages.readByUserIds, direction: telegramMessages.direction })
+    .from(telegramMessages)
+    .innerJoin(candidates, eq(telegramMessages.candidateId, candidates.id))
+    .where(eq(candidates.isDemo, isDemo));
+
+  return msgs.filter(
+    (m) => m.direction === "inbound" && (!m.readByUserIds || (m.readByUserIds as string[]).length === 0)
+  ).length;
+}
+
 export async function markMessagesRead(applicationId: string) {
   await db
     .update(telegramMessages)

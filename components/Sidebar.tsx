@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useStore } from "@/lib/store";
+import { useState, useEffect } from "react";
+import { getInboxUnreadCount } from "@/app/actions/messages";
 import {
   LayoutDashboard,
   Inbox,
@@ -56,9 +57,11 @@ function NavLink({ href, label, Icon, badge }: NavItem) {
 }
 
 export function Sidebar() {
-  const getUnreadCount = useStore((s) => s.getUnreadCount);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const unreadCount = getUnreadCount();
+  useEffect(() => {
+    getInboxUnreadCount().then(setUnreadCount).catch(() => setUnreadCount(0));
+  }, []);
 
   return (
     <aside className="w-60 shrink-0 bg-bg border-r border-border flex flex-col h-screen sticky top-0 z-40">

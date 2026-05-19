@@ -34,9 +34,21 @@ function useBreadcrumb(pathname: string): string {
   }
 
   if (segments[0] === "inbox") return "Inbox";
+  if (segments[0] === "leads") return "Leads";
   if (segments[0] === "analytics") return "Analytics";
   if (segments[0] === "automations") return "Automations";
   if (segments[0] === "templates") return "Templates";
+
+  if (segments[0] === "settings") {
+    if (segments.length === 1) return "Settings";
+    const sub = segments[1];
+    if (sub === "profile") return "Settings / Profile";
+    if (sub === "users") return "Settings / Users";
+    if (sub === "roles") return "Settings / Roles";
+    if (sub === "automations") return "Settings / Automations";
+    if (sub === "demo") return "Settings / Demo";
+    return "Settings";
+  }
 
   return segments[segments.length - 1];
 }
@@ -52,10 +64,7 @@ function formatUserChip(name: string | undefined): string {
 export function TopBar() {
   const pathname = usePathname();
   const breadcrumb = useBreadcrumb(pathname);
-  const getUnreadCount = useStore((s) => s.getUnreadCount);
   const { user, signOut } = useAuth();
-
-  const unreadCount = getUnreadCount();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -103,9 +112,6 @@ export function TopBar() {
         {/* Notification bell */}
         <button className="relative flex items-center justify-center size-7 rounded-full hover:bg-surface-2 transition-colors text-muted">
           <BellIcon size={16} />
-          {unreadCount > 0 && (
-            <span className="absolute top-0.5 right-0.5 size-2 rounded-full bg-danger" />
-          )}
         </button>
 
         {/* User chip with dropdown */}
