@@ -71,7 +71,15 @@ export function KanbanColumn({
       {/* Column header */}
       <div className="mb-2 px-0.5">
         <div className="flex items-center justify-between">
-          <StagePill stage={stage} size="sm" />
+          {stage.orderIndex === 0 ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-micro font-semibold text-warning bg-warning-soft px-2 h-5 rounded-full inline-flex items-center gap-1">
+                📥 {stage.name}
+              </span>
+            </div>
+          ) : (
+            <StagePill stage={stage} size="sm" />
+          )}
           <div className="flex items-center gap-1.5">
             <span className="text-micro text-subtle font-semibold bg-surface-2 rounded-full px-1.5 h-5 flex items-center justify-center">
               {search && visibleApplications.length !== applications.length

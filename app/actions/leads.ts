@@ -49,3 +49,22 @@ export async function getCandidateConversation(candidateId: string) {
     .where(eq(telegramMessages.candidateId, candidateId))
     .orderBy(telegramMessages.sentAt);
 }
+
+export async function getBrowsingLeadsCount(): Promise<number> {
+  // Candidates with telegramUserId that have no applications (or only abandoned ones)
+  const allCandidates = await db
+    .select()
+    .from(candidates)
+    .where(isNotNull(candidates.telegramUserId));
+
+  let count = 0;
+  for (const c of allCandidates) {
+    const apps = await db
+      .select()
+      .from(applications)
+      .where(eq(applications.candidateId, c.id));
+    const nonAbandoned = apps.filter((a) => a.status !== "abandoned");
+    if (nonAbandoned.length === 0) count++;
+  }
+  return count;
+}

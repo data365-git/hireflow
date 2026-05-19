@@ -16,14 +16,35 @@ import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { formatRelativeTime, daysAgo } from "@/lib/utils";
 import type { TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent } from "@/lib/types";
 
-type Tab = "activity" | "chat" | "notes" | "tasks" | "screening" | "timeline";
+type Tab = "activity" | "chat" | "notes" | "tasks" | "screening" | "timeline" | "conversation";
+
+export type ConversationMessage = {
+  id: string;
+  candidateId: string;
+  applicationId?: string | null;
+  direction: "inbound" | "outbound";
+  senderType: "candidate" | "hr" | "system";
+  senderName?: string | null;
+  text: string;
+  sentAt: Date | string;
+  readByUserIds: string[] | null;
+  attachmentFileId?: string | null;
+  attachmentType?: "photo" | "document" | null;
+  attachmentFilename?: string | null;
+};
 
 type ActivityItem =
   | { kind: "message"; ts: string; msg: TelegramMessage }
   | { kind: "timeline"; ts: string; event: TimelineEvent }
   | { kind: "note"; ts: string; note: InternalNote; author?: User };
 
-function ProfileContent({ applicationId }: { applicationId: string }) {
+function ProfileContent({
+  applicationId,
+  initialConversation,
+}: {
+  applicationId: string;
+  initialConversation: ConversationMessage[];
+}) {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as Tab) ?? "activity";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -134,6 +155,7 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
   const TABS: { id: Tab; label: string; badge?: number }[] = [
     { id: "activity", label: "Activity" },
     { id: "chat", label: "Chat", badge: unreadCount > 0 ? unreadCount : undefined },
+    { id: "conversation", label: "Conversation", badge: initialConversation.length > 0 ? initialConversation.length : undefined },
     { id: "notes", label: "Notes", badge: notes.length > 0 ? notes.length : undefined },
     { id: "tasks", label: "Tasks", badge: taskAssignments.length > 0 ? taskAssignments.length : undefined },
     { id: "screening", label: "Screening", badge: answers.length > 0 ? answers.length : undefined },
@@ -410,6 +432,47 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
               </div>
             )}
 
+            {/* ── Conversation (all TG history) ── */}
+            {activeTab === "conversation" && (
+              <div className="flex flex-col h-full max-w-[720px]">
+                <div className="px-4 py-2 border-b border-border bg-surface-2 shrink-0">
+                  <p className="text-micro text-muted">
+                    Full Telegram history — all messages including pre-application ({initialConversation.length})
+                  </p>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+                  {initialConversation.length === 0 ? (
+                    <EmptyState
+                      title="No conversation yet"
+                      description="Telegram messages will appear here once the candidate interacts with the bot."
+                    />
+                  ) : (
+                    initialConversation.map((msg) => {
+                      const sentAtStr =
+                        msg.sentAt instanceof Date
+                          ? msg.sentAt.toISOString()
+                          : String(msg.sentAt);
+                      const asTelegramMessage: import("@/lib/types").TelegramMessage = {
+                        id: msg.id,
+                        candidateId: msg.candidateId,
+                        applicationId: msg.applicationId ?? null,
+                        direction: msg.direction,
+                        senderType: msg.senderType,
+                        senderName: msg.senderName ?? undefined,
+                        text: msg.text,
+                        sentAt: sentAtStr,
+                        readByUserIds: msg.readByUserIds ?? [],
+                        attachmentFileId: msg.attachmentFileId ?? null,
+                        attachmentType: msg.attachmentType ?? null,
+                        attachmentFilename: msg.attachmentFilename ?? null,
+                      };
+                      return <ChatBubble key={msg.id} message={asTelegramMessage} />;
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ── Notes ── */}
             {activeTab === "notes" && (
               <div className="space-y-4">
@@ -579,7 +642,13 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
   );
 }
 
-export function CandidateProfileClient({ applicationId }: { applicationId: string }) {
+export function CandidateProfileClient({
+  applicationId,
+  initialConversation = [],
+}: {
+  applicationId: string;
+  initialConversation?: ConversationMessage[];
+}) {
   return (
     <Suspense
       fallback={
@@ -588,7 +657,7 @@ export function CandidateProfileClient({ applicationId }: { applicationId: strin
         </div>
       }
     >
-      <ProfileContent applicationId={applicationId} />
+      <ProfileContent applicationId={applicationId} initialConversation={initialConversation} />
     </Suspense>
   );
 }

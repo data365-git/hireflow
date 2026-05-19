@@ -12,6 +12,7 @@ import { formatRelativeTime } from "@/lib/utils";
 
 type Filter = "all" | "unread" | "stale";
 type DateFilter = "all" | "today" | "week" | "month";
+type StatusFilter = "all" | "browsing" | "in_progress" | "submitted" | "abandoned";
 
 function isToday(dateStr: string): boolean {
   const d = new Date(dateStr);
@@ -51,6 +52,7 @@ export default function InboxPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [vacancyFilter, setVacancyFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -102,6 +104,7 @@ export default function InboxPage() {
     if (dateFilter === "today" && !isToday(r.lastMsg.sentAt)) return false;
     if (dateFilter === "week" && !isThisWeek(r.lastMsg.sentAt)) return false;
     if (dateFilter === "month" && !isThisMonth(r.lastMsg.sentAt)) return false;
+    if (statusFilter !== "all" && r.app.status !== statusFilter) return false;
     return true;
   });
 
@@ -188,6 +191,16 @@ export default function InboxPage() {
             <option value="today">Today</option>
             <option value="week">This week</option>
             <option value="month">This month</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="w-full text-body-sm bg-surface border border-border rounded-lg px-2 py-1 text-text outline-none focus:border-primary"
+          >
+            <option value="all">All statuses</option>
+            <option value="in_progress">In progress</option>
+            <option value="submitted">Submitted</option>
+            <option value="abandoned">Abandoned</option>
           </select>
         </div>
         <div className="h-11 px-4 flex items-center border-b border-border shrink-0">

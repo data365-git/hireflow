@@ -9,6 +9,7 @@ import {
   BarChart2,
   Settings,
   Zap,
+  Users,
 } from "lucide-react";
 
 function isActive(href: string, pathname: string): boolean {
@@ -82,6 +83,7 @@ export function Sidebar() {
         {/* MY WORK */}
         <p className="text-micro text-subtle uppercase tracking-widest px-3 mb-1 mt-1">My Work</p>
         <NavLink href="/" label="My Pipeline" Icon={LayoutDashboard} />
+        <NavLink href="/leads" label="Leads" Icon={Users} />
         <NavLink href="/inbox" label="Inbox" Icon={Inbox} badge={unreadCount > 0 ? unreadCount : undefined} />
 
         {/* MANAGE */}

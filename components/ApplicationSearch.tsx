@@ -9,6 +9,7 @@ type AppRow = {
     currentStageId: string;
     appliedAt: Date;
     lastActivityAt: Date;
+    status?: string;
   };
   candidate: {
     id: string;
@@ -32,6 +33,7 @@ interface Props {
 export function ApplicationSearch({ appRows, stages, onFilter }: Props) {
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     let filtered = appRows;
@@ -49,8 +51,13 @@ export function ApplicationSearch({ appRows, stages, onFilter }: Props) {
         (r) => r.application.currentStageId === stageFilter
       );
     }
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(
+        (r) => r.application.status === statusFilter
+      );
+    }
     onFilter(filtered);
-  }, [query, stageFilter, appRows]);
+  }, [query, stageFilter, statusFilter, appRows]);
 
   return (
     <div className="flex items-center gap-2 px-8 pt-4 pb-2">
@@ -85,6 +92,15 @@ export function ApplicationSearch({ appRows, stages, onFilter }: Props) {
             {s.name}
           </option>
         ))}
+      </select>
+      <select
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+        className="bg-surface-2 border border-border rounded-lg px-3 py-2 text-body-sm text-text outline-none focus:border-primary"
+      >
+        <option value="all">All statuses</option>
+        <option value="in_progress">In progress</option>
+        <option value="submitted">Submitted</option>
       </select>
     </div>
   );

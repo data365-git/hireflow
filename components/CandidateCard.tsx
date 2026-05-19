@@ -94,6 +94,17 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <span className="text-micro text-subtle">{candidate.phone}</span>
         <div className="flex items-center gap-1.5 shrink-0">
+          {application.status === "in_progress" && (
+            <span className="text-micro bg-warning-soft text-warning px-1.5 h-5 rounded-full inline-flex items-center gap-1">
+              <span className="size-1.5 rounded-full bg-warning inline-block" />
+              In progress
+            </span>
+          )}
+          {application.status === "abandoned" && (
+            <span className="text-micro bg-surface-3 text-muted px-1.5 h-5 rounded-full inline-flex items-center">
+              Abandoned
+            </span>
+          )}
           {unread > 0 && (
             <span className="text-micro bg-primary text-primary-fg px-1.5 h-5 rounded-full inline-flex items-center gap-0.5">
               💬 {unread}
