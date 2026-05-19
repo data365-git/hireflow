@@ -12,6 +12,8 @@ import {
   Zap,
   Users,
   LogOut,
+  UserCog,
+  ShieldCheck,
 } from "lucide-react";
 
 function isActive(href: string, pathname: string): boolean {
@@ -63,7 +65,7 @@ export function Sidebar() {
   const currentUserId = useStore((s) => s.currentUserId);
   const simulateIncomingApplication = useStore((s) => s.simulateIncomingApplication);
   const getUnreadCount = useStore((s) => s.getUnreadCount);
-  const { user: authUser, signOut } = useAuth();
+  const { user: authUser, signOut, hasPermission } = useAuth();
 
   const unreadCount = getUnreadCount();
   const currentUser = users.find((u) => u.id === currentUserId);
@@ -110,6 +112,13 @@ export function Sidebar() {
       {/* Settings */}
       <div className="px-3 pb-2 shrink-0">
         <NavLink href="/automations" label="Automations" Icon={Settings} />
+        {hasPermission("settings", "read") && (
+          <>
+            <p className="text-micro text-subtle uppercase tracking-widest px-3 mb-1 mt-3">Admin</p>
+            <NavLink href="/settings/users" label="Users" Icon={UserCog} />
+            <NavLink href="/settings/roles" label="Roles" Icon={ShieldCheck} />
+          </>
+        )}
       </div>
 
       {/* User profile */}
