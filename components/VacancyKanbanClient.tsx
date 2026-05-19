@@ -7,7 +7,8 @@ import { KanbanBoardClient } from "@/components/KanbanBoardClient";
 import { ApplicationSearch } from "@/components/ApplicationSearch";
 import { formatSalary } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
-import { exportVacancyApplicationsCSV } from "@/app/actions/export";
+import { ExportModal } from "@/components/export/ExportModal";
+import type { ExportRow } from "@/lib/export/types";
 import type { TestTask } from "@/lib/types";
 
 const WORK_TYPE_LABELS: Record<string, string> = { office: "Office", remote: "Remote", hybrid: "Hybrid" };
@@ -118,22 +119,31 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
   const [batchMsgText, setBatchMsgText] = useState("");
   const [sent, setSent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
   const [taskDays, setTaskDays] = useState<number>(7);
 
   const router = useRouter();
 
-  async function handleExport() {
-    const csv = await exportVacancyApplicationsCSV(id);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${vacancy.title}-applications.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  // Build export rows from existing appRows prop (no extra server call needed)
+  const exportRows: ExportRow[] = appRows.map(({ application: app, candidate: cand }) => {
+    const stage = stages.find((s) => s.id === app.currentStageId);
+    const appliedAt = app.appliedAt ? new Date(app.appliedAt) : null;
+    const lastActivityAt = app.lastActivityAt ? new Date(app.lastActivityAt) : null;
+    return {
+      // dateKey used for filtering — keep as ISO so the modal can parse it
+      _appliedAtIso: appliedAt?.toISOString() ?? "",
+      name: cand.fullName,
+      phone: cand.phone ?? "",
+      telegram: cand.telegramUsername ? `@${cand.telegramUsername}` : "",
+      stage: stage?.name ?? "",
+      stageColor: stage?.color ?? "",
+      status: (app as Record<string, unknown>).status as string ?? "",
+      appliedAt: appliedAt ? appliedAt.toLocaleDateString("en-GB") : "",
+      lastActivityAt: lastActivityAt ? lastActivityAt.toLocaleDateString("en-GB") : "",
+    };
+  });
 
   // Auto-refresh every 10 seconds
   useEffect(() => {
@@ -224,7 +234,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={handleExport}
+              onClick={() => setExportOpen(true)}
               className="flex items-center gap-1.5 border border-border bg-surface text-body-sm font-medium text-text px-3 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
             >
               <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
@@ -234,7 +244,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
                   clipRule="evenodd"
                 />
               </svg>
-              Export CSV
+              Export
             </button>
             <div className="text-right">
               <div className="text-h2 text-text font-bold">{total}</div>
@@ -540,6 +550,26 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
           </div>
         </div>
       )}
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        data={exportRows}
+        dateKey="_appliedAtIso"
+        columnLabels={{
+          name: "col_name",
+          phone: "col_phone",
+          telegram: "col_telegram",
+          stage: "col_stage",
+          status: "col_status",
+          appliedAt: "col_appliedAt",
+          lastActivityAt: "col_lastActivityAt",
+        }}
+        categoryKey="stageColor"
+        categoryOptions={["new","screening","qualified","test","interview","hired","rejected"]}
+        filename={`${vacancy.title}-applications-${new Date().toISOString().slice(0, 10)}`}
+        sheetName="Applications"
+      />
     </div>
   );
 }
