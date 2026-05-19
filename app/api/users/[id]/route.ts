@@ -47,13 +47,15 @@ export async function GET(
 const PutBody = z.object({
   fullName: z.string().min(1).optional(),
   avatarUrl: z.string().url().optional(),
-  phone: z.string().optional(),
-  // Self password change via PUT (requires oldPassword)
+  phone: z.string().nullable().optional(),
+  // Self password change via PUT (requires oldPassword); admin can set directly
   oldPassword: z.string().optional(),
   password: PASSWORD_SCHEMA.optional(),
   // Admin-only
   isActive: z.boolean().optional(),
+  hasAccess: z.boolean().optional(),
   email: EMAIL_SCHEMA.optional(),
+  role: z.string().min(1).optional(),
 });
 
 export async function PUT(
@@ -75,7 +77,7 @@ export async function PUT(
 
     const parsed = PutBody.safeParse(await req.json());
     if (!parsed.success) return Response.json({ error: zodMessage(parsed.error) }, { status: 400 });
-    const { fullName, avatarUrl, phone, oldPassword, password, isActive, email } = parsed.data;
+    const { fullName, avatarUrl, phone, oldPassword, password, isActive, hasAccess, email, role } = parsed.data;
 
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (!user) throw new HttpError(404, "User not found");
@@ -106,12 +108,32 @@ export async function PUT(
       after.isActive = isActive;
     }
 
-    // Password change
+    // hasAccess update — admin only
+    if (hasAccess !== undefined) {
+      if (!isAdmin) throw new HttpError(403, "Only admins can change hasAccess");
+      before.hasAccess = user.hasAccess;
+      updates.hasAccess = hasAccess;
+      after.hasAccess = hasAccess;
+    }
+
+    // role update — admin only (updates the legacy role column; userRoles table managed separately)
+    if (role !== undefined) {
+      if (!isAdmin) throw new HttpError(403, "Only admins can change role");
+      before.role = user.role;
+      updates.role = role;
+      after.role = role;
+    }
+
+    // Password change — admin can set directly; self requires oldPassword
     if (password !== undefined) {
-      if (!oldPassword) return Response.json({ error: "oldPassword required" }, { status: 400 });
-      const ok = await verifyPassword(oldPassword, user.passwordHash!);
-      if (!ok) throw new HttpError(401, "Current password incorrect");
-      if (oldPassword === password) return Response.json({ error: "New password must differ from current" }, { status: 400 });
+      if (isSelf) {
+        if (!oldPassword) return Response.json({ error: "oldPassword required" }, { status: 400 });
+        const ok = await verifyPassword(oldPassword, user.passwordHash!);
+        if (!ok) throw new HttpError(401, "Current password incorrect");
+        if (oldPassword === password) return Response.json({ error: "New password must differ from current" }, { status: 400 });
+      } else if (!isAdmin) {
+        throw new HttpError(403, "Only admins can set another user's password");
+      }
       updates.passwordHash = await hashPassword(password);
       after.passwordChanged = true;
     }

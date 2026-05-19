@@ -1,35 +1,99 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { PermissionsGrid } from "./PermissionsGrid";
-import { CreateRoleDialog } from "./CreateRoleDialog";
+import { RoleRow } from "./RoleRow";
+import { RoleEditModal } from "./RoleEditModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import type { PermRow } from "./PermissionsGrid";
 
 interface Role {
   name: string;
   displayName: string;
-  description?: string | null;
-  color?: string | null;
+  description: string | null;
+  color: string | null;
   isSuperadmin: boolean;
   isSystem: boolean;
 }
 
+interface RoleWithPerms extends Role {
+  permissions: PermRow[];
+}
+
 export function RolesList() {
   const { hasPermission } = useAuth();
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [roles, setRoles] = useState<RoleWithPerms[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Edit / create modal state
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [editingPerms, setEditingPerms] = useState<PermRow[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Delete confirm state
+  const [deletingRole, setDeletingRole] = useState<Role | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const r = await fetch("/api/roles", { credentials: "include" });
-    if (r.ok) setRoles(await r.json());
-    setLoading(false);
+    try {
+      const rolesRes = await fetch("/api/roles", { credentials: "include" });
+      if (!rolesRes.ok) return;
+      const roleList: Role[] = await rolesRes.json();
+
+      // Load permissions for all roles in parallel
+      const withPerms: RoleWithPerms[] = await Promise.all(
+        roleList.map(async (role) => {
+          try {
+            const r = await fetch(`/api/roles/${role.name}/permissions`, { credentials: "include" });
+            const perms: PermRow[] = r.ok ? await r.json() : [];
+            return { ...role, permissions: perms };
+          } catch {
+            return { ...role, permissions: [] };
+          }
+        }),
+      );
+
+      setRoles(withPerms);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  const handleEditClick = (role: RoleWithPerms) => {
+    setEditingRole(role);
+    setEditingPerms(role.permissions);
+  };
+
+  const handleDeleteClick = (role: Role) => {
+    setDeleteError(null);
+    setDeletingRole(role);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingRole) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const r = await fetch(`/api/roles/${deletingRole.name}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!r.ok) {
+        const json = await r.json().catch(() => ({}));
+        setDeleteError(json.error ?? "Failed to delete role");
+        return;
+      }
+      setDeletingRole(null);
+      load();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) return <div className="text-muted text-body-sm">Loading...</div>;
 
@@ -46,58 +110,56 @@ export function RolesList() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {roles.map((role) => {
-          const isReadOnly = role.isSystem || role.isSuperadmin;
-          return (
-            <button
-              key={role.name}
-              onClick={isReadOnly ? undefined : () => setEditingRole(role)}
-              disabled={isReadOnly}
-              title={isReadOnly ? "System roles cannot be edited" : undefined}
-              className={`relative overflow-hidden text-left bg-surface border border-border rounded-xl p-5 transition-all group ${isReadOnly ? "cursor-default opacity-75" : "cursor-pointer hover:border-primary/40 hover:shadow-sm"}`}
-            >
-              <div
-                className="absolute left-0 inset-y-0 w-1 rounded-l-2xl"
-                style={{ backgroundColor: role.color ?? "#3525CD" }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-base font-semibold text-text transition-colors ${isReadOnly ? "" : "group-hover:text-primary"}`}>
-                    {role.displayName}
-                  </span>
-                  {role.isSuperadmin && <span title="Superadmin">👑</span>}
-                  {role.isSystem && <span title="System role">🔒</span>}
-                </div>
-                <p className="text-xs font-medium text-subtle mt-0.5">{role.name}</p>
-                {isReadOnly && (
-                  <span className="text-xs text-subtle mt-0.5">Read-only</span>
-                )}
-                {role.description && (
-                  <p className="text-body-xs text-muted mt-1 line-clamp-2">{role.description}</p>
-                )}
-              </div>
-            </button>
-          );
-        })}
+      <div className="space-y-2">
+        {roles.map((role) => (
+          <RoleRow
+            key={role.name}
+            role={role}
+            permissions={role.permissions}
+            onEdit={() => handleEditClick(role)}
+            onDelete={() => handleDeleteClick(role)}
+          />
+        ))}
       </div>
 
+      {/* Edit modal */}
       {editingRole && (
-        <PermissionsGrid
+        <RoleEditModal
           open={!!editingRole}
           role={editingRole}
+          permissions={editingPerms}
           onClose={(changed) => {
             setEditingRole(null);
+            setEditingPerms([]);
             if (changed) load();
           }}
         />
       )}
 
-      <CreateRoleDialog
+      {/* Create modal */}
+      <RoleEditModal
         open={showCreate}
+        role={null}
         onClose={(changed) => {
           setShowCreate(false);
           if (changed) load();
+        }}
+      />
+
+      {/* Delete confirm dialog */}
+      <ConfirmDialog
+        open={!!deletingRole}
+        title="Delete role"
+        message={
+          deleteError
+            ? deleteError
+            : `Are you sure you want to delete the role "${deletingRole?.displayName ?? deletingRole?.name}"? This cannot be undone.`
+        }
+        confirmLabel={deleting ? "Deleting..." : "Delete"}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setDeletingRole(null);
+          setDeleteError(null);
         }}
       />
     </div>
