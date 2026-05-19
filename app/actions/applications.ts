@@ -1,10 +1,54 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { applications, candidates, vacancyStages, timelineEvents, screeningAnswers, screeningQuestions } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { applications, candidates, vacancyStages, timelineEvents, screeningAnswers, screeningQuestions, vacancies } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
 import { getCurrentDataMode } from "@/lib/data-mode";
+
+export type PipelineApplication = {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  vacancyId: string;
+  vacancyTitle: string;
+  currentStageId: string;
+  stageColor: string;
+  status: string;
+  lastActivityAt: string;
+  appliedAt: string;
+  hasUnread: boolean;
+};
+
+export async function getPipelineApplications(): Promise<PipelineApplication[]> {
+  const isDemo = await getCurrentDataMode();
+
+  const rows = await db
+    .select({
+      id: applications.id,
+      candidateId: candidates.id,
+      candidateName: candidates.fullName,
+      vacancyId: vacancies.id,
+      vacancyTitle: vacancies.title,
+      currentStageId: applications.currentStageId,
+      stageColor: vacancyStages.color,
+      status: applications.status,
+      lastActivityAt: applications.lastActivityAt,
+      appliedAt: applications.appliedAt,
+    })
+    .from(applications)
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.status, "active")))
+    .innerJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .orderBy(desc(applications.lastActivityAt));
+
+  return rows.map((r) => ({
+    ...r,
+    hasUnread: false,
+    lastActivityAt: r.lastActivityAt?.toISOString() ?? new Date().toISOString(),
+    appliedAt: r.appliedAt?.toISOString() ?? new Date().toISOString(),
+  }));
+}
 
 export async function getApplicationsForVacancy(vacancyId: string) {
   const isDemo = await getCurrentDataMode();

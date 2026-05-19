@@ -1,25 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useStore } from "@/lib/store";
 import { Avatar } from "@/components/Avatar";
 import { formatRelativeTime } from "@/lib/utils";
-import type { Application, Candidate, Vacancy, VacancyStage } from "@/lib/types";
+import { useDataMode } from "@/context/DataModeContext";
+import { getPipelineApplications, type PipelineApplication } from "@/app/actions/applications";
+import { getAllVacancies } from "@/app/actions/vacancies";
 
 // ── Attention card ────────────────────────────────────────────────────────────
+
+type SimpleVacancy = { id: string; title: string };
 
 type AttentionCardProps = {
   title: string;
   icon: string;
   color: string;
-  items: Application[];
+  items: PipelineApplication[];
   emptyText: string;
-  candidates: Candidate[];
-  vacancies: Vacancy[];
+  vacancies: SimpleVacancy[];
 };
 
-function AttentionCard({ title, icon, color, items, emptyText, candidates, vacancies }: AttentionCardProps) {
+function AttentionCard({ title, icon, color, items, emptyText, vacancies }: AttentionCardProps) {
   return (
     <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -34,7 +36,6 @@ function AttentionCard({ title, icon, color, items, emptyText, candidates, vacan
       ) : (
         <div className="flex flex-col gap-2">
           {items.map((app) => {
-            const candidate = candidates.find((c) => c.id === app.candidateId);
             const vacancy = vacancies.find((v) => v.id === app.vacancyId);
             return (
               <Link
@@ -42,10 +43,10 @@ function AttentionCard({ title, icon, color, items, emptyText, candidates, vacan
                 href={`/candidates/${app.id}`}
                 className="flex items-center gap-2 hover:bg-surface-2 rounded-lg p-1.5 -mx-1.5 transition-colors"
               >
-                <Avatar name={candidate?.fullName ?? "?"} id={app.candidateId} size="sm" />
+                <Avatar name={app.candidateName} id={app.candidateId} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="text-body-sm font-semibold text-text truncate">
-                    {candidate?.fullName ?? "Unknown"}
+                    {app.candidateName}
                   </p>
                   <p className="text-micro text-subtle truncate">{vacancy?.title ?? ""}</p>
                 </div>
@@ -88,18 +89,24 @@ const STAGE_DOT_COLOR: Record<string, string> = {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MyPipelinePage() {
-  const vacancies = useStore((s) => s.vacancies);
-  const applications = useStore((s) => s.applications);
-  const candidates = useStore((s) => s.candidates);
-  const stages = useStore((s) => s.stages);
-  const messages = useStore((s) => s.messages);
-  const currentUserId = useStore((s) => s.currentUserId);
-
+  const { mode } = useDataMode();
+  const [apps, setApps] = useState<PipelineApplication[]>([]);
+  const [vacancies, setVacancies] = useState<SimpleVacancy[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterVacancyId, setFilterVacancyId] = useState<string>("all");
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([getPipelineApplications(), getAllVacancies()]).then(([a, v]) => {
+      setApps(a);
+      setVacancies(v.map((vac) => ({ id: vac.id, title: vac.title })));
+      setLoading(false);
+    });
+  }, [mode]);
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
-  const activeVacancies = vacancies.filter((v) => v.status === "active");
+  const activeVacancies = vacancies;
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -108,36 +115,29 @@ export default function MyPipelinePage() {
     year: "numeric",
   });
 
-  // Attention strip computations
   const oneDayMs = 86_400_000;
   const sevenDaysMs = 7 * 86_400_000;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const finalStageIds = new Set(stages.filter((s) => s.isFinal).map((s) => s.id));
-
-  const awaitingReply = applications
+  const awaitingReply = apps
     .filter((a) => {
-      const appMessages = messages.filter((m) => m.applicationId === a.id);
-      if (appMessages.length === 0) return false;
-      const last = appMessages[appMessages.length - 1];
-      return (
-        last.direction === "inbound" &&
-        !last.readByUserIds.includes(currentUserId) &&
-        Date.now() - new Date(last.sentAt).getTime() > oneDayMs
-      );
+      // hasUnread is false for now — server action always returns false
+      // Future: derive from real unread state
+      return a.hasUnread && Date.now() - new Date(a.lastActivityAt).getTime() > oneDayMs;
     })
     .slice(0, 5);
 
-  const stuckCandidates = applications
+  const stuckCandidates = apps
     .filter(
       (a) =>
-        !finalStageIds.has(a.currentStageId) &&
+        a.stageColor !== "hired" &&
+        a.stageColor !== "rejected" &&
         Date.now() - new Date(a.lastActivityAt).getTime() > sevenDaysMs
     )
     .slice(0, 5);
 
-  const newToday = applications
+  const newToday = apps
     .filter((a) => new Date(a.appliedAt).getTime() >= todayStart.getTime())
     .slice(0, 5);
 
@@ -146,26 +146,19 @@ export default function MyPipelinePage() {
 
   // ── Unified Kanban ─────────────────────────────────────────────────────────
 
-  // Applications to show in the kanban (respect vacancy filter)
-  const activeVacancyIds = new Set(activeVacancies.map((v) => v.id));
-  const visibleApps = applications.filter((a) => {
-    if (!activeVacancyIds.has(a.vacancyId)) return false;
+  const visibleApps = apps.filter((a) => {
     if (filterVacancyId !== "all" && a.vacancyId !== filterVacancyId) return false;
     return true;
   });
 
-  // Build a lookup: stageId → stage
-  const stageById = new Map<string, VacancyStage>(stages.map((s) => [s.id, s]));
-
-  // Group apps by the stage's color key
-  const appsByColor = new Map<string, Application[]>();
+  // Group apps by stageColor
+  const appsByColor = new Map<string, PipelineApplication[]>();
   for (const colorKey of STAGE_ORDER) {
     appsByColor.set(colorKey, []);
   }
   for (const app of visibleApps) {
-    const stage = stageById.get(app.currentStageId);
-    if (stage && appsByColor.has(stage.color)) {
-      appsByColor.get(stage.color)!.push(app);
+    if (appsByColor.has(app.stageColor)) {
+      appsByColor.get(app.stageColor)!.push(app);
     }
   }
 
@@ -173,6 +166,14 @@ export default function MyPipelinePage() {
   const columnsToShow = STAGE_ORDER.filter(
     (key) => key !== "rejected" || (appsByColor.get("rejected")?.length ?? 0) > 0
   );
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-body-sm text-subtle">Loading pipeline…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -195,7 +196,6 @@ export default function MyPipelinePage() {
               color="text-danger"
               items={awaitingReply}
               emptyText="All caught up!"
-              candidates={candidates}
               vacancies={vacancies}
             />
             <AttentionCard
@@ -204,7 +204,6 @@ export default function MyPipelinePage() {
               color="text-warning"
               items={stuckCandidates}
               emptyText="Pipeline is moving"
-              candidates={candidates}
               vacancies={vacancies}
             />
             <AttentionCard
@@ -213,7 +212,6 @@ export default function MyPipelinePage() {
               color="text-success"
               items={newToday}
               emptyText="None yet today"
-              candidates={candidates}
               vacancies={vacancies}
             />
           </div>
@@ -260,7 +258,6 @@ export default function MyPipelinePage() {
                   <div className="text-micro text-subtle px-1">Empty</div>
                 ) : (
                   colApps.map((app) => {
-                    const candidate = candidates.find((c) => c.id === app.candidateId);
                     const vacancy = vacancies.find((v) => v.id === app.vacancyId);
                     return (
                       <Link
@@ -270,13 +267,13 @@ export default function MyPipelinePage() {
                       >
                         <div className="flex items-center gap-2">
                           <Avatar
-                            name={candidate?.fullName ?? "?"}
+                            name={app.candidateName}
                             id={app.candidateId}
                             size="sm"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-body-sm font-semibold text-text truncate">
-                              {candidate?.fullName ?? "Unknown"}
+                              {app.candidateName}
                             </p>
                             <p className="text-micro text-subtle truncate">
                               {vacancy?.title ?? ""}

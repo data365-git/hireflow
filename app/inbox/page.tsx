@@ -1,13 +1,13 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useStore } from "@/lib/store";
 import { Avatar } from "@/components/Avatar";
-import { StagePill } from "@/components/StagePill";
 import { ChatBubble } from "@/components/ChatBubble";
 import { KbdHint } from "@/components/ui/KbdHint";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
-import type { Application, Candidate, VacancyStage, Vacancy, TelegramMessage } from "@/lib/types";
+import { useDataMode } from "@/context/DataModeContext";
+import { getInboxConversations, type InboxConversation } from "@/app/actions/messages";
+import { getMessagesForApplication, markMessagesRead, sendMessageToCandidate } from "@/app/actions/messages";
 import { formatRelativeTime } from "@/lib/utils";
 
 type Filter = "all" | "unread" | "stale";
@@ -38,14 +38,19 @@ function isThisMonth(dateStr: string): boolean {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
 }
 
-type InboxRow = {
-  appId: string;
-  app: Application;
-  candidate: Candidate;
-  lastMsg: TelegramMessage;
-  unreadCount: number;
-  vacancy: Vacancy | undefined;
-  stage: VacancyStage | undefined;
+type DbMessage = {
+  id: string;
+  candidateId: string;
+  applicationId: string | null;
+  direction: string;
+  senderType: string;
+  senderName: string | null;
+  text: string;
+  sentAt: Date | null;
+  readByUserIds: string[] | null;
+  attachmentFileId: string | null;
+  attachmentType: string | null;
+  attachmentFilename: string | null;
 };
 
 export default function InboxPage() {
@@ -55,89 +60,77 @@ export default function InboxPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
+  const [conversations, setConversations] = useState<InboxConversation[]>([]);
+  const [threadMessages, setThreadMessages] = useState<Record<string, DbMessage[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const applications = useStore((s) => s.applications);
-  const messages = useStore((s) => s.messages);
-  const currentUserId = useStore((s) => s.currentUserId);
-  const getCandidateForApplication = useStore((s) => s.getCandidateForApplication);
-  const getMessagesForApplication = useStore((s) => s.getMessagesForApplication);
-  const markConversationRead = useStore((s) => s.markConversationRead);
-  const sendMessage = useStore((s) => s.sendMessage);
-  const simulateIncomingMessage = useStore((s) => s.simulateIncomingMessage);
-  const vacancies = useStore((s) => s.vacancies);
-  const stages = useStore((s) => s.stages);
+  const { mode } = useDataMode();
 
-  // Build inbox rows — one per applicationId that has at least one message
-  const appIdsWithMessages = [...new Set(
-    messages.filter((m): m is typeof m & { applicationId: string } => m.applicationId != null).map((m) => m.applicationId)
-  )];
+  // Fetch conversations on mount and on mode change
+  useEffect(() => {
+    getInboxConversations().then(setConversations);
+  }, [mode]);
 
-  const rows: InboxRow[] = appIdsWithMessages
-    .map((appId): InboxRow | null => {
-      const app = applications.find((a) => a.id === appId);
-      if (!app) return null;
-      const candidate = getCandidateForApplication(appId);
-      if (!candidate) return null;
-      const msgs = getMessagesForApplication(appId);
-      const lastMsg = msgs[msgs.length - 1];
-      if (!lastMsg) return null;
-      const unreadCount = msgs.filter(
-        (m) => m.direction === "inbound" && !m.readByUserIds.includes(currentUserId)
-      ).length;
-      const vacancy = vacancies.find((v) => v.id === app.vacancyId);
-      const stage = stages.find((s) => s.id === app.currentStageId);
-      return { appId, app, candidate, lastMsg, unreadCount, vacancy, stage };
-    })
-    .filter((r): r is InboxRow => r !== null)
-    .sort((a, b) => new Date(b.lastMsg.sentAt).getTime() - new Date(a.lastMsg.sentAt).getTime());
+  // Initialize selectedAppId to first conversation once loaded
+  useEffect(() => {
+    if (selectedAppId === null && conversations.length > 0) {
+      setSelectedAppId(conversations[0].applicationId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations.length]);
 
-  const totalUnread = rows.reduce((sum: number, r: InboxRow) => sum + r.unreadCount, 0);
-  const staleCount = rows.filter(
-    (r) => Date.now() - new Date(r.lastMsg.sentAt).getTime() > 3 * 86400000
+  // Fetch messages when a thread is selected
+  useEffect(() => {
+    if (!selectedAppId) return;
+    getMessagesForApplication(selectedAppId).then((msgs) => {
+      setThreadMessages((prev) => ({ ...prev, [selectedAppId]: msgs }));
+      markMessagesRead(selectedAppId);
+    });
+  }, [selectedAppId]);
+
+  const totalUnread = conversations.reduce((sum, r) => sum + r.unreadCount, 0);
+  const staleCount = conversations.filter(
+    (r) => r.lastMessageAt && Date.now() - new Date(r.lastMessageAt).getTime() > 3 * 86400000
   ).length;
 
-  const filtered: InboxRow[] = rows.filter((r) => {
+  const filtered = conversations.filter((r) => {
     if (filter === "unread" && r.unreadCount === 0) return false;
-    if (filter === "stale" && Date.now() - new Date(r.lastMsg.sentAt).getTime() <= 3 * 86400000) return false;
-    if (vacancyFilter !== "all" && r.app.vacancyId !== vacancyFilter) return false;
-    if (dateFilter === "today" && !isToday(r.lastMsg.sentAt)) return false;
-    if (dateFilter === "week" && !isThisWeek(r.lastMsg.sentAt)) return false;
-    if (dateFilter === "month" && !isThisMonth(r.lastMsg.sentAt)) return false;
-    if (statusFilter !== "all" && r.app.status !== statusFilter) return false;
+    if (filter === "stale" && r.lastMessageAt && Date.now() - new Date(r.lastMessageAt).getTime() <= 3 * 86400000) return false;
+    if (vacancyFilter !== "all" && r.vacancyId !== vacancyFilter) return false;
+    if (dateFilter === "today" && r.lastMessageAt && !isToday(r.lastMessageAt)) return false;
+    if (dateFilter === "week" && r.lastMessageAt && !isThisWeek(r.lastMessageAt)) return false;
+    if (dateFilter === "month" && r.lastMessageAt && !isThisMonth(r.lastMessageAt)) return false;
+    if (statusFilter !== "all" && r.applicationStatus !== statusFilter) return false;
     return true;
   });
 
-  // Initialize selectedAppId to first row once rows are available
-  useEffect(() => {
-    if (selectedAppId === null && rows.length > 0) {
-      setSelectedAppId(rows[0].appId);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows.length]);
-
   useKeyboardShortcuts({
     j: () => {
-      const idx = filtered.findIndex((r) => r.appId === selectedAppId);
+      const idx = filtered.findIndex((r) => r.applicationId === selectedAppId);
       const next = filtered[idx + 1];
-      if (next) { setSelectedAppId(next.appId); markConversationRead(next.appId); }
+      if (next) { setSelectedAppId(next.applicationId); markMessagesRead(next.applicationId); }
     },
     k: () => {
-      const idx = filtered.findIndex((r) => r.appId === selectedAppId);
+      const idx = filtered.findIndex((r) => r.applicationId === selectedAppId);
       const prev = filtered[Math.max(0, idx - 1)];
-      if (prev && prev.appId !== selectedAppId) { setSelectedAppId(prev.appId); markConversationRead(prev.appId); }
+      if (prev && prev.applicationId !== selectedAppId) { setSelectedAppId(prev.applicationId); markMessagesRead(prev.applicationId); }
     },
   });
 
-  const selectedRow = rows.find((r) => r.appId === selectedAppId);
-  const threadMessages = selectedAppId ? getMessagesForApplication(selectedAppId) : [];
+  const selectedConv = conversations.find((r) => r.applicationId === selectedAppId);
+  const currentThreadMessages = selectedAppId ? (threadMessages[selectedAppId] ?? []) : [];
+
+  // Unique vacancies from conversations for the filter dropdown
+  const uniqueVacancies = Array.from(
+    new Map(conversations.map((c) => [c.vacancyId, c.vacancyTitle])).entries()
+  ).filter(([id]) => id);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     if (selectedAppId) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [threadMessages.length, selectedAppId]);
+  }, [currentThreadMessages.length, selectedAppId]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -145,7 +138,7 @@ export default function InboxPage() {
       <div className="w-40 shrink-0 border-r border-border flex flex-col bg-bg py-3 px-2">
         <p className="text-micro text-subtle uppercase tracking-wider px-2 mb-2">Inbox</p>
         {[
-          { id: "all",    label: "All",       count: rows.length },
+          { id: "all",    label: "All",       count: conversations.length },
           { id: "unread", label: "Unread",    count: totalUnread },
           { id: "stale",  label: "Stale >3d", count: staleCount },
         ].map(({ id, label, count }) => (
@@ -178,8 +171,8 @@ export default function InboxPage() {
             className="w-full text-body-sm bg-surface border border-border rounded-lg px-2 py-1 text-text outline-none focus:border-primary"
           >
             <option value="all">All vacancies</option>
-            {vacancies.filter((v) => v.status === "active").map((v) => (
-              <option key={v.id} value={v.id}>{v.title}</option>
+            {uniqueVacancies.map(([id, title]) => (
+              <option key={id} value={id}>{title}</option>
             ))}
           </select>
           <select
@@ -212,24 +205,24 @@ export default function InboxPage() {
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-body-sm text-muted text-center">No conversations</div>
           ) : (
-            filtered.map(({ appId, candidate, lastMsg, unreadCount, vacancy }) => {
-              const isSelected = selectedAppId === appId;
+            filtered.map((conv) => {
+              const isSelected = selectedAppId === conv.applicationId;
               return (
                 <button
-                  key={appId}
+                  key={conv.applicationId}
                   onClick={() => {
-                    setSelectedAppId(appId);
-                    markConversationRead(appId);
+                    setSelectedAppId(conv.applicationId);
+                    markMessagesRead(conv.applicationId);
                   }}
                   className={`w-full flex items-start gap-3 px-4 py-3 border-b border-border text-left transition-colors ${
                     isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-surface-2"
                   }`}
                 >
                   <div className="relative shrink-0 mt-0.5">
-                    <Avatar name={candidate.fullName} id={candidate.id} size="sm" />
-                    {unreadCount > 0 && (
+                    <Avatar name={conv.candidateName} id={conv.candidateId} size="sm" />
+                    {conv.unreadCount > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 size-3.5 bg-primary text-primary-fg text-[9px] font-bold rounded-full flex items-center justify-center">
-                        {unreadCount}
+                        {conv.unreadCount}
                       </span>
                     )}
                   </div>
@@ -237,27 +230,27 @@ export default function InboxPage() {
                     <div className="flex items-center justify-between gap-1">
                       <span
                         className={`text-body-sm truncate ${
-                          unreadCount > 0 ? "font-semibold text-text" : "text-muted"
+                          conv.unreadCount > 0 ? "font-semibold text-text" : "text-muted"
                         }`}
                       >
-                        {candidate.fullName}
+                        {conv.candidateName}
                       </span>
                       <span className="text-micro text-subtle shrink-0">
-                        {formatRelativeTime(lastMsg.sentAt)}
+                        {conv.lastMessageAt ? formatRelativeTime(conv.lastMessageAt) : ""}
                       </span>
                     </div>
                     <p
                       className={`text-body-sm truncate mt-0.5 ${
-                        unreadCount > 0 ? "text-text" : "text-subtle"
+                        conv.unreadCount > 0 ? "text-text" : "text-subtle"
                       }`}
                     >
-                      {lastMsg.direction === "outbound" && (
+                      {conv.lastMessageDirection === "outbound" && (
                         <span className="text-subtle">You: </span>
                       )}
-                      {lastMsg.text}
+                      {conv.lastMessageText}
                     </p>
-                    {vacancy && (
-                      <p className="text-micro text-subtle truncate mt-0.5">{vacancy.title}</p>
+                    {conv.vacancyTitle && (
+                      <p className="text-micro text-subtle truncate mt-0.5">{conv.vacancyTitle}</p>
                     )}
                   </div>
                 </button>
@@ -279,15 +272,14 @@ export default function InboxPage() {
             <div className="h-11 px-6 flex items-center gap-3 border-b border-border shrink-0 bg-bg">
               <div className="flex-1 min-w-0">
                 <span className="text-body-sm font-semibold text-text">
-                  {selectedRow?.candidate.fullName}
+                  {selectedConv?.candidateName}
                 </span>
-                {selectedRow?.vacancy && (
+                {selectedConv?.vacancyTitle && (
                   <span className="text-body-sm text-muted ml-2">
-                    {selectedRow.vacancy.title}
+                    {selectedConv.vacancyTitle}
                   </span>
                 )}
               </div>
-              {selectedRow?.stage && <StagePill stage={selectedRow.stage} size="sm" />}
               <Link
                 href={`/candidates/${selectedAppId}?tab=chat`}
                 className="text-body-sm text-primary hover:underline shrink-0"
@@ -298,21 +290,23 @@ export default function InboxPage() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-              {threadMessages.map((msg) => (
-                <ChatBubble key={msg.id} message={msg} />
+              {currentThreadMessages.map((msg) => (
+                <ChatBubble key={msg.id} message={{
+                  id: msg.id,
+                  candidateId: msg.candidateId,
+                  applicationId: msg.applicationId ?? undefined,
+                  direction: msg.direction as "inbound" | "outbound",
+                  senderType: msg.senderType as "candidate" | "hr" | "system",
+                  senderName: msg.senderName ?? undefined,
+                  text: msg.text,
+                  sentAt: msg.sentAt?.toISOString() ?? new Date().toISOString(),
+                  readByUserIds: (msg.readByUserIds as string[]) ?? [],
+                  attachmentFileId: msg.attachmentFileId ?? undefined,
+                  attachmentType: msg.attachmentType as "photo" | "document" | undefined,
+                  attachmentFilename: msg.attachmentFilename ?? undefined,
+                }} />
               ))}
               <div ref={messagesEndRef} />
-            </div>
-
-            {/* Simulate strip */}
-            <div className="px-6 py-1.5 border-t border-border flex items-center gap-2">
-              <span className="text-micro text-subtle">Demo:</span>
-              <button
-                onClick={() => simulateIncomingMessage(selectedAppId)}
-                className="text-micro text-primary hover:underline"
-              >
-                Simulate candidate reply
-              </button>
             </div>
 
             {/* Composer */}
@@ -325,7 +319,7 @@ export default function InboxPage() {
                     if ((e.key === "Enter" && !e.shiftKey) || (e.key === "Enter" && e.metaKey)) {
                       e.preventDefault();
                       if (chatInput.trim() && selectedAppId) {
-                        sendMessage(selectedAppId, chatInput.trim());
+                        sendMessageToCandidate(selectedAppId, chatInput.trim());
                         setChatInput("");
                       }
                     }
@@ -338,7 +332,7 @@ export default function InboxPage() {
                 <button
                   onClick={() => {
                     if (chatInput.trim() && selectedAppId) {
-                      sendMessage(selectedAppId, chatInput.trim());
+                      sendMessageToCandidate(selectedAppId, chatInput.trim());
                       setChatInput("");
                     }
                   }}
