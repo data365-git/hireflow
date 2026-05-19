@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+@theme {
+  /* ─── Surfaces ─────────────────────────────────────────── */
+  --color-bg:           #FAFAFB;
+  --color-surface:      #FFFFFF;
+  --color-surface-2:    #F4F5F7;
+  --color-surface-3:    #E8EAEE;
+  --color-overlay:      rgba(15, 23, 42, 0.45);
+
+  /* ─── Text ─────────────────────────────────────────────── */
+  --color-text:         #0F172A;
+  --color-muted:        #475569;
+  --color-subtle:       #94A3B8;
+  --color-disabled:     #CBD5E1;
+
+  /* ─── Borders ───────────────────────────────────────────── */
+  --color-border:       #E2E8F0;
+  --color-border-strong:#94A3B8;
+
+  /* ─── Brand ─────────────────────────────────────────────── */
+  --color-primary:      #3525CD;
+  --color-primary-hover:#4F46E5;
+  --color-primary-soft: #EEF2FF;
+  --color-primary-fg:   #FFFFFF;
+
+  /* ─── Backward-compat aliases (keep so existing code works) */
+  --color-accent:       #3525CD;
+  --color-accent-soft:  #EEF2FF;
+  --color-accent-fg:    #3525CD;
+
+  /* ─── Semantic ───────────────────────────────────────────── */
+  --color-success:      #059669;
+  --color-success-soft: #D1FAE5;
+  --color-warning:      #D97706;
+  --color-warning-soft: #FEF3C7;
+  --color-danger:       #DC2626;
+  --color-danger-soft:  #FEE2E2;
+  --color-info:         #0284C7;
+  --color-info-soft:    #E0F2FE;
+
+  /* ─── Stage colors — semantic fg/bg pairs ─────────────────── */
+  --color-stage-new-fg:        #475569;
+  --color-stage-new-bg:        #F1F5F9;
+  --color-stage-new:           #475569;
+  --color-stage-new-soft:      #F1F5F9;
+  --color-stage-screening-fg:  #0284C7;
+  --color-stage-screening-bg:  #E0F2FE;
+  --color-stage-screening:     #0284C7;
+  --color-stage-screening-soft:#E0F2FE;
+  --color-stage-qualified-fg:  #3525CD;
+  --color-stage-qualified-bg:  #EEF2FF;
+  --color-stage-qualified:     #3525CD;
+  --color-stage-qualified-soft:#EEF2FF;
+  --color-stage-test-fg:       #D97706;
+  --color-stage-test-bg:       #FEF3C7;
+  --color-stage-test:          #D97706;
+  --color-stage-test-soft:     #FEF3C7;
+  --color-stage-interview-fg:  #7C3AED;
+  --color-stage-interview-bg:  #EDE9FE;
+  --color-stage-interview:     #7C3AED;
+  --color-stage-interview-soft:#EDE9FE;
+  --color-stage-hired-fg:      #059669;
+  --color-stage-hired-bg:      #D1FAE5;
+  --color-stage-hired:         #059669;
+  --color-stage-hired-soft:    #D1FAE5;
+  --color-stage-rejected-fg:   #DC2626;
+  --color-stage-rejected-bg:   #FEE2E2;
+  --color-stage-rejected:      #DC2626;
+  --color-stage-rejected-soft: #FEE2E2;
+
+  /* ─── Typography ─────────────────────────────────────────── */
+  --font-sans: "Manrope", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --text-micro:    11px;  --text-micro--line-height: 1.3;   --text-micro--letter-spacing: 0.04em; --text-micro--font-weight: 600;
+  --text-body-xs:  12px;  --text-body-xs--line-height: 1.45;
+  --text-body-sm:  13px;  --text-body-sm--line-height: 1.5;
+  --text-body:     14px;  --text-body--line-height: 1.5;
+  --text-body-lg:  15px;  --text-body-lg--line-height: 1.55;
+  --text-h3:       16px;  --text-h3--line-height: 1.4;   --text-h3--font-weight: 600;
+  --text-h2:       18px;  --text-h2--line-height: 1.3;   --text-h2--font-weight: 600;
+  --text-h1:       22px;  --text-h1--line-height: 1.25;  --text-h1--letter-spacing: -0.01em; --text-h1--font-weight: 700;
+  --text-display:  32px;  --text-display--line-height: 1.15; --text-display--letter-spacing: -0.02em; --text-display--font-weight: 800;
+
+  /* ─── Radius ─────────────────────────────────────────────── */
+  --radius-sm:    4px;
+  --radius-md:    6px;
+  --radius-lg:    8px;
+  --radius-xl:    10px;
+  --radius-2xl:   12px;
+  --radius-full:  9999px;
+
+  /* ─── Shadow ─────────────────────────────────────────────── */
+  --shadow-xs:      0 1px 2px rgba(15,23,42,0.04);
+  --shadow-sm:      0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.06);
+  --shadow-md:      0 2px 4px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.08);
+  --shadow-lg:      0 8px 24px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04);
+  --shadow-overlay: 0 24px 64px rgba(15,23,42,0.18);
+
+  --spacing: 4px;
+}
+
+@layer base {
+  html { color-scheme: light; }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-fg);
+  }
+
+  ::placeholder { color: var(--color-subtle); }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+    border: 2px solid var(--color-bg);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
+}
+
+:root {
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+}
