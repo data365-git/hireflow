@@ -60,9 +60,26 @@ export async function listLeads() {
 }
 
 export async function getCandidateConversation(candidateId: string) {
+  const isDemo = await getCurrentDataMode();
+  // Inner-join candidates solely to verify this candidate belongs to the current data mode.
+  // Select only telegramMessages columns to keep the return shape flat.
   return db
-    .select()
+    .select({
+      id: telegramMessages.id,
+      candidateId: telegramMessages.candidateId,
+      applicationId: telegramMessages.applicationId,
+      direction: telegramMessages.direction,
+      senderType: telegramMessages.senderType,
+      senderName: telegramMessages.senderName,
+      text: telegramMessages.text,
+      sentAt: telegramMessages.sentAt,
+      readByUserIds: telegramMessages.readByUserIds,
+      attachmentFileId: telegramMessages.attachmentFileId,
+      attachmentType: telegramMessages.attachmentType,
+      attachmentFilename: telegramMessages.attachmentFilename,
+    })
     .from(telegramMessages)
+    .innerJoin(candidates, and(eq(telegramMessages.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
     .where(eq(telegramMessages.candidateId, candidateId))
     .orderBy(telegramMessages.sentAt);
 }
