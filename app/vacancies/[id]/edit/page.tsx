@@ -92,7 +92,6 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
   const createTestTask = useStore((s) => s.createTestTask);
   const removeTestTask = useStore((s) => s.removeTestTask);
   const getApplicationsInStage = useStore((s) => s.getApplicationsInStage);
-  const getAssignmentsForTask = useStore((s) => s.getAssignmentsForTask);
   const testTasks = getTestTasksForVacancy(id);
 
   // Confirm dialog state
@@ -127,22 +126,12 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
   }
 
   function handleRemoveTestTask(taskId: string) {
-    const count = getAssignmentsForTask(taskId).length;
-    if (count > 0) {
-      setConfirmDialog({
-        open: true,
-        title: "Cannot delete task",
-        message: `This task has ${count} active assignment${count === 1 ? "" : "s"}. Remove assignments before deleting.`,
-        onConfirm: closeConfirm,
-      });
-    } else {
-      setConfirmDialog({
-        open: true,
-        title: "Delete test task?",
-        message: "This will permanently remove the test task.",
-        onConfirm: () => { removeTestTask(taskId); closeConfirm(); },
-      });
-    }
+    setConfirmDialog({
+      open: true,
+      title: "Delete test task?",
+      message: "This will permanently remove the test task. This cannot be undone.",
+      onConfirm: () => { removeTestTask(taskId); closeConfirm(); },
+    });
   }
   const activeApplicationCount = applications.filter((application) => {
     if (application.vacancyId !== id) return false;
@@ -231,6 +220,14 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
             users={users}
             activeApplicationCount={activeApplicationCount}
             onSave={(patch) => updateVacancy(id, patch)}
+            onConfirm={(message, action) =>
+              setConfirmDialog({
+                open: true,
+                title: "Confirm",
+                message,
+                onConfirm: () => { action(); closeConfirm(); },
+              })
+            }
           />
         )}
         {activeTab === "questions" && (
@@ -406,11 +403,13 @@ function DetailsTab({
   users,
   activeApplicationCount,
   onSave,
+  onConfirm,
 }: {
   vacancy: Vacancy;
   users: User[];
   activeApplicationCount: number;
   onSave: (patch: VacancyPatch) => void;
+  onConfirm: (message: string, action: () => void) => void;
 }) {
   const [form, setForm] = useState<DetailsForm>(() => getDetailsForm(vacancy));
   const [submitted, setSubmitted] = useState(false);
@@ -439,18 +438,7 @@ function DetailsTab({
     setSubmitted(true);
     if (hasErrors) return;
 
-    if (
-      vacancy.status !== "closed" &&
-      form.status === "closed" &&
-      activeApplicationCount > 0 &&
-      !window.confirm(
-        `Close this vacancy with ${activeApplicationCount} active application${activeApplicationCount === 1 ? "" : "s"}?`
-      )
-    ) {
-      return;
-    }
-
-    onSave({
+    const patch: VacancyPatch = {
       title: form.title.trim(),
       department: form.department.trim(),
       workType: form.workType,
@@ -464,9 +452,23 @@ function DetailsTab({
       responsibleHrId: form.responsibleHrId,
       introMessage: form.introMessage,
       successMessage: form.successMessage,
-    });
-    toast.success("Saved");
-    setSubmitted(false);
+    };
+
+    const needsConfirm =
+      vacancy.status !== "closed" &&
+      form.status === "closed" &&
+      activeApplicationCount > 0;
+
+    if (needsConfirm) {
+      onConfirm(
+        `Close this vacancy with ${activeApplicationCount} active application${activeApplicationCount === 1 ? "" : "s"}?`,
+        () => { onSave(patch); toast.success("Saved"); setSubmitted(false); }
+      );
+    } else {
+      onSave(patch);
+      toast.success("Saved");
+      setSubmitted(false);
+    }
   }
 
   return (

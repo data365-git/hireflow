@@ -13,7 +13,7 @@ const SLUG_RE = /^[a-z0-9_-]+$/;
 
 interface Props {
   open: boolean;
-  onClose: () => void;
+  onClose: (changed?: boolean) => void;
 }
 
 function toSlug(s: string): string {
@@ -91,7 +91,7 @@ export function CreateRoleDialog({ open, onClose }: Props) {
         return;
       }
 
-      handleClose();
+      onClose(true);
     } finally {
       setSubmitting(false);
     }

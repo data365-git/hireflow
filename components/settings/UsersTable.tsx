@@ -200,18 +200,18 @@ export function UsersTable() {
 
       <AddUserDialog
         open={showAdd}
-        onClose={() => {
+        onClose={(changed) => {
           setShowAdd(false);
-          load();
+          if (changed) load();
         }}
       />
       {editingRolesFor && (
         <RoleAssignDialog
           open={!!editingRolesFor}
           user={editingRolesFor}
-          onClose={() => {
+          onClose={(changed) => {
             setEditingRolesFor(null);
-            load();
+            if (changed) load();
           }}
         />
       )}
@@ -219,9 +219,9 @@ export function UsersTable() {
         <ResetPasswordDialog
           open={!!resettingFor}
           user={resettingFor}
-          onClose={() => {
+          onClose={(changed) => {
             setResettingFor(null);
-            load();
+            if (changed) load();
           }}
         />
       )}

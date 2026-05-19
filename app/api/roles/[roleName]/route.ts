@@ -89,6 +89,17 @@ export async function DELETE(
       return Response.json({ error: `Role is assigned to ${activeUsers.length} active user(s)` }, { status: 409 });
     }
 
+    // users.role — deprecated TEXT column (soft FK, no constraint). It is the pre-RBAC
+    // backfill source and is no longer authoritative; user_roles is the source of truth.
+    // The active-user check above already covers anyone exercising this role. Orphaning
+    // the legacy column on deletion is intentional and safe.
+
+    // rolePermissions.role — soft FK deleted explicitly below before systemRoles deletion,
+    // so no orphan check needed here.
+
+    // audit_logs — append-only history. entityName may reference this role name in past
+    // ROLE_* events, but historical records are intentionally immutable. Orphaning is safe.
+
     audit({
       action: "ROLE_DELETE",
       actorId: session.sub,

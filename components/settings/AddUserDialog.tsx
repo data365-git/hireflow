@@ -10,7 +10,7 @@ interface Role {
 
 interface Props {
   open: boolean;
-  onClose: () => void;
+  onClose: (changed?: boolean) => void;
 }
 
 export function AddUserDialog({ open, onClose }: Props) {
@@ -67,7 +67,7 @@ export function AddUserDialog({ open, onClose }: Props) {
         return;
       }
 
-      handleClose();
+      onClose(true);
     } finally {
       setSubmitting(false);
     }

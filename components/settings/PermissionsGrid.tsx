@@ -33,7 +33,7 @@ interface Role {
 interface Props {
   open: boolean;
   role: Role;
-  onClose: () => void;
+  onClose: (changed?: boolean) => void;
 }
 
 function emptyPerms(): PermRow[] {
@@ -124,7 +124,7 @@ export function PermissionsGrid({ open, role, onClose }: Props) {
       setSaved(true);
       timerRef.current = setTimeout(() => {
         setSaved(false);
-        onClose();
+        onClose(true);
       }, 1000);
     } finally {
       setSaving(false);
@@ -186,7 +186,7 @@ export function PermissionsGrid({ open, role, onClose }: Props) {
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onClose()}
             className="px-4 py-2 rounded-lg text-body-sm font-medium text-muted hover:text-text hover:bg-surface-2 transition-colors"
           >
             Close

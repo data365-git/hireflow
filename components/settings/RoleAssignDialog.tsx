@@ -17,7 +17,7 @@ interface User {
 interface Props {
   open: boolean;
   user: User;
-  onClose: () => void;
+  onClose: (changed?: boolean) => void;
 }
 
 export function RoleAssignDialog({ open, user, onClose }: Props) {
@@ -34,7 +34,7 @@ export function RoleAssignDialog({ open, user, onClose }: Props) {
       .then((r) => (r.ok ? r.json() : []))
       .then(setRoles)
       .catch(() => {});
-  }, [open, user.roles]);
+  }, [open, user.id]);
 
   const toggle = (name: string) => {
     setSelected((prev) => {
@@ -68,7 +68,7 @@ export function RoleAssignDialog({ open, user, onClose }: Props) {
         return;
       }
 
-      onClose();
+      onClose(true);
     } finally {
       setSubmitting(false);
     }
@@ -98,7 +98,7 @@ export function RoleAssignDialog({ open, user, onClose }: Props) {
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onClose()}
             className="px-4 py-2 rounded-lg text-body-sm font-medium text-muted hover:text-text hover:bg-surface-2 transition-colors"
           >
             Cancel

@@ -47,49 +47,57 @@ export function RolesList() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {roles.map((role) => (
-          <button
-            key={role.name}
-            onClick={() => setEditingRole(role)}
-            className="relative overflow-hidden text-left bg-surface border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-sm transition-all group"
-          >
-            <div
-              className="absolute left-0 inset-y-0 w-1 rounded-l-2xl"
-              style={{ backgroundColor: role.color ?? "#3525CD" }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-base font-semibold text-text group-hover:text-primary transition-colors">
-                  {role.displayName}
-                </span>
-                {role.isSuperadmin && <span title="Superadmin">👑</span>}
-                {role.isSystem && <span title="System role">🔒</span>}
+        {roles.map((role) => {
+          const isReadOnly = role.isSystem || role.isSuperadmin;
+          return (
+            <button
+              key={role.name}
+              onClick={isReadOnly ? undefined : () => setEditingRole(role)}
+              disabled={isReadOnly}
+              title={isReadOnly ? "System roles cannot be edited" : undefined}
+              className={`relative overflow-hidden text-left bg-surface border border-border rounded-xl p-5 transition-all group ${isReadOnly ? "cursor-default opacity-75" : "cursor-pointer hover:border-primary/40 hover:shadow-sm"}`}
+            >
+              <div
+                className="absolute left-0 inset-y-0 w-1 rounded-l-2xl"
+                style={{ backgroundColor: role.color ?? "#3525CD" }}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-base font-semibold text-text transition-colors ${isReadOnly ? "" : "group-hover:text-primary"}`}>
+                    {role.displayName}
+                  </span>
+                  {role.isSuperadmin && <span title="Superadmin">👑</span>}
+                  {role.isSystem && <span title="System role">🔒</span>}
+                </div>
+                <p className="text-xs font-medium text-subtle mt-0.5">{role.name}</p>
+                {isReadOnly && (
+                  <span className="text-xs text-subtle mt-0.5">Read-only</span>
+                )}
+                {role.description && (
+                  <p className="text-body-xs text-muted mt-1 line-clamp-2">{role.description}</p>
+                )}
               </div>
-              <p className="text-xs font-medium text-subtle mt-0.5">{role.name}</p>
-              {role.description && (
-                <p className="text-body-xs text-muted mt-1 line-clamp-2">{role.description}</p>
-              )}
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       {editingRole && (
         <PermissionsGrid
           open={!!editingRole}
           role={editingRole}
-          onClose={() => {
+          onClose={(changed) => {
             setEditingRole(null);
-            load();
+            if (changed) load();
           }}
         />
       )}
 
       <CreateRoleDialog
         open={showCreate}
-        onClose={() => {
+        onClose={(changed) => {
           setShowCreate(false);
-          load();
+          if (changed) load();
         }}
       />
     </div>
