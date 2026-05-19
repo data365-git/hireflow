@@ -161,7 +161,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
     (t) => vacancyAppIds.has(t.applicationId) && t.type === "stage_changed" && t.createdAt >= sevenDaysAgo
   );
   const recentMessages = messages.filter(
-    (m) => vacancyAppIds.has(m.applicationId) && m.sentAt >= sevenDaysAgo
+    (m) => m.applicationId != null && vacancyAppIds.has(m.applicationId) && m.sentAt >= sevenDaysAgo
   );
   const hiredStage = stages.find((s) => s.isFinal && !s.isRejected);
   const hiredCount = hiredStage

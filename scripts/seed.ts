@@ -129,6 +129,7 @@ async function seed() {
         currentStageId: a.currentStageId,
         appliedAt: new Date(a.appliedAt),
         lastActivityAt: new Date(a.lastActivityAt),
+        status: "submitted" as const,
       }))
     )
     .onConflictDoNothing();
@@ -172,7 +173,8 @@ async function seed() {
     .values(
       MESSAGES.map((m) => ({
         id: m.id,
-        applicationId: m.applicationId,
+        candidateId: m.candidateId,
+        applicationId: m.applicationId ?? null,
         direction: m.direction,
         senderType: m.senderType,
         senderName: m.senderName ?? null,

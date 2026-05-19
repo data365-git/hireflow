@@ -83,6 +83,7 @@ export const applications = pgTable("applications", {
   currentStageId: text("current_stage_id").notNull().references(() => vacancyStages.id),
   appliedAt: timestamp("applied_at").notNull(),
   lastActivityAt: timestamp("last_activity_at").notNull(),
+  status: text("status").notNull().default("submitted"), // "in_progress" | "submitted" | "abandoned"
 });
 
 // ─── Screening Answers ────────────────────────────────────────────────────────
@@ -111,7 +112,8 @@ export const timelineEvents = pgTable("timeline_events", {
 
 export const telegramMessages = pgTable("telegram_messages", {
   id: text("id").primaryKey(),
-  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  candidateId: text("candidate_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  applicationId: text("application_id").references(() => applications.id, { onDelete: "cascade" }),
   direction: text("direction").notNull(), // "inbound" | "outbound"
   senderType: text("sender_type").notNull(), // "candidate" | "hr" | "system"
   senderName: text("sender_name"),

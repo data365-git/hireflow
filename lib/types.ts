@@ -50,6 +50,7 @@ export type Application = {
   currentStageId: UUID;
   appliedAt: ISODate;
   lastActivityAt: ISODate;
+  status: "in_progress" | "submitted" | "abandoned";
 };
 
 export type ScreeningQuestion = {
@@ -94,7 +95,8 @@ export type User = {
 
 export type TelegramMessage = {
   id: UUID;
-  applicationId: UUID;
+  candidateId: UUID;
+  applicationId?: UUID | null;
   direction: "inbound" | "outbound";
   senderType: "candidate" | "hr" | "system";
   senderName?: string;

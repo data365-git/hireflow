@@ -67,7 +67,9 @@ export default function InboxPage() {
   const stages = useStore((s) => s.stages);
 
   // Build inbox rows — one per applicationId that has at least one message
-  const appIdsWithMessages = [...new Set(messages.map((m) => m.applicationId))];
+  const appIdsWithMessages = [...new Set(
+    messages.filter((m): m is typeof m & { applicationId: string } => m.applicationId != null).map((m) => m.applicationId)
+  )];
 
   const rows: InboxRow[] = appIdsWithMessages
     .map((appId): InboxRow | null => {

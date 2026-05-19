@@ -1,6 +1,6 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { candidates, applications, screeningAnswers, timelineEvents, botSessions, vacancyStages, vacancies } from "@/lib/db/schema";
+import { candidates, applications, screeningAnswers, timelineEvents, botSessions, vacancyStages, vacancies, telegramMessages } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -127,6 +127,174 @@ export async function createApplicationFromBot(args: {
 
   revalidatePath(`/vacancies/${args.vacancyId}`);
   return appId;
+}
+
+export async function upsertCandidateFromTelegram(args: {
+  telegramUserId: string;
+  telegramUsername?: string;
+  telegramFirstName: string;
+}): Promise<string> {
+  const existing = await db
+    .select()
+    .from(candidates)
+    .where(eq(candidates.telegramUserId, args.telegramUserId));
+
+  if (existing[0]) {
+    await db
+      .update(candidates)
+      .set({
+        telegramUsername: args.telegramUsername ?? existing[0].telegramUsername,
+        telegramFirstName: args.telegramFirstName,
+      })
+      .where(eq(candidates.id, existing[0].id));
+    return existing[0].id;
+  }
+
+  const candidateId = crypto.randomUUID();
+  await db.insert(candidates).values({
+    id: candidateId,
+    fullName: args.telegramFirstName,
+    telegramUserId: args.telegramUserId,
+    telegramUsername: args.telegramUsername ?? "",
+    telegramFirstName: args.telegramFirstName,
+    phone: "",
+    language: "en",
+    city: "",
+    createdAt: new Date(),
+  });
+  return candidateId;
+}
+
+export async function saveBotMessage(args: {
+  candidateId: string;
+  applicationId?: string | null;
+  direction: "inbound" | "outbound";
+  text: string;
+  attachmentFileId?: string;
+  attachmentType?: "photo" | "document";
+  attachmentFilename?: string;
+}): Promise<void> {
+  await db.insert(telegramMessages).values({
+    id: crypto.randomUUID(),
+    candidateId: args.candidateId,
+    applicationId: args.applicationId ?? null,
+    direction: args.direction,
+    senderType: args.direction === "inbound" ? "candidate" : "system",
+    text: args.text,
+    sentAt: new Date(),
+    readByUserIds: [],
+    attachmentFileId: args.attachmentFileId ?? null,
+    attachmentType: args.attachmentType ?? null,
+    attachmentFilename: args.attachmentFilename ?? null,
+  });
+}
+
+export async function getOrCreateInProgressApplication(args: {
+  candidateId: string;
+  vacancyId: string;
+}): Promise<string> {
+  const existing = await db
+    .select()
+    .from(applications)
+    .where(
+      and(
+        eq(applications.candidateId, args.candidateId),
+        eq(applications.vacancyId, args.vacancyId)
+      )
+    );
+  if (existing[0]) return existing[0].id;
+
+  // Get Pre-screening stage (orderIndex 0)
+  const stages = await db
+    .select()
+    .from(vacancyStages)
+    .where(eq(vacancyStages.vacancyId, args.vacancyId))
+    .orderBy(asc(vacancyStages.orderIndex));
+  const preScreeningStage = stages[0];
+  if (!preScreeningStage) throw new Error(`No stages found for vacancy ${args.vacancyId}`);
+
+  const appId = crypto.randomUUID();
+  await db.insert(applications).values({
+    id: appId,
+    candidateId: args.candidateId,
+    vacancyId: args.vacancyId,
+    currentStageId: preScreeningStage.id,
+    appliedAt: new Date(),
+    lastActivityAt: new Date(),
+    status: "in_progress",
+  });
+
+  revalidatePath(`/vacancies/${args.vacancyId}`);
+  return appId;
+}
+
+export async function saveScreeningAnswerLive(args: {
+  applicationId: string;
+  questionId: string;
+  answerText: string;
+}): Promise<void> {
+  // Delete existing answer for this app+question, then insert fresh
+  await db
+    .delete(screeningAnswers)
+    .where(
+      and(
+        eq(screeningAnswers.applicationId, args.applicationId),
+        eq(screeningAnswers.questionId, args.questionId)
+      )
+    );
+  await db.insert(screeningAnswers).values({
+    id: crypto.randomUUID(),
+    applicationId: args.applicationId,
+    questionId: args.questionId,
+    answerText: args.answerText,
+    answeredAt: new Date(),
+  });
+}
+
+export async function submitApplication(applicationId: string): Promise<void> {
+  const appRows = await db
+    .select()
+    .from(applications)
+    .where(eq(applications.id, applicationId));
+  const app = appRows[0];
+  if (!app) return;
+
+  // Find the stage after Pre-screening (orderIndex 1)
+  const stages = await db
+    .select()
+    .from(vacancyStages)
+    .where(eq(vacancyStages.vacancyId, app.vacancyId))
+    .orderBy(asc(vacancyStages.orderIndex));
+
+  const nextStage = stages.find((s) => s.orderIndex === 1) ?? stages[1];
+  const targetStageId = nextStage ? nextStage.id : app.currentStageId;
+
+  await db
+    .update(applications)
+    .set({ status: "submitted", currentStageId: targetStageId, lastActivityAt: new Date() })
+    .where(eq(applications.id, applicationId));
+
+  await db.insert(timelineEvents).values({
+    id: crypto.randomUUID(),
+    applicationId,
+    type: "application_completed",
+    description: "Application submitted via Telegram",
+    createdAt: new Date(),
+  });
+
+  revalidatePath(`/vacancies/${app.vacancyId}`);
+  revalidatePath(`/candidates/${applicationId}`);
+
+  await notifyCandidateOfStageChange(applicationId).catch((err) => {
+    console.error("Submit notification failed:", err);
+  });
+}
+
+export async function abandonApplication(applicationId: string): Promise<void> {
+  await db
+    .update(applications)
+    .set({ status: "abandoned", lastActivityAt: new Date() })
+    .where(eq(applications.id, applicationId));
 }
 
 export async function getBotSession(telegramUserId: string) {

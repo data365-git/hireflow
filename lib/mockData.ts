@@ -129,30 +129,30 @@ export const CANDIDATES: Candidate[] = [
 
 export const APPLICATIONS: Application[] = [
   // ── Vibecoder (v1) ──────────────────────────────────────────────────────────
-  { id: "a1",  candidateId: "c1",  vacancyId: "v1", currentStageId: "s1_6", appliedAt: "2025-04-12T10:35:00Z", lastActivityAt: "2025-04-28T09:00:00Z" }, // Interview
-  { id: "a2",  candidateId: "c2",  vacancyId: "v1", currentStageId: "s1_5", appliedAt: "2025-04-13T09:20:00Z", lastActivityAt: "2025-04-27T14:00:00Z" }, // Test Submitted
-  { id: "a3",  candidateId: "c3",  vacancyId: "v1", currentStageId: "s1_2", appliedAt: "2025-04-14T11:05:00Z", lastActivityAt: "2025-04-29T10:00:00Z" }, // Screening
-  { id: "a4",  candidateId: "c4",  vacancyId: "v1", currentStageId: "s1_4", appliedAt: "2025-04-15T14:25:00Z", lastActivityAt: "2025-04-26T16:00:00Z" }, // Test Sent
-  { id: "a5",  candidateId: "c5",  vacancyId: "v1", currentStageId: "s1_1", appliedAt: "2025-04-30T08:50:00Z", lastActivityAt: "2025-04-30T08:50:00Z" }, // New
-  { id: "a6",  candidateId: "c6",  vacancyId: "v1", currentStageId: "s1_1", appliedAt: "2025-05-01T09:10:00Z", lastActivityAt: "2025-05-01T09:10:00Z" }, // New
-  { id: "a7",  candidateId: "c7",  vacancyId: "v1", currentStageId: "s1_3", appliedAt: "2025-04-18T10:05:00Z", lastActivityAt: "2025-04-25T11:00:00Z" }, // Qualified
-  { id: "a8",  candidateId: "c8",  vacancyId: "v1", currentStageId: "s1_2", appliedAt: "2025-04-19T13:20:00Z", lastActivityAt: "2025-04-30T09:00:00Z" }, // Screening
-  { id: "a9",  candidateId: "c9",  vacancyId: "v1", currentStageId: "s1_8", appliedAt: "2025-04-20T09:35:00Z", lastActivityAt: "2025-04-24T15:00:00Z" }, // Rejected
-  { id: "a10", candidateId: "c10", vacancyId: "v1", currentStageId: "s1_7", appliedAt: "2025-04-21T11:50:00Z", lastActivityAt: "2025-05-02T10:00:00Z" }, // Hired
-  { id: "a11", candidateId: "c11", vacancyId: "v1", currentStageId: "s1_1", appliedAt: "2025-05-02T15:05:00Z", lastActivityAt: "2025-05-02T15:05:00Z" }, // New
-  { id: "a12", candidateId: "c12", vacancyId: "v1", currentStageId: "s1_6", appliedAt: "2025-04-23T08:25:00Z", lastActivityAt: "2025-05-01T14:00:00Z" }, // Interview
+  { id: "a1",  candidateId: "c1",  vacancyId: "v1", currentStageId: "s1_6", appliedAt: "2025-04-12T10:35:00Z", lastActivityAt: "2025-04-28T09:00:00Z", status: "submitted" }, // Interview
+  { id: "a2",  candidateId: "c2",  vacancyId: "v1", currentStageId: "s1_5", appliedAt: "2025-04-13T09:20:00Z", lastActivityAt: "2025-04-27T14:00:00Z", status: "submitted" }, // Test Submitted
+  { id: "a3",  candidateId: "c3",  vacancyId: "v1", currentStageId: "s1_2", appliedAt: "2025-04-14T11:05:00Z", lastActivityAt: "2025-04-29T10:00:00Z", status: "submitted" }, // Screening
+  { id: "a4",  candidateId: "c4",  vacancyId: "v1", currentStageId: "s1_4", appliedAt: "2025-04-15T14:25:00Z", lastActivityAt: "2025-04-26T16:00:00Z", status: "submitted" }, // Test Sent
+  { id: "a5",  candidateId: "c5",  vacancyId: "v1", currentStageId: "s1_1", appliedAt: "2025-04-30T08:50:00Z", lastActivityAt: "2025-04-30T08:50:00Z", status: "submitted" }, // New
+  { id: "a6",  candidateId: "c6",  vacancyId: "v1", currentStageId: "s1_1", appliedAt: "2025-05-01T09:10:00Z", lastActivityAt: "2025-05-01T09:10:00Z", status: "submitted" }, // New
+  { id: "a7",  candidateId: "c7",  vacancyId: "v1", currentStageId: "s1_3", appliedAt: "2025-04-18T10:05:00Z", lastActivityAt: "2025-04-25T11:00:00Z", status: "submitted" }, // Qualified
+  { id: "a8",  candidateId: "c8",  vacancyId: "v1", currentStageId: "s1_2", appliedAt: "2025-04-19T13:20:00Z", lastActivityAt: "2025-04-30T09:00:00Z", status: "submitted" }, // Screening
+  { id: "a9",  candidateId: "c9",  vacancyId: "v1", currentStageId: "s1_8", appliedAt: "2025-04-20T09:35:00Z", lastActivityAt: "2025-04-24T15:00:00Z", status: "submitted" }, // Rejected
+  { id: "a10", candidateId: "c10", vacancyId: "v1", currentStageId: "s1_7", appliedAt: "2025-04-21T11:50:00Z", lastActivityAt: "2025-05-02T10:00:00Z", status: "submitted" }, // Hired
+  { id: "a11", candidateId: "c11", vacancyId: "v1", currentStageId: "s1_1", appliedAt: "2025-05-02T15:05:00Z", lastActivityAt: "2025-05-02T15:05:00Z", status: "submitted" }, // New
+  { id: "a12", candidateId: "c12", vacancyId: "v1", currentStageId: "s1_6", appliedAt: "2025-04-23T08:25:00Z", lastActivityAt: "2025-05-01T14:00:00Z", status: "submitted" }, // Interview
 
   // ── Sales Manager (v2) ──────────────────────────────────────────────────────
-  { id: "a13", candidateId: "c13", vacancyId: "v2", currentStageId: "s2_1", appliedAt: "2025-04-24T10:15:00Z", lastActivityAt: "2025-04-24T10:15:00Z" }, // New
-  { id: "a14", candidateId: "c14", vacancyId: "v2", currentStageId: "s2_2", appliedAt: "2025-04-25T12:05:00Z", lastActivityAt: "2025-04-29T11:00:00Z" }, // Screening
-  { id: "a15", candidateId: "c15", vacancyId: "v2", currentStageId: "s2_3", appliedAt: "2025-04-26T14:35:00Z", lastActivityAt: "2025-04-30T13:00:00Z" }, // Test Sent
-  { id: "a16", candidateId: "c16", vacancyId: "v2", currentStageId: "s2_4", appliedAt: "2025-04-27T09:05:00Z", lastActivityAt: "2025-05-01T10:00:00Z" }, // Interview
-  { id: "a17", candidateId: "c17", vacancyId: "v2", currentStageId: "s2_6", appliedAt: "2025-04-28T11:25:00Z", lastActivityAt: "2025-04-30T16:00:00Z" }, // Rejected
+  { id: "a13", candidateId: "c13", vacancyId: "v2", currentStageId: "s2_1", appliedAt: "2025-04-24T10:15:00Z", lastActivityAt: "2025-04-24T10:15:00Z", status: "submitted" }, // New
+  { id: "a14", candidateId: "c14", vacancyId: "v2", currentStageId: "s2_2", appliedAt: "2025-04-25T12:05:00Z", lastActivityAt: "2025-04-29T11:00:00Z", status: "submitted" }, // Screening
+  { id: "a15", candidateId: "c15", vacancyId: "v2", currentStageId: "s2_3", appliedAt: "2025-04-26T14:35:00Z", lastActivityAt: "2025-04-30T13:00:00Z", status: "submitted" }, // Test Sent
+  { id: "a16", candidateId: "c16", vacancyId: "v2", currentStageId: "s2_4", appliedAt: "2025-04-27T09:05:00Z", lastActivityAt: "2025-05-01T10:00:00Z", status: "submitted" }, // Interview
+  { id: "a17", candidateId: "c17", vacancyId: "v2", currentStageId: "s2_6", appliedAt: "2025-04-28T11:25:00Z", lastActivityAt: "2025-04-30T16:00:00Z", status: "submitted" }, // Rejected
 
   // ── Designer (v3) ───────────────────────────────────────────────────────────
-  { id: "a18", candidateId: "c18", vacancyId: "v3", currentStageId: "s3_1", appliedAt: "2025-04-29T13:50:00Z", lastActivityAt: "2025-04-29T13:50:00Z" }, // New
-  { id: "a19", candidateId: "c19", vacancyId: "v3", currentStageId: "s3_2", appliedAt: "2025-04-30T08:35:00Z", lastActivityAt: "2025-05-01T09:00:00Z" }, // Screening
-  { id: "a20", candidateId: "c20", vacancyId: "v3", currentStageId: "s3_3", appliedAt: "2025-05-01T10:05:00Z", lastActivityAt: "2025-05-02T11:00:00Z" }, // Interview
+  { id: "a18", candidateId: "c18", vacancyId: "v3", currentStageId: "s3_1", appliedAt: "2025-04-29T13:50:00Z", lastActivityAt: "2025-04-29T13:50:00Z", status: "submitted" }, // New
+  { id: "a19", candidateId: "c19", vacancyId: "v3", currentStageId: "s3_2", appliedAt: "2025-04-30T08:35:00Z", lastActivityAt: "2025-05-01T09:00:00Z", status: "submitted" }, // Screening
+  { id: "a20", candidateId: "c20", vacancyId: "v3", currentStageId: "s3_3", appliedAt: "2025-05-01T10:05:00Z", lastActivityAt: "2025-05-02T11:00:00Z", status: "submitted" }, // Interview
 ];
 
 // ─── Screening Questions ──────────────────────────────────────────────────────
@@ -332,46 +332,46 @@ import type { TelegramMessage, InternalNote } from "./types";
 
 export const MESSAGES: TelegramMessage[] = [
   // ── a1 — Sardor (Interview) ──────────────────────────────────────────────
-  { id: "m1_1",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "Salom! Ariza yubordim. Jarayon qanday bormoqda?", sentAt: "2025-04-12T11:00:00Z", readByUserIds: ["u1"] },
-  { id: "m1_2",  applicationId: "a1", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Salom Sardor! Arizangiz qabul qilindi va ko'rib chiqilyapti.", sentAt: "2025-04-15T09:05:00Z", readByUserIds: ["u1"] },
-  { id: "m1_3",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "Raxmat! Test topshirig'i ham ko'rib chiqildimi?", sentAt: "2025-04-25T15:00:00Z", readByUserIds: ["u1"] },
-  { id: "m1_4",  applicationId: "a1", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Ha, test natijasi juda yaxshi edi! Siz Interview bosqichiga o'tdingiz. Dushanba kuni soat 14:00 da Google Meet orqali suhbatlashamiz.", sentAt: "2025-04-28T09:10:00Z", readByUserIds: ["u1"] },
-  { id: "m1_5",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "Zo'r xabar! Meet linkini yuborasizmi?", sentAt: "2025-04-28T09:45:00Z", readByUserIds: ["u1"] },
-  { id: "m1_6",  applicationId: "a1", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Albatta: meet.google.com/hrf-vbcd-xyz — Dushanba, 14:00 (UTC+5). Intervyuga muvaffaqiyat! 🚀", sentAt: "2025-04-28T10:00:00Z", readByUserIds: ["u1"] },
-  { id: "m1_7",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "✅ Tayyor, rahmat!", sentAt: "2025-04-28T10:05:00Z", readByUserIds: [] },
+  { id: "m1_1",  candidateId: "c1",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "Salom! Ariza yubordim. Jarayon qanday bormoqda?", sentAt: "2025-04-12T11:00:00Z", readByUserIds: ["u1"] },
+  { id: "m1_2",  candidateId: "c1",  applicationId: "a1", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Salom Sardor! Arizangiz qabul qilindi va ko'rib chiqilyapti.", sentAt: "2025-04-15T09:05:00Z", readByUserIds: ["u1"] },
+  { id: "m1_3",  candidateId: "c1",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "Raxmat! Test topshirig'i ham ko'rib chiqildimi?", sentAt: "2025-04-25T15:00:00Z", readByUserIds: ["u1"] },
+  { id: "m1_4",  candidateId: "c1",  applicationId: "a1", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Ha, test natijasi juda yaxshi edi! Siz Interview bosqichiga o'tdingiz. Dushanba kuni soat 14:00 da Google Meet orqali suhbatlashamiz.", sentAt: "2025-04-28T09:10:00Z", readByUserIds: ["u1"] },
+  { id: "m1_5",  candidateId: "c1",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "Zo'r xabar! Meet linkini yuborasizmi?", sentAt: "2025-04-28T09:45:00Z", readByUserIds: ["u1"] },
+  { id: "m1_6",  candidateId: "c1",  applicationId: "a1", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Albatta: meet.google.com/hrf-vbcd-xyz — Dushanba, 14:00 (UTC+5). Intervyuga muvaffaqiyat! 🚀", sentAt: "2025-04-28T10:00:00Z", readByUserIds: ["u1"] },
+  { id: "m1_7",  candidateId: "c1",  applicationId: "a1", direction: "inbound",  senderType: "candidate", text: "✅ Tayyor, rahmat!", sentAt: "2025-04-28T10:05:00Z", readByUserIds: [] },
 
   // ── a2 — Jasur (Test Submitted) ──────────────────────────────────────────
-  { id: "m2_1",  applicationId: "a2", direction: "inbound",  senderType: "candidate", text: "Assalomu alaykum! Test topshirig'ini yubordim. Ko'rib chiqasizmi?", sentAt: "2025-04-27T14:30:00Z", readByUserIds: ["u1"] },
-  { id: "m2_2",  applicationId: "a2", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Salom Jasur! Qabul qildik, yaqin 2–3 ish kuni ichida ko'rib chiqamiz.", sentAt: "2025-04-27T16:00:00Z", readByUserIds: ["u1"] },
-  { id: "m2_3",  applicationId: "a2", direction: "inbound",  senderType: "candidate", text: "Taxminan qachon javob berасiz?", sentAt: "2025-04-29T10:00:00Z", readByUserIds: ["u1"] },
-  { id: "m2_4",  applicationId: "a2", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "2–3 ish kuni ichida aniq xabardor qilamiz. Sabr qiling, rahmat!", sentAt: "2025-04-29T10:30:00Z", readByUserIds: ["u1"] },
-  { id: "m2_5",  applicationId: "a2", direction: "inbound",  senderType: "candidate", text: "Ok, kutaman. Raxmat!", sentAt: "2025-04-29T10:35:00Z", readByUserIds: [] },
+  { id: "m2_1",  candidateId: "c2",  applicationId: "a2", direction: "inbound",  senderType: "candidate", text: "Assalomu alaykum! Test topshirig'ini yubordim. Ko'rib chiqasizmi?", sentAt: "2025-04-27T14:30:00Z", readByUserIds: ["u1"] },
+  { id: "m2_2",  candidateId: "c2",  applicationId: "a2", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Salom Jasur! Qabul qildik, yaqin 2–3 ish kuni ichida ko'rib chiqamiz.", sentAt: "2025-04-27T16:00:00Z", readByUserIds: ["u1"] },
+  { id: "m2_3",  candidateId: "c2",  applicationId: "a2", direction: "inbound",  senderType: "candidate", text: "Taxminan qachon javob berасiz?", sentAt: "2025-04-29T10:00:00Z", readByUserIds: ["u1"] },
+  { id: "m2_4",  candidateId: "c2",  applicationId: "a2", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "2–3 ish kuni ichida aniq xabardor qilamiz. Sabr qiling, rahmat!", sentAt: "2025-04-29T10:30:00Z", readByUserIds: ["u1"] },
+  { id: "m2_5",  candidateId: "c2",  applicationId: "a2", direction: "inbound",  senderType: "candidate", text: "Ok, kutaman. Raxmat!", sentAt: "2025-04-29T10:35:00Z", readByUserIds: [] },
 
   // ── a12 — Doniyor (Interview) ────────────────────────────────────────────
-  { id: "m12_1", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "Hello! I submitted my test task yesterday. Looking forward to feedback.", sentAt: "2025-04-30T17:00:00Z", readByUserIds: ["u1"] },
-  { id: "m12_2", applicationId: "a12", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Hi Doniyor! We reviewed your SaaS boilerplate — genuinely impressive. Moving you to Interview stage.", sentAt: "2025-05-01T09:00:00Z", readByUserIds: ["u1"] },
-  { id: "m12_3", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "That's great news! When is the interview scheduled?", sentAt: "2025-05-01T09:15:00Z", readByUserIds: ["u1"] },
-  { id: "m12_4", applicationId: "a12", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Wednesday at 15:00 Tashkent time. Here's the Meet link: meet.google.com/dky-mnop-rst", sentAt: "2025-05-01T09:30:00Z", readByUserIds: ["u1"] },
-  { id: "m12_5", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "Perfect, I'll be there. Thank you!", sentAt: "2025-05-01T09:40:00Z", readByUserIds: ["u1"] },
-  { id: "m12_6", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "Just to confirm — is it a technical interview or more culture/fit focused?", sentAt: "2025-05-02T08:00:00Z", readByUserIds: [] },
+  { id: "m12_1", candidateId: "c12", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "Hello! I submitted my test task yesterday. Looking forward to feedback.", sentAt: "2025-04-30T17:00:00Z", readByUserIds: ["u1"] },
+  { id: "m12_2", candidateId: "c12", applicationId: "a12", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Hi Doniyor! We reviewed your SaaS boilerplate — genuinely impressive. Moving you to Interview stage.", sentAt: "2025-05-01T09:00:00Z", readByUserIds: ["u1"] },
+  { id: "m12_3", candidateId: "c12", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "That's great news! When is the interview scheduled?", sentAt: "2025-05-01T09:15:00Z", readByUserIds: ["u1"] },
+  { id: "m12_4", candidateId: "c12", applicationId: "a12", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Wednesday at 15:00 Tashkent time. Here's the Meet link: meet.google.com/dky-mnop-rst", sentAt: "2025-05-01T09:30:00Z", readByUserIds: ["u1"] },
+  { id: "m12_5", candidateId: "c12", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "Perfect, I'll be there. Thank you!", sentAt: "2025-05-01T09:40:00Z", readByUserIds: ["u1"] },
+  { id: "m12_6", candidateId: "c12", applicationId: "a12", direction: "inbound",  senderType: "candidate", text: "Just to confirm — is it a technical interview or more culture/fit focused?", sentAt: "2025-05-02T08:00:00Z", readByUserIds: [] },
 
   // ── a10 — Ulugbek (Hired) ────────────────────────────────────────────────
-  { id: "m10_1", applicationId: "a10", direction: "inbound",  senderType: "candidate", text: "Salom, oferta haqida yangilik bormi?", sentAt: "2025-05-02T10:30:00Z", readByUserIds: ["u1"] },
-  { id: "m10_2", applicationId: "a10", direction: "outbound", senderType: "hr", senderName: "Dilnoza Y.", text: "Salom Ulugbek! Tabriklaymiz 🎉 Siz barcha bosqichlarni muvaffaqiyatli o'tdingiz!", sentAt: "2025-05-02T10:45:00Z", readByUserIds: ["u1"] },
-  { id: "m10_3", applicationId: "a10", direction: "outbound", senderType: "hr", senderName: "Dilnoza Y.", text: "Oferta email orqali yuborildi. Dushanba kuni soat 9:00 da ofisga keling.", sentAt: "2025-05-02T10:46:00Z", readByUserIds: ["u1"] },
-  { id: "m10_4", applicationId: "a10", direction: "inbound",  senderType: "candidate", text: "Juda xursandman! Bu yangilik uchun katta rahmat! Dushanba kuni bo'laman 💪", sentAt: "2025-05-02T11:00:00Z", readByUserIds: ["u1"] },
+  { id: "m10_1", candidateId: "c10", applicationId: "a10", direction: "inbound",  senderType: "candidate", text: "Salom, oferta haqida yangilik bormi?", sentAt: "2025-05-02T10:30:00Z", readByUserIds: ["u1"] },
+  { id: "m10_2", candidateId: "c10", applicationId: "a10", direction: "outbound", senderType: "hr", senderName: "Dilnoza Y.", text: "Salom Ulugbek! Tabriklaymiz 🎉 Siz barcha bosqichlarni muvaffaqiyatli o'tdingiz!", sentAt: "2025-05-02T10:45:00Z", readByUserIds: ["u1"] },
+  { id: "m10_3", candidateId: "c10", applicationId: "a10", direction: "outbound", senderType: "hr", senderName: "Dilnoza Y.", text: "Oferta email orqali yuborildi. Dushanba kuni soat 9:00 da ofisga keling.", sentAt: "2025-05-02T10:46:00Z", readByUserIds: ["u1"] },
+  { id: "m10_4", candidateId: "c10", applicationId: "a10", direction: "inbound",  senderType: "candidate", text: "Juda xursandman! Bu yangilik uchun katta rahmat! Dushanba kuni bo'laman 💪", sentAt: "2025-05-02T11:00:00Z", readByUserIds: ["u1"] },
 
   // ── a3 — Kamola (Screening) ──────────────────────────────────────────────
-  { id: "m3_1",  applicationId: "a3", direction: "inbound",  senderType: "candidate", text: "Hi! I just applied for the Vibecoder position. Can you confirm you received my application?", sentAt: "2025-04-14T11:30:00Z", readByUserIds: ["u1"] },
-  { id: "m3_2",  applicationId: "a3", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Hi Kamola! Yes, received. Currently in Screening. We'll be in touch within 2 business days.", sentAt: "2025-04-14T14:00:00Z", readByUserIds: ["u1"] },
-  { id: "m3_3",  applicationId: "a3", direction: "inbound",  senderType: "candidate", text: "Thanks for the quick reply! Happy to do a call whenever.", sentAt: "2025-04-14T14:10:00Z", readByUserIds: [] },
+  { id: "m3_1",  candidateId: "c3",  applicationId: "a3", direction: "inbound",  senderType: "candidate", text: "Hi! I just applied for the Vibecoder position. Can you confirm you received my application?", sentAt: "2025-04-14T11:30:00Z", readByUserIds: ["u1"] },
+  { id: "m3_2",  candidateId: "c3",  applicationId: "a3", direction: "outbound", senderType: "hr", senderName: "Aziza K.", text: "Hi Kamola! Yes, received. Currently in Screening. We'll be in touch within 2 business days.", sentAt: "2025-04-14T14:00:00Z", readByUserIds: ["u1"] },
+  { id: "m3_3",  candidateId: "c3",  applicationId: "a3", direction: "inbound",  senderType: "candidate", text: "Thanks for the quick reply! Happy to do a call whenever.", sentAt: "2025-04-14T14:10:00Z", readByUserIds: [] },
 
   // ── a16 — Akbar (Interview, Sales) ──────────────────────────────────────
-  { id: "m16_1", applicationId: "a16", direction: "inbound",  senderType: "candidate", text: "Salom, intervyu haqida ma'lumot berasizmi?", sentAt: "2025-04-30T09:00:00Z", readByUserIds: ["u1"] },
-  { id: "m16_2", applicationId: "a16", direction: "outbound", senderType: "hr", senderName: "Bobur T.", text: "Salom Akbar! Seshanba kuni soat 11:00 da ofisimizda suhbatlashamiz.", sentAt: "2025-04-30T09:30:00Z", readByUserIds: ["u1"] },
-  { id: "m16_3", applicationId: "a16", direction: "inbound",  senderType: "candidate", text: "Xop, bo'ladi. Manzilni yuborasizmi?", sentAt: "2025-04-30T09:45:00Z", readByUserIds: ["u1"] },
-  { id: "m16_4", applicationId: "a16", direction: "outbound", senderType: "hr", senderName: "Bobur T.", text: "Toshkent sh., Amir Temur ko'chasi 107B, 3-qavat, HR bo'limi. Pasport yoki ID karta olib keling.", sentAt: "2025-04-30T10:00:00Z", readByUserIds: ["u1"] },
-  { id: "m16_5", applicationId: "a16", direction: "inbound",  senderType: "candidate", text: "Rahmat! Tayyor bo'laman ✅", sentAt: "2025-04-30T10:05:00Z", readByUserIds: [] },
+  { id: "m16_1", candidateId: "c16", applicationId: "a16", direction: "inbound",  senderType: "candidate", text: "Salom, intervyu haqida ma'lumot berasizmi?", sentAt: "2025-04-30T09:00:00Z", readByUserIds: ["u1"] },
+  { id: "m16_2", candidateId: "c16", applicationId: "a16", direction: "outbound", senderType: "hr", senderName: "Bobur T.", text: "Salom Akbar! Seshanba kuni soat 11:00 da ofisimizda suhbatlashamiz.", sentAt: "2025-04-30T09:30:00Z", readByUserIds: ["u1"] },
+  { id: "m16_3", candidateId: "c16", applicationId: "a16", direction: "inbound",  senderType: "candidate", text: "Xop, bo'ladi. Manzilni yuborasizmi?", sentAt: "2025-04-30T09:45:00Z", readByUserIds: ["u1"] },
+  { id: "m16_4", candidateId: "c16", applicationId: "a16", direction: "outbound", senderType: "hr", senderName: "Bobur T.", text: "Toshkent sh., Amir Temur ko'chasi 107B, 3-qavat, HR bo'limi. Pasport yoki ID karta olib keling.", sentAt: "2025-04-30T10:00:00Z", readByUserIds: ["u1"] },
+  { id: "m16_5", candidateId: "c16", applicationId: "a16", direction: "inbound",  senderType: "candidate", text: "Rahmat! Tayyor bo'laman ✅", sentAt: "2025-04-30T10:05:00Z", readByUserIds: [] },
 ];
 
 // ─── Internal Notes ───────────────────────────────────────────────────────────

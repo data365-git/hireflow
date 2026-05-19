@@ -209,6 +209,7 @@ export const useStore = create<Store>((set, get) => ({
       currentStageId: firstStage.id,
       appliedAt: now,
       lastActivityAt: now,
+      status: "submitted",
     };
 
     const vacancyQuestions = questions
@@ -244,6 +245,7 @@ export const useStore = create<Store>((set, get) => ({
 
     const greeting: TelegramMessage = {
       id: makeId("sim_msg"),
+      candidateId,
       applicationId,
       direction: "inbound",
       senderType: "candidate",
@@ -265,12 +267,14 @@ export const useStore = create<Store>((set, get) => ({
     const messageText = text.trim();
     if (!messageText) return;
 
-    const { currentUserId, users } = get();
+    const { currentUserId, users, applications } = get();
     const hr = users.find((u) => u.id === currentUserId);
+    const app = applications.find((a) => a.id === applicationId);
     const now = new Date().toISOString();
 
     const msg: TelegramMessage = {
       id: makeId("msg"),
+      candidateId: app?.candidateId ?? "",
       applicationId,
       direction: "outbound",
       senderType: "hr",
@@ -292,9 +296,11 @@ export const useStore = create<Store>((set, get) => ({
     const now = new Date().toISOString();
     const reply = SIM_REPLIES[_replyIndex % SIM_REPLIES.length];
     _replyIndex++;
+    const app = get().applications.find((a) => a.id === applicationId);
 
     const msg: TelegramMessage = {
       id: makeId("sim_reply"),
+      candidateId: app?.candidateId ?? "",
       applicationId,
       direction: "inbound",
       senderType: "candidate",
@@ -585,8 +591,9 @@ export const useStore = create<Store>((set, get) => ({
     const seen = new Set<string>();
     let count = 0;
     for (const m of messages) {
-      if (m.direction === "inbound" && !m.readByUserIds.includes(currentUserId) && !seen.has(m.applicationId)) {
-        seen.add(m.applicationId);
+      const key = m.applicationId ?? m.candidateId;
+      if (m.direction === "inbound" && !m.readByUserIds.includes(currentUserId) && !seen.has(key)) {
+        seen.add(key);
         count++;
       }
     }
@@ -692,19 +699,23 @@ export const useStore = create<Store>((set, get) => ({
     const messageText = text.trim();
     if (!messageText) return;
 
-    const { currentUserId, users } = get();
+    const { currentUserId, users, applications } = get();
     const hr = users.find((u) => u.id === currentUserId);
     const now = new Date().toISOString();
-    const newMessages = applicationIds.map((applicationId) => ({
-      id: makeId("msg_batch"),
-      applicationId,
-      direction: "outbound" as const,
-      senderType: "hr" as const,
-      senderName: hr ? `${hr.name.split(" ")[0]} ${hr.name.split(" ")[1]?.[0] ?? ""}.` : "HR",
-      text: messageText,
-      sentAt: now,
-      readByUserIds: [currentUserId],
-    }));
+    const newMessages = applicationIds.map((applicationId) => {
+      const app = applications.find((a) => a.id === applicationId);
+      return {
+        id: makeId("msg_batch"),
+        candidateId: app?.candidateId ?? "",
+        applicationId,
+        direction: "outbound" as const,
+        senderType: "hr" as const,
+        senderName: hr ? `${hr.name.split(" ")[0]} ${hr.name.split(" ")[1]?.[0] ?? ""}.` : "HR",
+        text: messageText,
+        sentAt: now,
+        readByUserIds: [currentUserId],
+      };
+    });
     set((s) => ({
       messages: [...s.messages, ...newMessages],
       applications: s.applications.map((a) =>

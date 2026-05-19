@@ -215,6 +215,7 @@ export default function AnalyticsPage() {
     const appIds = new Set(filteredApps.map((a) => a.id));
     return messages.filter(
       (m) =>
+        m.applicationId != null &&
         appIds.has(m.applicationId) &&
         new Date(m.sentAt).getTime() >= sevenDaysAgo
     ).length;

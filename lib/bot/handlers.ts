@@ -189,6 +189,12 @@ export async function handleCancel(ctx: Context) {
 
 // ---- Helper: find applicationId for a telegram user ----
 async function getApplicationIdForUser(telegramUserId: string): Promise<string | null> {
+  const result = await getApplicationAndCandidateForUser(telegramUserId);
+  return result?.applicationId ?? null;
+}
+
+// ---- Helper: find both applicationId and candidateId for a telegram user ----
+async function getApplicationAndCandidateForUser(telegramUserId: string): Promise<{ applicationId: string; candidateId: string } | null> {
   const candRows = await db
     .select()
     .from(candidates)
@@ -200,8 +206,9 @@ async function getApplicationIdForUser(telegramUserId: string): Promise<string |
     .from(applications)
     .where(eq(applications.candidateId, candRows[0].id))
     .orderBy(applications.appliedAt);
-  // Return the most recently applied application
-  return appRows[appRows.length - 1]?.id ?? null;
+  const latestApp = appRows[appRows.length - 1];
+  if (!latestApp) return null;
+  return { applicationId: latestApp.id, candidateId: candRows[0].id };
 }
 
 // ---- Handler for inbound photo messages (outside application flow) ----
@@ -218,12 +225,13 @@ export async function handlePhoto(ctx: Context) {
   const photo = ctx.message?.photo?.at(-1);
   if (!photo) return;
 
-  const applicationId = await getApplicationIdForUser(telegramUserId);
-  if (!applicationId) return;
+  const ids = await getApplicationAndCandidateForUser(telegramUserId);
+  if (!ids) return;
 
   await db.insert(telegramMessages).values({
     id: crypto.randomUUID(),
-    applicationId,
+    candidateId: ids.candidateId,
+    applicationId: ids.applicationId,
     direction: "inbound",
     senderType: "candidate",
     text: ctx.message?.caption ?? "",
@@ -244,12 +252,13 @@ export async function handleText(ctx: Context) {
     // No active flow — save inbound message to DB if we can resolve an application
     const doc = ctx.message?.document;
     const text = ctx.message?.text?.trim() ?? ctx.message?.caption ?? "";
-    const applicationId = await getApplicationIdForUser(telegramUserId);
+    const ids = await getApplicationAndCandidateForUser(telegramUserId);
 
-    if (applicationId) {
+    if (ids) {
       await db.insert(telegramMessages).values({
         id: crypto.randomUUID(),
-        applicationId,
+        candidateId: ids.candidateId,
+        applicationId: ids.applicationId,
         direction: "inbound",
         senderType: "candidate",
         text: doc ? (ctx.message?.caption ?? "") : text,

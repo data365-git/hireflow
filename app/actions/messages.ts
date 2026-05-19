@@ -40,6 +40,7 @@ export async function sendMessageToCandidate(applicationId: string, text: string
   // 3. Save to DB
   await db.insert(telegramMessages).values({
     id: crypto.randomUUID(),
+    candidateId: row.cand.id,
     applicationId,
     direction: "outbound",
     senderType: "hr",
