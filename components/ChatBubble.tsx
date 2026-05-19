@@ -30,6 +30,14 @@ export function ChatBubble({ message }: Props) {
               : "bg-surface border border-border text-text rounded-bl-sm"
           }`}
         >
+          {message.attachmentType === "photo" && (
+            <span className="block mb-1 opacity-80">[📷 Photo]</span>
+          )}
+          {message.attachmentType === "document" && (
+            <span className="block mb-1 opacity-80">
+              [📎 {message.attachmentFilename ?? "Document"}]
+            </span>
+          )}
           {message.text}
         </div>
         <span className="text-micro text-subtle px-1">{formatRelativeTime(message.sentAt)}</span>

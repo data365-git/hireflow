@@ -11,6 +11,31 @@ import type { Application, Candidate, VacancyStage, Vacancy, TelegramMessage } f
 import { formatRelativeTime } from "@/lib/utils";
 
 type Filter = "all" | "unread" | "stale";
+type DateFilter = "all" | "today" | "week" | "month";
+
+function isToday(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+}
+
+function isThisWeek(dateStr: string): boolean {
+  const d = new Date(dateStr).getTime();
+  const now = Date.now();
+  const startOfWeek = now - (new Date().getDay() * 86400000);
+  return d >= startOfWeek - (new Date(startOfWeek).getHours() * 3600000 +
+    new Date(startOfWeek).getMinutes() * 60000 +
+    new Date(startOfWeek).getSeconds() * 1000 +
+    new Date(startOfWeek).getMilliseconds());
+}
+
+function isThisMonth(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
 
 type InboxRow = {
   appId: string;
@@ -24,6 +49,8 @@ type InboxRow = {
 
 export default function InboxPage() {
   const [filter, setFilter] = useState<Filter>("all");
+  const [vacancyFilter, setVacancyFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,12 +93,15 @@ export default function InboxPage() {
     (r) => Date.now() - new Date(r.lastMsg.sentAt).getTime() > 3 * 86400000
   ).length;
 
-  const filtered: InboxRow[] =
-    filter === "unread"
-      ? rows.filter((r) => r.unreadCount > 0)
-      : filter === "stale"
-      ? rows.filter((r) => Date.now() - new Date(r.lastMsg.sentAt).getTime() > 3 * 86400000)
-      : rows;
+  const filtered: InboxRow[] = rows.filter((r) => {
+    if (filter === "unread" && r.unreadCount === 0) return false;
+    if (filter === "stale" && Date.now() - new Date(r.lastMsg.sentAt).getTime() <= 3 * 86400000) return false;
+    if (vacancyFilter !== "all" && r.app.vacancyId !== vacancyFilter) return false;
+    if (dateFilter === "today" && !isToday(r.lastMsg.sentAt)) return false;
+    if (dateFilter === "week" && !isThisWeek(r.lastMsg.sentAt)) return false;
+    if (dateFilter === "month" && !isThisMonth(r.lastMsg.sentAt)) return false;
+    return true;
+  });
 
   // Initialize selectedAppId to first row once rows are available
   useEffect(() => {
@@ -136,6 +166,28 @@ export default function InboxPage() {
 
       {/* Pane 2: Thread list (280px) */}
       <div className="w-72 shrink-0 border-r border-border flex flex-col">
+        <div className="px-3 py-2 border-b border-border shrink-0 flex flex-col gap-2">
+          <select
+            value={vacancyFilter}
+            onChange={(e) => setVacancyFilter(e.target.value)}
+            className="w-full text-body-sm bg-surface border border-border rounded-lg px-2 py-1 text-text outline-none focus:border-primary"
+          >
+            <option value="all">All vacancies</option>
+            {vacancies.filter((v) => v.status === "active").map((v) => (
+              <option key={v.id} value={v.id}>{v.title}</option>
+            ))}
+          </select>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+            className="w-full text-body-sm bg-surface border border-border rounded-lg px-2 py-1 text-text outline-none focus:border-primary"
+          >
+            <option value="all">All time</option>
+            <option value="today">Today</option>
+            <option value="week">This week</option>
+            <option value="month">This month</option>
+          </select>
+        </div>
         <div className="h-11 px-4 flex items-center border-b border-border shrink-0">
           <span className="text-body-sm font-semibold text-text">
             {filtered.length} conversation{filtered.length !== 1 ? "s" : ""}

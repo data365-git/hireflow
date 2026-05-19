@@ -1,7 +1,7 @@
 import { InlineKeyboard } from "grammy";
 import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
-import { vacancies, vacancyStages, screeningQuestions, applications, candidates } from "@/lib/db/schema";
+import { vacancies, vacancyStages, screeningQuestions, applications, candidates, telegramMessages } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
@@ -187,6 +187,53 @@ export async function handleCancel(ctx: Context) {
   await ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
 }
 
+// ---- Helper: find applicationId for a telegram user ----
+async function getApplicationIdForUser(telegramUserId: string): Promise<string | null> {
+  const candRows = await db
+    .select()
+    .from(candidates)
+    .where(eq(candidates.telegramUserId, telegramUserId));
+  if (!candRows[0]) return null;
+
+  const appRows = await db
+    .select()
+    .from(applications)
+    .where(eq(applications.candidateId, candRows[0].id))
+    .orderBy(applications.appliedAt);
+  // Return the most recently applied application
+  return appRows[appRows.length - 1]?.id ?? null;
+}
+
+// ---- Handler for inbound photo messages (outside application flow) ----
+export async function handlePhoto(ctx: Context) {
+  const telegramUserId = String(ctx.from!.id);
+  const session = await getBotSession(telegramUserId);
+
+  // If in an active flow state, ignore — flow handlers deal with documents but not photos
+  if (session?.state && session.state !== "complete") {
+    const lang = detectLang(ctx);
+    return ctx.reply(tr(lang, "session_timeout"), { parse_mode: "Markdown" });
+  }
+
+  const photo = ctx.message?.photo?.at(-1);
+  if (!photo) return;
+
+  const applicationId = await getApplicationIdForUser(telegramUserId);
+  if (!applicationId) return;
+
+  await db.insert(telegramMessages).values({
+    id: crypto.randomUUID(),
+    applicationId,
+    direction: "inbound",
+    senderType: "candidate",
+    text: ctx.message?.caption ?? "",
+    sentAt: new Date(),
+    readByUserIds: [],
+    attachmentFileId: photo.file_id,
+    attachmentType: "photo",
+  });
+}
+
 // ---- text/document messages during application flow ----
 export async function handleText(ctx: Context) {
   const lang = detectLang(ctx);
@@ -194,6 +241,30 @@ export async function handleText(ctx: Context) {
   const session = await getBotSession(telegramUserId);
 
   if (!session?.state || session.state === "complete") {
+    // No active flow — save inbound message to DB if we can resolve an application
+    const doc = ctx.message?.document;
+    const text = ctx.message?.text?.trim() ?? ctx.message?.caption ?? "";
+    const applicationId = await getApplicationIdForUser(telegramUserId);
+
+    if (applicationId) {
+      await db.insert(telegramMessages).values({
+        id: crypto.randomUUID(),
+        applicationId,
+        direction: "inbound",
+        senderType: "candidate",
+        text: doc ? (ctx.message?.caption ?? "") : text,
+        sentAt: new Date(),
+        readByUserIds: [],
+        ...(doc
+          ? {
+              attachmentFileId: doc.file_id,
+              attachmentType: "document" as const,
+              attachmentFilename: doc.file_name ?? undefined,
+            }
+          : {}),
+      });
+    }
+
     return ctx.reply(tr(lang, "session_timeout"), { parse_mode: "Markdown" });
   }
 

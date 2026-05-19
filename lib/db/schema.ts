@@ -118,6 +118,9 @@ export const telegramMessages = pgTable("telegram_messages", {
   text: text("text").notNull(),
   sentAt: timestamp("sent_at").notNull(),
   readByUserIds: jsonb("read_by_user_ids").$type<string[]>().default([]),
+  attachmentFileId: text("attachment_file_id"),
+  attachmentType: text("attachment_type"), // "photo" | "document" | null
+  attachmentFilename: text("attachment_filename"),
 });
 
 // ─── Internal Notes ───────────────────────────────────────────────────────────

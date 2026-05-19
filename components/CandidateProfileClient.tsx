@@ -1,8 +1,9 @@
 "use client";
-import { useState, useRef, useEffect, Suspense } from "react";
+import { useState, useRef, useEffect, Suspense, useTransition } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
+import { sendMessageToCandidate } from "@/app/actions/messages";
 import { Avatar } from "@/components/Avatar";
 import { StagePill } from "@/components/StagePill";
 import { ScreeningAnswerRow } from "@/components/ScreeningAnswerRow";
@@ -28,6 +29,8 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [chatInput, setChatInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
+  const [sendPending, startSendTransition] = useTransition();
+  const [sendError, setSendError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -107,8 +110,18 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
   const handleSend = () => {
     const text = chatInput.trim();
     if (!text) return;
+    setSendError(null);
+    // Optimistic update via Zustand for immediate UI feedback
     sendMessage(applicationId, text);
     setChatInput("");
+    // Fire real Telegram send in background
+    startSendTransition(async () => {
+      try {
+        await sendMessageToCandidate(applicationId, text);
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Failed to send message");
+      }
+    });
   };
 
   const handleAddNote = () => {
@@ -367,6 +380,9 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
                 </div>
 
                 <div className="px-6 py-4 border-t border-border bg-bg">
+                  {sendError && (
+                    <p className="text-micro text-red-500 mb-2">{sendError}</p>
+                  )}
                   <div className="flex items-end gap-2 bg-surface border border-border rounded-xl px-4 py-3 focus-within:border-primary transition-colors">
                     <textarea
                       value={chatInput}
@@ -384,7 +400,7 @@ function ProfileContent({ applicationId }: { applicationId: string }) {
                     />
                     <button
                       onClick={handleSend}
-                      disabled={!chatInput.trim()}
+                      disabled={!chatInput.trim() || sendPending}
                       className="shrink-0 h-8 w-8 rounded-lg bg-primary text-primary-fg flex items-center justify-center disabled:opacity-30 transition-opacity"
                     >
                       ↑

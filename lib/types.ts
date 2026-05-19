@@ -101,6 +101,9 @@ export type TelegramMessage = {
   text: string;
   sentAt: ISODate;
   readByUserIds: UUID[];
+  attachmentFileId?: string | null;
+  attachmentType?: "photo" | "document" | null;
+  attachmentFilename?: string | null;
 };
 
 export type InternalNote = {

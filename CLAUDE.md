@@ -255,37 +255,37 @@ For any domain not listed above: find the equivalent senior practitioner instinc
 
 ---
 
-## Always Recap at the End (Done + Pending Table)
+## Recap Table at the End (when work was actually done)
 
-After completing any task (or batch of tasks) in a session, **end the reply with a status table**. So the user never has to ask "did you finish? anything left?"
+### 🚫 DO NOT show the recap table in these cases — this rule is absolute:
 
-Format:
+1. **Plan mode** — when ExitPlanMode tool is being used, or any reply that is a proposal/plan to be approved before execution. NO TABLE.
+2. **Pure planning/discussion sessions** — when the reply is only describing what *would* be done, not what *was* done. NO TABLE.
+3. **Brainstorming, Q&A, "what is X", clarifying questions, advice** — NO TABLE.
+4. **Trivial single-turn replies** — greetings, acknowledgments, one-line answers. NO TABLE.
+
+**The test:** Did this reply actually change files, run commands, or produce output? 
+- **NO** → no table. Period. Even if the user asks "anything left?", answer in plain prose.
+- **YES** → use the table below.
+
+### ✅ When work WAS done, end the reply with this table:
 
 ```
 | Status | Task | Notes |
 |--------|------|-------|
 | ✅ Done | [what was completed] | [file path / command / result] |
-| ✅ Done | [another finished thing] | [...] |
 | ⏳ Pending | [what's still to do] | [why — waiting on user input, blocked, deferred] |
-| ⚠️ Skipped | [what was not done] | [reason — failed, refused, out of scope] |
+| ⚠️ Skipped | [what was not done] | [reason] |
 ```
 
-Rules:
-- **Always include the table** at the bottom — even if everything is done (then it's all ✅)
+Rules for the table:
 - Group related sub-steps into one row — don't bloat the table
 - Each "Notes" cell under 80 chars
-- If nothing is pending or skipped, omit those rows — but keep the table
-- Goes at the very **bottom** of the reply, not the top
+- Omit Pending/Skipped rows if there are none
+- Table goes at the very bottom of the reply, not the top
 
-**When to SKIP the recap (do not show the table):**
-- Trivial single-turn replies — greetings, one-line Q&A, "what is X"
-- **Planning sessions** — when in plan mode, ExitPlanMode flow, or any reply that is only proposing/discussing what to do (not executing). No work was done, so no recap.
-- Pure conversation, brainstorming, clarifying questions
-- When the user is asking you to think/analyze/recommend (no files touched, no commands run)
+**One more time:** if no files were edited and no commands were executed in this reply, there is no table. The recap exists only to summarize concrete work — not to summarize a plan.
 
-Rule of thumb: **if no concrete action was taken, no table.**
-
-This means the user always sees, at a glance: what's finished, what's still open, what was skipped and why.
 
 ---
 
