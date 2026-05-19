@@ -5,6 +5,8 @@ import {
   boolean,
   integer,
   jsonb,
+  uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -13,7 +15,19 @@ export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   avatarInitials: text("avatar_initials").notNull(),
-  role: text("role").notNull(), // "admin" | "hr" | "interviewer"
+  role: text("role").notNull(), // "admin" | "hr" | "interviewer" (deprecated — backfill source for user_roles)
+  // Auth columns — NOT NULL enforced in migration 0003 after backfill
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  adminPassword: text("admin_password"),
+  fullName: text("full_name"),
+  avatarUrl: text("avatar_url"),
+  phone: text("phone"),
+  isActive: boolean("is_active").notNull().default(true),
+  hasAccess: boolean("has_access").notNull().default(true),
+  deactivationReason: text("deactivation_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── Vacancies ────────────────────────────────────────────────────────────────
@@ -193,3 +207,98 @@ export const botSessions = pgTable("bot_sessions", {
   collectedData: jsonb("collected_data").$type<Record<string, unknown>>().default({}),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// ─── RBAC — Profiles ──────────────────────────────────────────────────────────
+
+export const profiles = pgTable("profiles", {
+  id: text("id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  fullName: text("full_name"),
+  avatarUrl: text("avatar_url"),
+  telegramChatId: text("telegram_chat_id").unique(),
+  telegramUsername: text("telegram_username"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── RBAC — Refresh Tokens ────────────────────────────────────────────────────
+
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(), // bcrypt-hashed
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── RBAC — User Roles ────────────────────────────────────────────────────────
+
+export const userRoles = pgTable("user_roles", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+  assignedBy: text("assigned_by"),
+}, (t) => ({
+  uniqUserRole: uniqueIndex("user_roles_user_role_uniq").on(t.userId, t.role),
+}));
+
+// ─── RBAC — System Roles ──────────────────────────────────────────────────────
+
+export const systemRoles = pgTable("system_roles", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  isSystem: boolean("is_system").notNull().default(false),
+  color: text("color"),
+  isSuperadmin: boolean("is_superadmin").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── RBAC — Role Permissions ──────────────────────────────────────────────────
+
+export const rolePermissions = pgTable("role_permissions", {
+  id: text("id").primaryKey(),
+  role: text("role").notNull(),
+  screenName: text("screen_name").notNull(),
+  canRead: boolean("can_read").notNull().default(false),
+  canCreate: boolean("can_create").notNull().default(false),
+  canEdit: boolean("can_edit").notNull().default(false),
+  canDelete: boolean("can_delete").notNull().default(false),
+  canWrite: boolean("can_write").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqRoleScreen: uniqueIndex("role_permissions_role_screen_uniq").on(t.role, t.screenName),
+}));
+
+// ─── RBAC — Audit Logs ────────────────────────────────────────────────────────
+
+export const auditLogs = pgTable("audit_logs", {
+  id: text("id").primaryKey(),
+  action: text("action").notNull(),
+  actorId: text("actor_id"),
+  actorEmail: text("actor_email"),
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  entityName: text("entity_name"),
+  description: text("description"),
+  before: jsonb("before"),
+  after: jsonb("after"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── RBAC — Login Attempts ────────────────────────────────────────────────────
+
+export const loginAttempts = pgTable("login_attempts", {
+  id: text("id").primaryKey(),
+  ip: text("ip").notNull(),
+  email: text("email"),
+  success: boolean("success").notNull(),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  ipTimeIdx: index("login_attempts_ip_time_idx").on(t.ip, t.attemptedAt),
+}));

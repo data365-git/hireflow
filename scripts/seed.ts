@@ -22,8 +22,14 @@ import {
 async function seed() {
   console.log("Seeding...");
 
-  // 1. Users
-  await db.insert(schema.users).values(USERS).onConflictDoNothing();
+  // 1. Users (add placeholder email/passwordHash for existing mock users)
+  await db.insert(schema.users).values(
+    USERS.map((u) => ({
+      ...u,
+      email: `${u.id}@hireflow.local`,
+      passwordHash: "$2a$10$placeholderplaceholderplaceholderplaceholderplaceholderpla",
+    }))
+  ).onConflictDoNothing();
   console.log("  users done");
 
   // 2. Vacancies (responsibleHrId references users)
