@@ -1,10 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatSalary } from "@/lib/utils";
 import { PipelineMiniBar } from "@/components/PipelineMiniBar";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useDataMode } from "@/context/DataModeContext";
+import { getVacanciesPageData } from "@/app/actions/vacancies";
 import type { VacancyStage, Application, User } from "@/lib/types";
 
 type DbVacancy = {
@@ -66,9 +68,24 @@ const STATUS_STYLES: Record<string, string> = {
   closed: "bg-surface-3 text-muted",
 };
 
-export function VacanciesView({ vacancies, stages, applications, users }: Props) {
+export function VacanciesView({ vacancies: initialVacancies, stages: initialStages, applications: initialApplications, users: initialUsers }: Props) {
   const [view, setView] = useState<"cards" | "table">("cards");
   const router = useRouter();
+  const { mode } = useDataMode();
+
+  const [vacancies, setVacancies] = useState(initialVacancies);
+  const [stages, setStages] = useState(initialStages);
+  const [applications, setApplications] = useState(initialApplications);
+  const [users, setUsers] = useState(initialUsers);
+
+  useEffect(() => {
+    getVacanciesPageData(mode === "demo").then((data) => {
+      setVacancies(data.vacancies);
+      setStages(data.stages);
+      setApplications(data.applications);
+      setUsers(data.users);
+    });
+  }, [mode]);
 
   function getTotalCandidates(vacancyId: string) {
     return applications.filter((a) => a.vacancyId === vacancyId).length;

@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
 import { formatRelativeTime } from "@/lib/utils";
+import { useDataMode } from "@/context/DataModeContext";
+import { listLeads } from "@/app/actions/leads";
 
 type LeadRow = {
   candidate: {
@@ -100,23 +102,30 @@ export function LeadsView({ initialLeads }: Props) {
   const [vacancyFilter, setVacancyFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const { mode } = useDataMode();
+  const [leads, setLeads] = useState(initialLeads);
+
+  // Re-fetch when data mode changes
+  useEffect(() => {
+    listLeads(mode === "demo").then((data) => setLeads(data));
+  }, [mode]);
 
   // Auto-refresh every 5 seconds
   useEffect(() => {
-    const id = setInterval(() => router.refresh(), 5_000);
+    const id = setInterval(() => listLeads(mode === "demo").then((data) => setLeads(data)), 5_000);
     return () => clearInterval(id);
-  }, [router]);
+  }, [router, mode]);
 
   // Derive unique vacancies from leads
   const vacancyOptions = Array.from(
     new Map(
-      initialLeads
+      leads
         .filter((l) => l.latestApplication)
         .map((l) => [l.latestApplication!.vacancy.id, l.latestApplication!.vacancy.title])
     ).entries()
   );
 
-  const filtered = initialLeads.filter((lead) => {
+  const filtered = leads.filter((lead) => {
     const key = getStatusKey(lead);
 
     // Vacancy filter: "browsing" means no application

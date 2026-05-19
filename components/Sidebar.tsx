@@ -15,6 +15,7 @@ import {
   UserCog,
   ShieldCheck,
 } from "lucide-react";
+import { DataModeToggle } from "@/components/DataModeToggle";
 
 function isActive(href: string, pathname: string): boolean {
   if (href === "/") return pathname === "/";
@@ -100,6 +101,9 @@ export function Sidebar() {
       {/* Demo section */}
       <div className="px-3 pb-2 border-t border-border pt-3 shrink-0">
         <p className="text-micro text-subtle uppercase tracking-widest px-3 mb-1">Demo</p>
+        <div className="px-3 mb-2">
+          <DataModeToggle />
+        </div>
         <button
           onClick={() => simulateIncomingApplication("v1")}
           className="w-full flex items-center gap-2.5 h-8 px-3 rounded-lg text-body-sm text-primary hover:bg-primary/10 transition-colors font-medium"

@@ -1,13 +1,13 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { candidates, applications, vacancies, telegramMessages } from "@/lib/db/schema";
-import { eq, desc, isNotNull } from "drizzle-orm";
+import { eq, desc, isNotNull, and } from "drizzle-orm";
 
-export async function listLeads() {
+export async function listLeads(isDemo?: boolean) {
   const allCandidates = await db
     .select()
     .from(candidates)
-    .where(isNotNull(candidates.telegramUserId));
+    .where(and(isNotNull(candidates.telegramUserId), eq(candidates.isDemo, isDemo ?? false)));
 
   const results = [];
   for (const c of allCandidates) {

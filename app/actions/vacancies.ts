@@ -1,10 +1,24 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { vacancies, vacancyStages, screeningQuestions } from "@/lib/db/schema";
+import { vacancies, vacancyStages, screeningQuestions, applications, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function getAllVacancies() {
-  return db.select().from(vacancies).orderBy(vacancies.createdAt);
+export async function getAllVacancies(isDemo?: boolean) {
+  return db
+    .select()
+    .from(vacancies)
+    .where(eq(vacancies.isDemo, isDemo ?? false))
+    .orderBy(vacancies.createdAt);
+}
+
+export async function getVacanciesPageData(isDemo?: boolean) {
+  const [vacancyRows, stageRows, appRows, userRows] = await Promise.all([
+    db.select().from(vacancies).where(eq(vacancies.isDemo, isDemo ?? false)).orderBy(vacancies.createdAt),
+    db.select().from(vacancyStages),
+    db.select().from(applications),
+    db.select().from(users),
+  ]);
+  return { vacancies: vacancyRows, stages: stageRows, applications: appRows, users: userRows };
 }
 
 export async function getVacancyById(id: string) {

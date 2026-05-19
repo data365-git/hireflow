@@ -49,6 +49,7 @@ export const vacancies = pgTable("vacancies", {
   createdAt: timestamp("created_at").notNull(),
   introMessage: text("intro_message"),
   successMessage: text("success_message"),
+  isDemo: boolean("is_demo").notNull().default(false),
 });
 
 // ─── Vacancy Stages ───────────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ export const candidates = pgTable("candidates", {
   language: text("language").notNull(), // "uz" | "en" | "ru"
   city: text("city").notNull(),
   createdAt: timestamp("created_at").notNull(),
+  isDemo: boolean("is_demo").notNull().default(false),
 });
 
 // ─── Applications ─────────────────────────────────────────────────────────────

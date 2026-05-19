@@ -1,18 +1,18 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { applications, candidates, vacancyStages, timelineEvents, screeningAnswers, screeningQuestions } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
 
-export async function getApplicationsForVacancy(vacancyId: string) {
+export async function getApplicationsForVacancy(vacancyId: string, isDemo?: boolean) {
   return db
     .select({
       application: applications,
       candidate: candidates,
     })
     .from(applications)
-    .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo ?? false)))
     .where(eq(applications.vacancyId, vacancyId));
 }
 
