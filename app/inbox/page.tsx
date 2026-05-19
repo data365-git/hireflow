@@ -7,7 +7,7 @@ import { KbdHint } from "@/components/ui/KbdHint";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { useDataMode } from "@/context/DataModeContext";
 import { getInboxConversations, type InboxConversation } from "@/app/actions/messages";
-import { getMessagesForApplication, markMessagesRead, sendMessageToCandidate } from "@/app/actions/messages";
+import { getMessagesForApplication, getMessagesByCandidateId, markMessagesRead, sendMessageToCandidate } from "@/app/actions/messages";
 import { formatRelativeTime } from "@/lib/utils";
 
 type Filter = "all" | "unread" | "stale";
@@ -58,7 +58,8 @@ export default function InboxPage() {
   const [vacancyFilter, setVacancyFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  // Key is applicationId when present, else candidateId — always non-empty when something is selected
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [threadMessages, setThreadMessages] = useState<Record<string, DbMessage[]>>({});
@@ -71,22 +72,30 @@ export default function InboxPage() {
     getInboxConversations().then(setConversations);
   }, [mode]);
 
-  // Initialize selectedAppId to first conversation once loaded
+  // Initialize selectedKey to first conversation once loaded
   useEffect(() => {
-    if (selectedAppId === null && conversations.length > 0) {
-      setSelectedAppId(conversations[0].applicationId);
+    if (selectedKey === null && conversations.length > 0) {
+      const first = conversations[0];
+      setSelectedKey(first.applicationId || first.candidateId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations.length]);
 
   // Fetch messages when a thread is selected
   useEffect(() => {
-    if (!selectedAppId) return;
-    getMessagesForApplication(selectedAppId).then((msgs) => {
-      setThreadMessages((prev) => ({ ...prev, [selectedAppId]: msgs }));
-      markMessagesRead(selectedAppId);
+    if (!selectedKey) return;
+    const conv = conversations.find(
+      (c) => (c.applicationId || c.candidateId) === selectedKey
+    );
+    if (!conv) return;
+    const fetchFn = conv.applicationId
+      ? getMessagesForApplication(conv.applicationId)
+      : getMessagesByCandidateId(conv.candidateId);
+    fetchFn.then((msgs) => {
+      setThreadMessages((prev) => ({ ...prev, [selectedKey]: msgs }));
+      if (conv.applicationId) markMessagesRead(conv.applicationId);
     });
-  }, [selectedAppId]);
+  }, [selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalUnread = conversations.reduce((sum, r) => sum + r.unreadCount, 0);
   const staleCount = conversations.filter(
@@ -106,19 +115,27 @@ export default function InboxPage() {
 
   useKeyboardShortcuts({
     j: () => {
-      const idx = filtered.findIndex((r) => r.applicationId === selectedAppId);
+      const idx = filtered.findIndex((r) => (r.applicationId || r.candidateId) === selectedKey);
       const next = filtered[idx + 1];
-      if (next) { setSelectedAppId(next.applicationId); markMessagesRead(next.applicationId); }
+      if (next) {
+        const key = next.applicationId || next.candidateId;
+        setSelectedKey(key);
+        if (next.applicationId) markMessagesRead(next.applicationId);
+      }
     },
     k: () => {
-      const idx = filtered.findIndex((r) => r.applicationId === selectedAppId);
+      const idx = filtered.findIndex((r) => (r.applicationId || r.candidateId) === selectedKey);
       const prev = filtered[Math.max(0, idx - 1)];
-      if (prev && prev.applicationId !== selectedAppId) { setSelectedAppId(prev.applicationId); markMessagesRead(prev.applicationId); }
+      if (prev && (prev.applicationId || prev.candidateId) !== selectedKey) {
+        const key = prev.applicationId || prev.candidateId;
+        setSelectedKey(key);
+        if (prev.applicationId) markMessagesRead(prev.applicationId);
+      }
     },
   });
 
-  const selectedConv = conversations.find((r) => r.applicationId === selectedAppId);
-  const currentThreadMessages = selectedAppId ? (threadMessages[selectedAppId] ?? []) : [];
+  const selectedConv = conversations.find((r) => (r.applicationId || r.candidateId) === selectedKey);
+  const currentThreadMessages = selectedKey ? (threadMessages[selectedKey] ?? []) : [];
 
   // Unique vacancies from conversations for the filter dropdown
   const uniqueVacancies = Array.from(
@@ -127,10 +144,10 @@ export default function InboxPage() {
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    if (selectedAppId) {
+    if (selectedKey) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [currentThreadMessages.length, selectedAppId]);
+  }, [currentThreadMessages.length, selectedKey]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -206,13 +223,14 @@ export default function InboxPage() {
             <div className="px-4 py-8 text-body-sm text-muted text-center">No conversations</div>
           ) : (
             filtered.map((conv) => {
-              const isSelected = selectedAppId === conv.applicationId;
+              const convKey = conv.applicationId || conv.candidateId;
+              const isSelected = selectedKey === convKey;
               return (
                 <button
-                  key={conv.applicationId}
+                  key={convKey}
                   onClick={() => {
-                    setSelectedAppId(conv.applicationId);
-                    markMessagesRead(conv.applicationId);
+                    setSelectedKey(convKey);
+                    if (conv.applicationId) markMessagesRead(conv.applicationId);
                   }}
                   className={`w-full flex items-start gap-3 px-4 py-3 border-b border-border text-left transition-colors ${
                     isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-surface-2"
@@ -262,7 +280,7 @@ export default function InboxPage() {
 
       {/* Pane 3: Thread detail (flex-1) */}
       <div className="flex-1 flex flex-col min-w-0">
-        {!selectedAppId ? (
+        {!selectedKey ? (
           <div className="flex-1 flex items-center justify-center">
             <p className="text-body-sm text-subtle">Select a conversation</p>
           </div>
@@ -280,12 +298,14 @@ export default function InboxPage() {
                   </span>
                 )}
               </div>
-              <Link
-                href={`/candidates/${selectedAppId}?tab=chat`}
-                className="text-body-sm text-primary hover:underline shrink-0"
-              >
-                Open profile →
-              </Link>
+              {selectedConv?.applicationId && (
+                <Link
+                  href={`/candidates/${selectedConv.applicationId}?tab=chat`}
+                  className="text-body-sm text-primary hover:underline shrink-0"
+                >
+                  Open profile →
+                </Link>
+              )}
             </div>
 
             {/* Messages */}
@@ -318,8 +338,8 @@ export default function InboxPage() {
                   onKeyDown={(e) => {
                     if ((e.key === "Enter" && !e.shiftKey) || (e.key === "Enter" && e.metaKey)) {
                       e.preventDefault();
-                      if (chatInput.trim() && selectedAppId) {
-                        sendMessageToCandidate(selectedAppId, chatInput.trim());
+                      if (chatInput.trim() && selectedConv?.applicationId) {
+                        sendMessageToCandidate(selectedConv.applicationId, chatInput.trim());
                         setChatInput("");
                       }
                     }
@@ -331,12 +351,12 @@ export default function InboxPage() {
                 />
                 <button
                   onClick={() => {
-                    if (chatInput.trim() && selectedAppId) {
-                      sendMessageToCandidate(selectedAppId, chatInput.trim());
+                    if (chatInput.trim() && selectedConv?.applicationId) {
+                      sendMessageToCandidate(selectedConv.applicationId, chatInput.trim());
                       setChatInput("");
                     }
                   }}
-                  disabled={!chatInput.trim()}
+                  disabled={!chatInput.trim() || !selectedConv?.applicationId}
                   className="shrink-0 h-8 w-8 rounded-lg bg-primary text-primary-fg flex items-center justify-center disabled:opacity-30 transition-opacity"
                 >
                   ↑

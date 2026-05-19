@@ -144,6 +144,15 @@ export async function getMessagesForApplication(applicationId: string) {
     .orderBy(telegramMessages.sentAt);
 }
 
+// Used when a conversation has no applicationId (pre-application bot messages)
+export async function getMessagesByCandidateId(candidateId: string) {
+  return db
+    .select()
+    .from(telegramMessages)
+    .where(eq(telegramMessages.candidateId, candidateId))
+    .orderBy(telegramMessages.sentAt);
+}
+
 export async function getInboxUnreadCount(): Promise<number> {
   const isDemo = await getCurrentDataMode();
 
