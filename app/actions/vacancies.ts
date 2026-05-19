@@ -112,6 +112,8 @@ function serializeSource(row: typeof sources.$inferSelect): Source {
     vacancyId: row.vacancyId,
     name: row.name,
     botLink: row.botLink,
+    isArchived: row.isArchived,
+    createdAt: toIso(row.createdAt),
   };
 }
 
@@ -236,7 +238,7 @@ export async function getVacancyEditData(id: string): Promise<VacancyEditData | 
       .from(vacancyStages)
       .where(eq(vacancyStages.vacancyId, id))
       .orderBy(vacancyStages.orderIndex),
-    db.select().from(sources).where(eq(sources.vacancyId, id)),
+    db.select().from(sources).where(and(eq(sources.vacancyId, id), eq(sources.isArchived, false))),
     db.select().from(testTasks).where(eq(testTasks.vacancyId, id)),
     db.select().from(applications).where(eq(applications.vacancyId, id)),
   ]);
@@ -604,7 +606,7 @@ export async function removeVacancySource(sourceId: string): Promise<void> {
   if (!source) throw new Error("Source not found.");
   await requireVacancyInCurrentMode(source.vacancyId);
 
-  await db.delete(sources).where(eq(sources.id, sourceId));
+  await db.update(sources).set({ isArchived: true }).where(eq(sources.id, sourceId));
   revalidateVacancy(source.vacancyId);
 }
 

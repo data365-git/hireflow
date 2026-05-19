@@ -209,6 +209,7 @@ async function getFirstVacancyStageId(vacancyId: string): Promise<string> {
 export async function getOrCreateBrowsingApplication(args: {
   candidateId: string;
   vacancyId: string;
+  sourceId?: string;
 }): Promise<string> {
   const existing = await db
     .select()
@@ -236,6 +237,7 @@ export async function getOrCreateBrowsingApplication(args: {
     appliedAt: new Date(),
     lastActivityAt: new Date(),
     status: "browsing",
+    sourceId: args.sourceId ?? null,
   });
 
   await db.insert(timelineEvents).values({

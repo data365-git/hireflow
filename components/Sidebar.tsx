@@ -17,6 +17,7 @@ import {
   MessageSquareText,
   Network,
   Settings,
+  TrendingUp,
   Users,
 } from "lucide-react";
 
@@ -153,6 +154,7 @@ const groups: NavGroup[] = [
     items: [
       { href: "/feedback", label: "Feedback", Icon: MessageSquareText },
       { href: "/analytics", label: "Reports", Icon: BarChart2 },
+      { href: "/reports/sources", label: "Source Performance", Icon: TrendingUp },
     ],
   },
 ];

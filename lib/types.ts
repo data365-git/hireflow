@@ -136,6 +136,8 @@ export type Source = {
   vacancyId: UUID;
   name: string;
   botLink: string;
+  isArchived: boolean;
+  createdAt: ISODate;
 };
 
 export type QuestionTemplate = {

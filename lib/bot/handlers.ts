@@ -105,7 +105,9 @@ export async function handleStart(ctx: Context) {
   const payload = typeof ctx.match === "string" ? ctx.match.trim() : "";
   const telegramUserId = String(ctx.from!.id);
   const candidate = await getCandidateByTelegramId(telegramUserId);
-  const vacancyId = payload ? payload.split("_")[0] : undefined;
+  const parts = payload ? payload.split("_") : [];
+  const vacancyId = parts[0] || undefined;
+  const sourceId = parts[1] || undefined;
 
   if (candidate && !candidate.profileCompleted) {
     await startAnketa(ctx, candidate.id, lang, vacancyId);
@@ -124,10 +126,10 @@ export async function handleStart(ctx: Context) {
     return;
   }
 
-  await startVacancyFlow(ctx, vacancyId!, lang);
+  await startVacancyFlow(ctx, vacancyId!, lang, sourceId);
 }
 
-async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang) {
+async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang, sourceId?: string) {
   const vacancy = await getLiveActiveVacancy(vacancyId);
   if (!vacancy) {
     return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
@@ -136,7 +138,7 @@ async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang) {
   const candidateId = (ctx as any).state?.candidateId as string | undefined;
   let browsingApplicationId: string | null = null;
   if (candidateId) {
-    browsingApplicationId = await getOrCreateBrowsingApplication({ candidateId, vacancyId });
+    browsingApplicationId = await getOrCreateBrowsingApplication({ candidateId, vacancyId, sourceId });
   }
 
   const questions = await db.select().from(screeningQuestions)

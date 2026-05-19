@@ -130,6 +130,7 @@ export const applications = pgTable("applications", {
   appliedAt: timestamp("applied_at").notNull(),
   lastActivityAt: timestamp("last_activity_at").notNull(),
   status: text("status").notNull().default("submitted"), // "in_progress" | "submitted" | "abandoned"
+  sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
 });
 
 // ─── Screening Answers ────────────────────────────────────────────────────────
@@ -247,6 +248,8 @@ export const sources = pgTable("sources", {
   vacancyId: text("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   botLink: text("bot_link").notNull(),
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ─── Bot Sessions ─────────────────────────────────────────────────────────────

@@ -39,6 +39,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
         appliedAt: applications.appliedAt,
         lastActivityAt: applications.lastActivityAt,
         status: applications.status,
+        sourceId: applications.sourceId,
       })
       .from(applications)
       .innerJoin(

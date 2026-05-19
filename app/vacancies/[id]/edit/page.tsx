@@ -1310,6 +1310,7 @@ function SourcesTab({
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [qrModalSource, setQrModalSource] = useState<Source | null>(null);
 
   function copyLink(id: string, link: string) {
     navigator.clipboard.writeText(link).then(() => {
@@ -1327,6 +1328,35 @@ function SourcesTab({
 
   return (
     <div className="max-w-2xl space-y-3">
+      {/* QR Code Modal */}
+      {qrModalSource && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setQrModalSource(null)}
+        >
+          <div
+            className="bg-bg border border-border rounded-2xl p-6 flex flex-col items-center gap-4 shadow-xl max-w-xs w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-body-sm font-semibold text-text">{qrModalSource.name}</p>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrModalSource.botLink)}`}
+              alt="QR code"
+              width={200}
+              height={200}
+              className="rounded-lg"
+            />
+            <p className="text-micro text-subtle font-mono text-center break-all">{qrModalSource.botLink}</p>
+            <button
+              onClick={() => setQrModalSource(null)}
+              className="h-9 px-6 rounded-lg bg-surface-2 text-muted text-body-sm hover:text-text transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {sources.length === 0 && !showAdd && (
         <EmptyState title="No sources yet" description="Add sources to track where candidates come from." />
       )}
@@ -1340,6 +1370,13 @@ function SourcesTab({
           <p className="flex-1 text-body-sm text-subtle font-mono truncate" title={src.botLink}>
             {src.botLink}
           </p>
+          <button
+            title="Show QR code"
+            onClick={() => setQrModalSource(src)}
+            className="text-body-sm text-muted hover:text-primary transition-colors shrink-0 px-2"
+          >
+            QR Code
+          </button>
           <button
             title="Copy bot link"
             onClick={() => copyLink(src.id, src.botLink)}

@@ -397,6 +397,8 @@ export const useStore = create<Store>((set, get) => ({
         vacancyId,
         name: s.name,
         botLink: `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${id}`,
+        isArchived: false,
+        createdAt: new Date().toISOString(),
       };
     });
 
@@ -526,6 +528,8 @@ export const useStore = create<Store>((set, get) => ({
       vacancyId,
       name,
       botLink: `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${id}`,
+      isArchived: false,
+      createdAt: new Date().toISOString(),
     };
     set((s) => ({ sources: [...s.sources, newSource] }));
   },

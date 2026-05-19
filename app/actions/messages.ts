@@ -1,9 +1,8 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { telegramMessages, applications, candidates, vacancies } from "@/lib/db/schema";
+import { telegramMessages, applications, candidates, vacancies, sources } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getCurrentDataMode } from "@/lib/data-mode";
 
 export type InboxConversation = {
   candidateId: string;
@@ -17,6 +16,7 @@ export type InboxConversation = {
   lastMessageDirection: "inbound" | "outbound" | null;
   lastMessageAt: string | null;
   unreadCount: number;
+  sourceName: string | null;
 };
 
 export type InboxMessage = {
@@ -52,8 +52,8 @@ function toInboxMessage(row: typeof telegramMessages.$inferSelect): InboxMessage
 }
 
 export async function getInboxConversations(): Promise<InboxConversation[]> {
-  const isDemo = await getCurrentDataMode();
-
+  // Inbox is exclusively for real Telegram bot conversations — always isDemo=false,
+  // regardless of the admin's current UI mode (demo vs live).
   const msgs = await db
     .select({
       msgId: telegramMessages.id,
@@ -68,12 +68,14 @@ export async function getInboxConversations(): Promise<InboxConversation[]> {
       direction: telegramMessages.direction,
       sentAt: telegramMessages.sentAt,
       readByUserIds: telegramMessages.readByUserIds,
+      sourceName: sources.name,
     })
     .from(telegramMessages)
     .innerJoin(candidates, eq(telegramMessages.candidateId, candidates.id))
     .leftJoin(applications, eq(telegramMessages.applicationId, applications.id))
     .leftJoin(vacancies, eq(applications.vacancyId, vacancies.id))
-    .where(eq(candidates.isDemo, isDemo))
+    .leftJoin(sources, eq(applications.sourceId, sources.id))
+    .where(eq(candidates.isDemo, false))
     .orderBy(asc(telegramMessages.sentAt));
 
   // Group by applicationId (or candidateId if no applicationId)
@@ -104,6 +106,7 @@ export async function getInboxConversations(): Promise<InboxConversation[]> {
       lastMessageDirection: last.direction as "inbound" | "outbound",
       lastMessageAt: last.sentAt?.toISOString() ?? null,
       unreadCount,
+      sourceName: last.sourceName ?? null,
     });
   }
 
@@ -122,14 +125,12 @@ export async function sendMessageToCandidate(applicationId: string, text: string
     throw new Error("Message cannot be empty");
   }
 
-  const isDemo = await getCurrentDataMode();
-
-  // 1. Get application → candidate → telegramUserId, guarded by isDemo via vacancy join
+  // Always operate on live candidates — Telegram messages are never demo data.
   const rows = await db
     .select({ app: applications, cand: candidates })
     .from(applications)
-    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, false)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false)))
     .where(eq(applications.id, applicationId));
 
   const row = rows[0];
@@ -192,13 +193,12 @@ export async function getMessagesByCandidateId(candidateId: string): Promise<Inb
 }
 
 export async function getInboxUnreadCount(): Promise<number> {
-  const isDemo = await getCurrentDataMode();
-
+  // Always count from live candidates — inbox is bot-only, always isDemo=false.
   const msgs = await db
     .select({ readByUserIds: telegramMessages.readByUserIds, direction: telegramMessages.direction })
     .from(telegramMessages)
     .innerJoin(candidates, eq(telegramMessages.candidateId, candidates.id))
-    .where(eq(candidates.isDemo, isDemo));
+    .where(eq(candidates.isDemo, false));
 
   return msgs.filter(
     (m) => m.direction === "inbound" && (!m.readByUserIds || (m.readByUserIds as string[]).length === 0)

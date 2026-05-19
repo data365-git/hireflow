@@ -387,13 +387,13 @@ export const NOTES: InternalNote[] = [
 // ─── Sources ──────────────────────────────────────────────────────────────────
 
 export const SOURCES: Source[] = [
-  { id: "src1_1", vacancyId: "v1", name: "LinkedIn",  botLink: "https://t.me/hireflow_bot?start=v1_src1_1" },
-  { id: "src1_2", vacancyId: "v1", name: "Instagram", botLink: "https://t.me/hireflow_bot?start=v1_src1_2" },
-  { id: "src1_3", vacancyId: "v1", name: "Telegram",  botLink: "https://t.me/hireflow_bot?start=v1_src1_3" },
-  { id: "src2_1", vacancyId: "v2", name: "hh.uz",     botLink: "https://t.me/hireflow_bot?start=v2_src2_1" },
-  { id: "src2_2", vacancyId: "v2", name: "Telegram",  botLink: "https://t.me/hireflow_bot?start=v2_src2_2" },
-  { id: "src3_1", vacancyId: "v3", name: "Behance",   botLink: "https://t.me/hireflow_bot?start=v3_src3_1" },
-  { id: "src3_2", vacancyId: "v3", name: "LinkedIn",  botLink: "https://t.me/hireflow_bot?start=v3_src3_2" },
+  { id: "src1_1", vacancyId: "v1", name: "LinkedIn",  botLink: "https://t.me/hireflow_bot?start=v1_src1_1", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
+  { id: "src1_2", vacancyId: "v1", name: "Instagram", botLink: "https://t.me/hireflow_bot?start=v1_src1_2", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
+  { id: "src1_3", vacancyId: "v1", name: "Telegram",  botLink: "https://t.me/hireflow_bot?start=v1_src1_3", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
+  { id: "src2_1", vacancyId: "v2", name: "hh.uz",     botLink: "https://t.me/hireflow_bot?start=v2_src2_1", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
+  { id: "src2_2", vacancyId: "v2", name: "Telegram",  botLink: "https://t.me/hireflow_bot?start=v2_src2_2", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
+  { id: "src3_1", vacancyId: "v3", name: "Behance",   botLink: "https://t.me/hireflow_bot?start=v3_src3_1", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
+  { id: "src3_2", vacancyId: "v3", name: "LinkedIn",  botLink: "https://t.me/hireflow_bot?start=v3_src3_2", isArchived: false, createdAt: "2025-04-10T09:00:00Z" },
 ];
 
 // ─── Question Templates ───────────────────────────────────────────────────────

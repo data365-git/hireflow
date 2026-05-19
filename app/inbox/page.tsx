@@ -390,6 +390,11 @@ export default function InboxPage() {
                         {statusLabel}
                       </span>
                     )}
+                    {conv.sourceName && (
+                      <span className="mt-0.5 inline-flex h-5 items-center rounded-full border border-primary/20 bg-primary/10 text-primary px-1.5 text-micro font-medium">
+                        {conv.sourceName}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
@@ -415,6 +420,11 @@ export default function InboxPage() {
                 {selectedConv?.vacancyTitle && (
                   <span className="text-body-sm text-muted ml-2">
                     {selectedConv.vacancyTitle}
+                  </span>
+                )}
+                {selectedConv?.sourceName && (
+                  <span className="text-body-sm text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5 text-micro font-medium ml-2">
+                    {selectedConv.sourceName}
                   </span>
                 )}
               </div>
