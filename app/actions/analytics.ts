@@ -1,9 +1,9 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { vacancies, applications, vacancyStages, sources, timelineEvents, telegramMessages } from "@/lib/db/schema";
+import { vacancies, applications, vacancyStages, sources, timelineEvents, telegramMessages, candidates } from "@/lib/db/schema";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 export type AnalyticsData = {
   vacancies: (typeof vacancies.$inferSelect)[];
@@ -30,7 +30,22 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   }
 
   const [allApps, allStages, allSources] = await Promise.all([
-    db.select().from(applications).where(inArray(applications.vacancyId, vacancyIds)),
+    db
+      .select({
+        id: applications.id,
+        candidateId: applications.candidateId,
+        vacancyId: applications.vacancyId,
+        currentStageId: applications.currentStageId,
+        appliedAt: applications.appliedAt,
+        lastActivityAt: applications.lastActivityAt,
+        status: applications.status,
+      })
+      .from(applications)
+      .innerJoin(
+        candidates,
+        and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo))
+      )
+      .where(inArray(applications.vacancyId, vacancyIds)),
     db.select().from(vacancyStages).where(inArray(vacancyStages.vacancyId, vacancyIds)),
     db.select().from(sources).where(inArray(sources.vacancyId, vacancyIds)),
   ]);

@@ -11,6 +11,7 @@ interface User {
   id: string;
   email: string;
   fullName: string;
+  avatarUrl?: string | null;
   phone?: string | null;
   isActive: boolean;
   hasAccess: boolean;
@@ -66,13 +67,18 @@ export function UsersTable() {
   if (loading) return <div className="text-muted text-body-sm">Loading...</div>;
 
   // Build roles prop for UserEditModal: unique roles with color
-  const rolesForModal = systemRoles.map((r) => ({ name: r.name, color: r.color ?? null }));
+  const rolesForModal = systemRoles.map((r) => ({
+    name: r.name,
+    displayName: r.displayName,
+    color: r.color ?? null,
+  }));
 
   // Map user to form-compatible shape
   const toEditUser = (u: User) => ({
     id: u.id,
     fullName: u.fullName,
     email: u.email,
+    avatarUrl: u.avatarUrl,
     phone: u.phone,
     role: u.roles[0] ?? "",
     isActive: u.isActive,

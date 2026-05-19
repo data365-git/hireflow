@@ -1,5 +1,5 @@
 import type { Context, NextFunction } from "grammy";
-import { upsertCandidateFromTelegram, saveBotMessage } from "@/app/actions/bot";
+import { getBotSession, getLatestApplicationIdForTelegramUser, upsertCandidateFromTelegram, saveBotMessage } from "@/app/actions/bot";
 
 // Stash candidateId on the context for downstream handlers
 declare module "grammy" {
@@ -22,11 +22,18 @@ export async function persistenceMiddleware(ctx: Context, next: NextFunction) {
   (ctx as any).state = (ctx as any).state ?? {};
   (ctx as any).state.candidateId = candidateId;
 
+  async function currentApplicationId() {
+    const session = await getBotSession(String(ctx.from!.id)).catch(() => null);
+    return session?.applicationId ?? await getLatestApplicationIdForTelegramUser(String(ctx.from!.id)).catch(() => null);
+  }
+
   // 2) Save inbound message
   try {
+    const applicationId = await currentApplicationId();
     if (ctx.message?.text) {
       await saveBotMessage({
         candidateId,
+        applicationId,
         direction: "inbound",
         text: ctx.message.text,
       });
@@ -34,6 +41,7 @@ export async function persistenceMiddleware(ctx: Context, next: NextFunction) {
       const photo = ctx.message.photo.at(-1);
       await saveBotMessage({
         candidateId,
+        applicationId,
         direction: "inbound",
         text: ctx.message.caption ?? "",
         attachmentFileId: photo?.file_id,
@@ -42,6 +50,7 @@ export async function persistenceMiddleware(ctx: Context, next: NextFunction) {
     } else if (ctx.message?.document) {
       await saveBotMessage({
         candidateId,
+        applicationId,
         direction: "inbound",
         text: ctx.message.caption ?? "",
         attachmentFileId: ctx.message.document.file_id,
@@ -52,6 +61,7 @@ export async function persistenceMiddleware(ctx: Context, next: NextFunction) {
       // Persist the button tap as a "user action" message
       await saveBotMessage({
         candidateId,
+        applicationId,
         direction: "inbound",
         text: `[tapped: ${ctx.callbackQuery.data}]`,
       });
@@ -65,8 +75,10 @@ export async function persistenceMiddleware(ctx: Context, next: NextFunction) {
   (ctx as any).reply = async (text: string, other?: any) => {
     const result = await originalReply(text, other);
     try {
+      const applicationId = await currentApplicationId();
       await saveBotMessage({
         candidateId,
+        applicationId,
         direction: "outbound",
         text,
       });

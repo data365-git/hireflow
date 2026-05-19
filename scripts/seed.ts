@@ -19,6 +19,32 @@ import {
   TEST_TASK_ASSIGNMENTS,
 } from "../lib/mockData";
 
+const DEPARTMENTS = [
+  { id: "dept_engineering", name: "engineering", displayName: "Engineering" },
+  { id: "dept_marketing", name: "marketing", displayName: "Marketing" },
+  { id: "dept_sales", name: "sales", displayName: "Sales" },
+  { id: "dept_operations", name: "operations", displayName: "Operations" },
+  { id: "dept_design", name: "design", displayName: "Design" },
+];
+
+const STANDARD_FULL_FUNNEL = {
+  id: "tpl-full-funnel",
+  name: "Standard Full Funnel",
+  description: "Comprehensive 9-stage pipeline for most roles",
+  isSystem: true,
+  stages: [
+    { id: "tpl_full_funnel_1", name: "New Application",       color: "new",       isFinal: false, isRejected: false, isReserve: false, orderIndex: 0 },
+    { id: "tpl_full_funnel_2", name: "Under Review",          color: "screening", isFinal: false, isRejected: false, isReserve: false, orderIndex: 1 },
+    { id: "tpl_full_funnel_3", name: "Contacted",             color: "screening", isFinal: false, isRejected: false, isReserve: false, orderIndex: 2 },
+    { id: "tpl_full_funnel_4", name: "Interview Scheduled",   color: "interview", isFinal: false, isRejected: false, isReserve: false, orderIndex: 3 },
+    { id: "tpl_full_funnel_5", name: "Test Assignment",       color: "test",      isFinal: false, isRejected: false, isReserve: false, orderIndex: 4 },
+    { id: "tpl_full_funnel_6", name: "Final Interview",       color: "interview", isFinal: false, isRejected: false, isReserve: false, orderIndex: 5 },
+    { id: "tpl_full_funnel_7", name: "Hired",                 color: "hired",     isFinal: true,  isRejected: false, isReserve: false, orderIndex: 6 },
+    { id: "tpl_full_funnel_8", name: "Rejected",              color: "rejected",  isFinal: true,  isRejected: true,  isReserve: false, orderIndex: 7 },
+    { id: "tpl_full_funnel_9", name: "Talent Pool / Reserve", color: "qualified", isFinal: true,  isRejected: false, isReserve: true,  orderIndex: 8 },
+  ],
+};
+
 async function seed() {
   console.log("Seeding...");
 
@@ -32,7 +58,11 @@ async function seed() {
   ).onConflictDoNothing();
   console.log("  users done");
 
-  // 2. Vacancies (responsibleHrId references users)
+  // 2. Departments
+  await db.insert(schema.departments).values(DEPARTMENTS).onConflictDoNothing();
+  console.log("  departments done");
+
+  // 3. Vacancies (responsibleHrId references users)
   await db
     .insert(schema.vacancies)
     .values(
@@ -58,7 +88,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  vacancies done");
 
-  // 3. Vacancy stages
+  // 4. Vacancy stages
   await db
     .insert(schema.vacancyStages)
     .values(
@@ -69,13 +99,14 @@ async function seed() {
         color: s.color,
         isFinal: s.isFinal,
         isRejected: s.isRejected,
+        isReserve: false,
         orderIndex: s.orderIndex,
       }))
     )
     .onConflictDoNothing();
   console.log("  vacancy_stages done");
 
-  // 4. Screening questions
+  // 5. Screening questions
   await db
     .insert(schema.screeningQuestions)
     .values(
@@ -91,7 +122,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  screening_questions done");
 
-  // 5. Sources
+  // 6. Sources
   await db
     .insert(schema.sources)
     .values(
@@ -105,7 +136,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  sources done");
 
-  // 6. Candidates
+  // 7. Candidates
   await db
     .insert(schema.candidates)
     .values(
@@ -124,7 +155,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  candidates done");
 
-  // 7. Applications
+  // 8. Applications
   await db
     .insert(schema.applications)
     .values(
@@ -141,7 +172,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  applications done");
 
-  // 8. Screening answers
+  // 9. Screening answers
   await db
     .insert(schema.screeningAnswers)
     .values(
@@ -156,7 +187,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  screening_answers done");
 
-  // 9. Timeline events
+  // 10. Timeline events
   await db
     .insert(schema.timelineEvents)
     .values(
@@ -173,7 +204,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  timeline_events done");
 
-  // 10. Telegram messages
+  // 11. Telegram messages
   await db
     .insert(schema.telegramMessages)
     .values(
@@ -192,7 +223,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  telegram_messages done");
 
-  // 11. Internal notes
+  // 12. Internal notes
   await db
     .insert(schema.internalNotes)
     .values(
@@ -208,7 +239,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  internal_notes done");
 
-  // 12. Automation rules
+  // 13. Automation rules
   await db
     .insert(schema.automationRules)
     .values(
@@ -228,7 +259,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  automation_rules done");
 
-  // 13. Test tasks
+  // 14. Test tasks
   await db
     .insert(schema.testTasks)
     .values(
@@ -243,7 +274,7 @@ async function seed() {
     .onConflictDoNothing();
   console.log("  test_tasks done");
 
-  // 14. Test task assignments
+  // 15. Test task assignments
   await db
     .insert(schema.testTaskAssignments)
     .values(
@@ -259,6 +290,21 @@ async function seed() {
     )
     .onConflictDoNothing();
   console.log("  test_task_assignments done");
+
+  // 16. Stage template defaults
+  await db.insert(schema.stageTemplates).values({
+    id: STANDARD_FULL_FUNNEL.id,
+    name: STANDARD_FULL_FUNNEL.name,
+    description: STANDARD_FULL_FUNNEL.description,
+    isSystem: STANDARD_FULL_FUNNEL.isSystem,
+  }).onConflictDoNothing();
+  await db.insert(schema.stageTemplateStages).values(
+    STANDARD_FULL_FUNNEL.stages.map((stage) => ({
+      ...stage,
+      templateId: STANDARD_FULL_FUNNEL.id,
+    }))
+  ).onConflictDoNothing();
+  console.log("  stage_templates done");
 
   console.log("Done.");
   process.exit(0);

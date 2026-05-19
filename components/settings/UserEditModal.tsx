@@ -8,6 +8,7 @@ interface UserForEdit {
   id: string;
   fullName: string;
   email: string;
+  avatarUrl?: string | null;
   phone?: string | null;
   role: string;
   isActive: boolean;
@@ -16,6 +17,7 @@ interface UserForEdit {
 
 interface Role {
   name: string;
+  displayName?: string;
   color: string | null;
 }
 
@@ -30,6 +32,7 @@ interface FormState {
   fullName: string;
   email: string;
   password: string;
+  avatarUrl: string;
   phone: string;
   role: string;
   isActive: boolean;
@@ -40,6 +43,7 @@ function blankForm(roles: Role[]): FormState {
     fullName: "",
     email: "",
     password: "",
+    avatarUrl: "",
     phone: "",
     role: roles[0]?.name ?? "",
     isActive: true,
@@ -51,6 +55,7 @@ function userToForm(user: UserForEdit): FormState {
     fullName: user.fullName,
     email: user.email,
     password: "",
+    avatarUrl: user.avatarUrl ?? "",
     phone: user.phone ?? "",
     role: user.role,
     isActive: user.isActive && user.hasAccess,
@@ -103,6 +108,8 @@ export function UserEditModal({ open, user, roles, onClose }: Props) {
       if (isEdit) {
         const body: Record<string, unknown> = {
           fullName: form.fullName,
+          email: form.email,
+          avatarUrl: form.avatarUrl || null,
           phone: form.phone || null,
           role: form.role,
           isActive: form.isActive,
@@ -171,10 +178,19 @@ export function UserEditModal({ open, user, roles, onClose }: Props) {
           type="email"
           value={form.email}
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          required={!isEdit}
-          disabled={isEdit}
+          required
           placeholder="jane@example.com"
         />
+
+        {isEdit && (
+          <Input
+            label="Avatar URL"
+            type="url"
+            value={form.avatarUrl}
+            onChange={(e) => setForm((f) => ({ ...f, avatarUrl: e.target.value }))}
+            placeholder="https://example.com/avatar.jpg"
+          />
+        )}
 
         <div>
           <Input
@@ -219,7 +235,7 @@ export function UserEditModal({ open, user, roles, onClose }: Props) {
           >
             {roles.map((r) => (
               <option key={r.name} value={r.name}>
-                {r.name}
+                {r.displayName ?? r.name}
               </option>
             ))}
           </select>

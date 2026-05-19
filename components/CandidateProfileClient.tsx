@@ -1,9 +1,11 @@
 "use client";
-import { useState, useRef, useEffect, Suspense, useTransition } from "react";
+import { type ReactNode, useState, useRef, useEffect, Suspense, useTransition } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { sendMessageToCandidate } from "@/app/actions/messages";
+import { moveApplicationToStage as moveApplicationToStageAction } from "@/app/actions/applications";
+import { updateCandidateAnketa, type CandidateAnketaInput } from "@/app/actions/candidate-actions";
 import { Avatar } from "@/components/Avatar";
 import { StagePill } from "@/components/StagePill";
 import { ScreeningAnswerRow } from "@/components/ScreeningAnswerRow";
@@ -11,12 +13,14 @@ import { TimelineEntry } from "@/components/TimelineEntry";
 import { ChatBubble } from "@/components/ChatBubble";
 import { NoteCard } from "@/components/NoteCard";
 import { EmptyState } from "@/components/EmptyState";
+import { Dialog } from "@/components/ui/Dialog";
 import { KbdHint } from "@/components/ui/KbdHint";
+import { CandidateActionControls } from "@/components/candidates/CandidateActionControls";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { formatRelativeTime, daysAgo } from "@/lib/utils";
-import type { TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent } from "@/lib/types";
+import type { Application, Candidate, TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent } from "@/lib/types";
 
-type Tab = "activity" | "chat" | "notes" | "tasks" | "screening" | "timeline" | "conversation";
+type Tab = "activity" | "anketa" | "chat" | "notes" | "tasks" | "screening" | "timeline" | "conversation";
 
 export type ConversationMessage = {
   id: string;
@@ -38,21 +42,85 @@ type ActivityItem =
   | { kind: "timeline"; ts: string; event: TimelineEvent }
   | { kind: "note"; ts: string; note: InternalNote; author?: User };
 
+type WorkExperienceFormRow = {
+  company: string;
+  position: string;
+  period: string;
+  leaveReason: string;
+};
+
+type AnketaFormState = {
+  fullName: string;
+  phone: string;
+  city: string;
+  dateOfBirth: string | null;
+  address: string | null;
+  maritalStatus: string | null;
+  isStudent: boolean | null;
+  educationField: string | null;
+  englishLevel: string | null;
+  russianLevel: string | null;
+  workExperience: WorkExperienceFormRow[];
+  departmentId: string | null;
+  profileCompleted: boolean;
+  languagePref: "" | "uz" | "en" | "ru" | null;
+};
+
+const MARITAL_STATUS_OPTIONS = [
+  { value: "", label: "Not recorded" },
+  { value: "single", label: "Single" },
+  { value: "married", label: "Married" },
+  { value: "divorced", label: "Divorced" },
+  { value: "other", label: "Other" },
+];
+
+const LANGUAGE_LEVEL_OPTIONS = [
+  { value: "", label: "Not recorded" },
+  { value: "none", label: "None" },
+  { value: "a1_a2", label: "A1-A2" },
+  { value: "b1_b2", label: "B1-B2" },
+  { value: "c1_c2", label: "C1-C2" },
+  { value: "native", label: "Native" },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "", label: "Not recorded" },
+  { value: "uz", label: "Uzbek" },
+  { value: "en", label: "English" },
+  { value: "ru", label: "Russian" },
+];
+
 function ProfileContent({
   applicationId,
   initialConversation,
+  initialApplication,
+  initialCandidate,
+  initialTimeline,
 }: {
   applicationId: string;
   initialConversation: ConversationMessage[];
+  initialApplication?: Application;
+  initialCandidate?: Candidate;
+  initialTimeline?: TimelineEvent[];
 }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialTab = (searchParams.get("tab") as Tab) ?? "activity";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [chatInput, setChatInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [sendPending, startSendTransition] = useTransition();
+  const [movePending, startMoveTransition] = useTransition();
   const [sendError, setSendError] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [commentStageId, setCommentStageId] = useState<string | null>(null);
+  const [stageComment, setStageComment] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [isAnketaOpen, setIsAnketaOpen] = useState(false);
+  const [anketaForm, setAnketaForm] = useState<AnketaFormState>(() => createEmptyAnketaForm());
+  const [anketaError, setAnketaError] = useState<string | null>(null);
+  const [candidateOverrides, setCandidateOverrides] = useState<Partial<Candidate> | null>(null);
+  const [anketaPending, startAnketaTransition] = useTransition();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const applications = useStore((s) => s.applications);
@@ -76,12 +144,22 @@ function ProfileContent({
   const assignTestTask = useStore((s) => s.assignTestTask);
   const updateTestTaskAssignment = useStore((s) => s.updateTestTaskAssignment);
 
-  const application = applications.find((a) => a.id === applicationId);
-  const candidate = getCandidateForApplication(applicationId);
+  const application = applications.find((a) => a.id === applicationId) ?? initialApplication;
+  const storeCandidate = getCandidateForApplication(applicationId);
+  const baseCandidate = storeCandidate ?? initialCandidate;
+  const candidate = baseCandidate ? { ...baseCandidate, ...candidateOverrides } : undefined;
   const answers = getAnswersForApplication(applicationId);
-  const timeline = getTimelineForApplication(applicationId);
+  const timeline = getTimelineForApplication(applicationId).length > 0
+    ? getTimelineForApplication(applicationId)
+    : initialTimeline ?? [];
   const messages = getMessagesForApplication(applicationId);
   const notes = getNotesForApplication(applicationId);
+
+  useEffect(() => {
+    setCandidateOverrides(null);
+    setIsAnketaOpen(false);
+    setAnketaError(null);
+  }, [applicationId, initialCandidate?.id]);
 
   const unreadCount = messages.filter(
     (m) => m.direction === "inbound" && !m.readByUserIds.includes(currentUserId)
@@ -95,7 +173,7 @@ function ProfileContent({
     Object.fromEntries(
       vacancyStages.slice(0, 9).map((stage, i) => [
         String(i + 1),
-        () => moveApplicationToStage(applicationId, stage.id),
+        () => requestStageMove(stage.id),
       ])
     )
   );
@@ -152,8 +230,122 @@ function ProfileContent({
     setNoteInput("");
   };
 
+  const selectedCommentStage = commentStageId
+    ? vacancyStages.find((stage) => stage.id === commentStageId)
+    : null;
+
+  function requestStageMove(stageId: string) {
+    if (!application) return;
+    if (stageId === application.currentStageId || movePending) return;
+    const target = vacancyStages.find((stage) => stage.id === stageId);
+    if (!target) return;
+
+    if (target.isFinal || target.isRejected) {
+      setMoveError(null);
+      setStageComment("");
+      setCommentStageId(stageId);
+      return;
+    }
+
+    executeStageMove(stageId);
+  }
+
+  function executeStageMove(stageId: string, comment?: string) {
+    startMoveTransition(async () => {
+      try {
+        setMoveError(null);
+        await moveApplicationToStageAction(applicationId, stageId, comment);
+        moveApplicationToStage(applicationId, stageId);
+        setCommentStageId(null);
+        setStageComment("");
+        router.refresh();
+      } catch (err) {
+        setMoveError(err instanceof Error ? err.message : "Failed to move candidate.");
+      }
+    });
+  }
+
+  function confirmCommentedMove() {
+    if (!commentStageId) return;
+    const target = vacancyStages.find((stage) => stage.id === commentStageId);
+    const comment = stageComment.trim();
+    if (target?.isRejected && !comment) {
+      setMoveError("Comment is required when rejecting a candidate.");
+      return;
+    }
+    executeStageMove(commentStageId, comment || undefined);
+  }
+
+  function openAnketaEditor() {
+    if (!candidate) return;
+    setAnketaForm(createAnketaForm(candidate));
+    setAnketaError(null);
+    setIsAnketaOpen(true);
+  }
+
+  function closeAnketaEditor() {
+    if (anketaPending) return;
+    setIsAnketaOpen(false);
+    setAnketaError(null);
+  }
+
+  function updateAnketaField<K extends keyof AnketaFormState>(field: K, value: AnketaFormState[K]) {
+    setAnketaForm((current) => ({ ...current, [field]: value }));
+    if (anketaError) setAnketaError(null);
+  }
+
+  function updateWorkExperienceRow<K extends keyof WorkExperienceFormRow>(
+    index: number,
+    field: K,
+    value: WorkExperienceFormRow[K],
+  ) {
+    setAnketaForm((current) => ({
+      ...current,
+      workExperience: current.workExperience.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row,
+      ),
+    }));
+    if (anketaError) setAnketaError(null);
+  }
+
+  function addWorkExperienceRow() {
+    setAnketaForm((current) => ({
+      ...current,
+      workExperience: [...current.workExperience, createEmptyWorkExperienceRow()],
+    }));
+  }
+
+  function removeWorkExperienceRow(index: number) {
+    setAnketaForm((current) => ({
+      ...current,
+      workExperience: current.workExperience.filter((_, rowIndex) => rowIndex !== index),
+    }));
+  }
+
+  function handleSaveAnketa() {
+    if (!candidate) return;
+    const candidateId = candidate.id;
+    const payload = normalizeAnketaForm(anketaForm);
+    startAnketaTransition(async () => {
+      try {
+        setAnketaError(null);
+        await updateCandidateAnketa(candidateId, payload);
+        setCandidateOverrides({
+          ...payload,
+          dateOfBirth: payload.dateOfBirth,
+          workExperience: payload.workExperience,
+        });
+        setIsAnketaOpen(false);
+        router.refresh();
+      } catch (err) {
+        setAnketaError(err instanceof Error ? err.message : "Failed to save anketa.");
+      }
+    });
+  }
+
   const TABS: { id: Tab; label: string; badge?: number }[] = [
     { id: "activity", label: "Activity" },
+    { id: "anketa", label: "Anketa", badge: candidate?.profileCompleted ? 1 : undefined },
     { id: "chat", label: "Chat", badge: unreadCount > 0 ? unreadCount : undefined },
     { id: "conversation", label: "Conversation", badge: initialConversation.length > 0 ? initialConversation.length : undefined },
     { id: "notes", label: "Notes", badge: notes.length > 0 ? notes.length : undefined },
@@ -202,7 +394,7 @@ function ProfileContent({
                   <span className="text-micro text-muted group-hover:text-text transition-colors">▾</span>
                   <select
                     value={application.currentStageId}
-                    onChange={(e) => moveApplicationToStage(applicationId, e.target.value)}
+                    onChange={(e) => requestStageMove(e.target.value)}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   >
                     {vacancyStages.map((s) => (
@@ -217,7 +409,7 @@ function ProfileContent({
                     {vacancyStages.slice(0, 9).map((s, i) => (
                       <button
                         key={s.id}
-                        onClick={() => moveApplicationToStage(applicationId, s.id)}
+                        onClick={() => requestStageMove(s.id)}
                         title={s.name}
                         className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                           s.id === application.currentStageId
@@ -296,6 +488,14 @@ function ProfileContent({
             >
               📋 Assign task
             </button>
+            <CandidateActionControls
+              applicationId={application.id}
+              candidateId={candidate.id}
+              candidateName={candidate.fullName}
+              initialIsWatched={false}
+              initialIsBlacklisted={Boolean((candidate as { isBlacklisted?: boolean }).isBlacklisted)}
+              showRelationships
+            />
           </div>
         </aside>
 
@@ -373,6 +573,64 @@ function ProfileContent({
                     return null;
                   })
                 )}
+              </div>
+            )}
+
+            {/* ── Anketa ── */}
+            {activeTab === "anketa" && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-h3 text-text">Anketa</h2>
+                    <p className="text-body-sm text-muted mt-0.5">
+                      {candidate.profileCompleted ? "Completed profile" : "Profile not completed"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openAnketaEditor}
+                    className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    Edit anketa
+                  </button>
+                </div>
+
+                <div className="bg-surface border border-border rounded-xl p-4">
+                  <h3 className="text-body-sm font-semibold text-text mb-3">Personal info</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <ProfileRow label="Full name" value={candidate.fullName} />
+                    <ProfileRow label="Date of birth" value={formatDateValue(candidate.dateOfBirth)} />
+                    <ProfileRow label="Address" value={candidate.address} />
+                    <ProfileRow label="Phone" value={candidate.phone} />
+                    <ProfileRow label="Marital status" value={formatValue(candidate.maritalStatus)} />
+                    <ProfileRow label="Student" value={candidate.isStudent == null ? null : candidate.isStudent ? "Yes" : "No"} />
+                    <ProfileRow label="Education" value={candidate.educationField} />
+                    <ProfileRow label="English" value={formatLanguageLevel(candidate.englishLevel)} />
+                    <ProfileRow label="Russian" value={formatLanguageLevel(candidate.russianLevel)} />
+                    <ProfileRow label="Language" value={(candidate.languagePref ?? candidate.language)?.toUpperCase()} />
+                    <ProfileRow label="Department" value={candidate.departmentId} />
+                  </div>
+                </div>
+
+                <div className="bg-surface border border-border rounded-xl p-4">
+                  <h3 className="text-body-sm font-semibold text-text mb-3">Work experience</h3>
+                  {candidate.workExperience?.length ? (
+                    <div className="space-y-3">
+                      {candidate.workExperience.map((exp, index) => (
+                        <div key={`${exp.company ?? "experience"}-${index}`} className="rounded-lg border border-border bg-bg p-3">
+                          <p className="text-body-sm font-semibold text-text">{exp.position || "Position not recorded"}</p>
+                          <p className="text-body-sm text-muted">{exp.company || "Company not recorded"}</p>
+                          <p className="text-micro text-subtle mt-1">{exp.period || "Period not recorded"}</p>
+                          {exp.leaveReason && (
+                            <p className="text-body-sm text-text mt-2">{exp.leaveReason}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title="No work experience recorded" description="This candidate did not add work history in the bot anketa." />
+                  )}
+                </div>
               </div>
             )}
 
@@ -638,6 +896,277 @@ function ProfileContent({
           </div>
         </div>
       </div>
+
+      <Dialog open={isAnketaOpen} onClose={closeAnketaEditor} title="Edit anketa" size="lg">
+        <div className="space-y-5">
+          {anketaError && (
+            <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-body-sm text-danger">
+              {anketaError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormField label="Full name">
+              <input
+                value={anketaForm.fullName}
+                onChange={(e) => updateAnketaField("fullName", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="Phone">
+              <input
+                value={anketaForm.phone}
+                onChange={(e) => updateAnketaField("phone", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="City">
+              <input
+                value={anketaForm.city}
+                onChange={(e) => updateAnketaField("city", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="Date of birth">
+              <input
+                type="date"
+                value={anketaForm.dateOfBirth ?? ""}
+                onChange={(e) => updateAnketaField("dateOfBirth", e.target.value || null)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="Address" className="sm:col-span-2">
+              <input
+                value={anketaForm.address ?? ""}
+                onChange={(e) => updateAnketaField("address", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="Marital status">
+              <select
+                value={anketaForm.maritalStatus ?? ""}
+                onChange={(e) => updateAnketaField("maritalStatus", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              >
+                {MARITAL_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Student">
+              <select
+                value={anketaForm.isStudent == null ? "" : anketaForm.isStudent ? "yes" : "no"}
+                onChange={(e) =>
+                  updateAnketaField(
+                    "isStudent",
+                    e.target.value === "" ? null : e.target.value === "yes",
+                  )
+                }
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              >
+                <option value="">Not recorded</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </FormField>
+            <FormField label="Education">
+              <input
+                value={anketaForm.educationField ?? ""}
+                onChange={(e) => updateAnketaField("educationField", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="Department ID">
+              <input
+                value={anketaForm.departmentId ?? ""}
+                onChange={(e) => updateAnketaField("departmentId", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </FormField>
+            <FormField label="English">
+              <select
+                value={anketaForm.englishLevel ?? ""}
+                onChange={(e) => updateAnketaField("englishLevel", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              >
+                {LANGUAGE_LEVEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Russian">
+              <select
+                value={anketaForm.russianLevel ?? ""}
+                onChange={(e) => updateAnketaField("russianLevel", e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              >
+                {LANGUAGE_LEVEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Language">
+              <select
+                value={anketaForm.languagePref ?? ""}
+                onChange={(e) => updateAnketaField("languagePref", e.target.value as AnketaFormState["languagePref"])}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <label className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 h-9 self-end">
+              <input
+                type="checkbox"
+                checked={Boolean(anketaForm.profileCompleted)}
+                onChange={(e) => updateAnketaField("profileCompleted", e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span className="text-body-sm text-text">Profile completed</span>
+            </label>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-body-sm font-semibold text-text">Work experience</h3>
+              <button
+                type="button"
+                onClick={addWorkExperienceRow}
+                className="h-8 px-3 rounded-lg border border-border text-body-sm text-muted hover:text-text hover:bg-surface-2"
+              >
+                Add row
+              </button>
+            </div>
+
+            {anketaForm.workExperience.length === 0 ? (
+              <div className="rounded-lg border border-border bg-bg px-3 py-4 text-body-sm text-muted">
+                No work experience rows.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {anketaForm.workExperience.map((row, index) => (
+                  <div key={index} className="rounded-lg border border-border bg-bg p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <FormField label="Company">
+                        <input
+                          value={row.company}
+                          onChange={(e) => updateWorkExperienceRow(index, "company", e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-body-sm text-text outline-none focus:border-primary"
+                        />
+                      </FormField>
+                      <FormField label="Position">
+                        <input
+                          value={row.position}
+                          onChange={(e) => updateWorkExperienceRow(index, "position", e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-body-sm text-text outline-none focus:border-primary"
+                        />
+                      </FormField>
+                      <FormField label="Period">
+                        <input
+                          value={row.period}
+                          onChange={(e) => updateWorkExperienceRow(index, "period", e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-body-sm text-text outline-none focus:border-primary"
+                        />
+                      </FormField>
+                      <FormField label="Leave reason">
+                        <input
+                          value={row.leaveReason}
+                          onChange={(e) => updateWorkExperienceRow(index, "leaveReason", e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-body-sm text-text outline-none focus:border-primary"
+                        />
+                      </FormField>
+                    </div>
+                    <div className="flex justify-end mt-3">
+                      <button
+                        type="button"
+                        onClick={() => removeWorkExperienceRow(index)}
+                        className="h-8 px-3 rounded-lg text-body-sm text-danger hover:bg-danger/10"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={closeAnketaEditor}
+              disabled={anketaPending}
+              className="h-9 px-4 rounded-lg border border-border text-body-sm text-muted hover:text-text hover:bg-surface-2 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAnketa}
+              disabled={anketaPending}
+              className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-medium disabled:opacity-50"
+            >
+              {anketaPending ? "Saving..." : "Save anketa"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      {selectedCommentStage && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="w-full max-w-md bg-surface border border-border rounded-xl shadow-xl p-5">
+            <h3 className="text-h3 text-text">Move to {selectedCommentStage.name}</h3>
+            <p className="text-body-sm text-muted mt-1">
+              Add context for the candidate history. Rejected moves require a reason.
+            </p>
+            <textarea
+              value={stageComment}
+              onChange={(e) => {
+                setStageComment(e.target.value);
+                if (moveError) setMoveError(null);
+              }}
+              autoFocus
+              rows={4}
+              className={`mt-4 w-full rounded-lg border bg-bg px-3 py-2 text-body-sm text-text outline-none focus:border-primary ${
+                moveError ? "border-danger" : "border-border"
+              }`}
+              placeholder="Write a short note..."
+            />
+            {moveError && <p className="mt-2 text-body-sm text-danger">{moveError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCommentStageId(null);
+                  setStageComment("");
+                  setMoveError(null);
+                }}
+                disabled={movePending}
+                className="h-9 px-4 rounded-lg border border-border text-body-sm text-muted hover:text-text hover:bg-surface-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmCommentedMove}
+                disabled={movePending}
+                className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-medium disabled:opacity-50"
+              >
+                {movePending ? "Moving..." : "Confirm move"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -645,9 +1174,15 @@ function ProfileContent({
 export function CandidateProfileClient({
   applicationId,
   initialConversation = [],
+  initialApplication,
+  initialCandidate,
+  initialTimeline = [],
 }: {
   applicationId: string;
   initialConversation?: ConversationMessage[];
+  initialApplication?: Application;
+  initialCandidate?: Candidate;
+  initialTimeline?: TimelineEvent[];
 }) {
   return (
     <Suspense
@@ -657,7 +1192,153 @@ export function CandidateProfileClient({
         </div>
       }
     >
-      <ProfileContent applicationId={applicationId} initialConversation={initialConversation} />
+      <ProfileContent
+        applicationId={applicationId}
+        initialConversation={initialConversation}
+        initialApplication={initialApplication}
+        initialCandidate={initialCandidate}
+        initialTimeline={initialTimeline}
+      />
     </Suspense>
   );
+}
+
+function FormField({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-micro text-subtle uppercase tracking-wide">{label}</span>
+      <span className="block mt-1">{children}</span>
+    </label>
+  );
+}
+
+function ProfileRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <p className="text-micro text-subtle uppercase tracking-wide">{label}</p>
+      <p className="text-body-sm text-text font-medium mt-0.5">{value || "—"}</p>
+    </div>
+  );
+}
+
+function formatValue(value?: string | null) {
+  return value ? value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : null;
+}
+
+function formatLanguageLevel(value?: string | null) {
+  const labels: Record<string, string> = {
+    none: "None",
+    a1_a2: "A1-A2",
+    b1_b2: "B1-B2",
+    c1_c2: "C1-C2",
+    native: "Native",
+  };
+  return value ? labels[value] ?? value : null;
+}
+
+function formatDateValue(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-GB");
+}
+
+function createEmptyWorkExperienceRow(): WorkExperienceFormRow {
+  return {
+    company: "",
+    position: "",
+    period: "",
+    leaveReason: "",
+  };
+}
+
+function createEmptyAnketaForm(): AnketaFormState {
+  return {
+    fullName: "",
+    phone: "",
+    city: "",
+    dateOfBirth: null,
+    address: null,
+    maritalStatus: null,
+    isStudent: null,
+    educationField: null,
+    englishLevel: null,
+    russianLevel: null,
+    workExperience: [],
+    departmentId: null,
+    profileCompleted: false,
+    languagePref: null,
+  };
+}
+
+function createAnketaForm(candidate: Candidate): AnketaFormState {
+  return {
+    fullName: candidate.fullName,
+    phone: candidate.phone,
+    city: candidate.city,
+    dateOfBirth: formatDateInputValue(candidate.dateOfBirth),
+    address: candidate.address ?? "",
+    maritalStatus: candidate.maritalStatus ?? "",
+    isStudent: candidate.isStudent ?? null,
+    educationField: candidate.educationField ?? "",
+    englishLevel: candidate.englishLevel ?? "",
+    russianLevel: candidate.russianLevel ?? "",
+    workExperience: candidate.workExperience?.length
+      ? candidate.workExperience.map((entry) => ({
+          company: entry.company ?? "",
+          position: entry.position ?? "",
+          period: entry.period ?? "",
+          leaveReason: entry.leaveReason ?? "",
+        }))
+      : [],
+    departmentId: candidate.departmentId ?? "",
+    profileCompleted: Boolean(candidate.profileCompleted),
+    languagePref: candidate.languagePref ?? "",
+  };
+}
+
+function normalizeOptionalString(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeAnketaForm(form: AnketaFormState): CandidateAnketaInput {
+  return {
+    fullName: form.fullName.trim(),
+    phone: form.phone.trim(),
+    city: form.city.trim(),
+    dateOfBirth: normalizeOptionalString(form.dateOfBirth),
+    address: normalizeOptionalString(form.address),
+    maritalStatus: normalizeOptionalString(form.maritalStatus),
+    isStudent: form.isStudent,
+    educationField: normalizeOptionalString(form.educationField),
+    englishLevel: normalizeOptionalString(form.englishLevel),
+    russianLevel: normalizeOptionalString(form.russianLevel),
+    workExperience: form.workExperience
+      .map((entry) => ({
+        company: normalizeOptionalString(entry.company) ?? undefined,
+        position: normalizeOptionalString(entry.position) ?? undefined,
+        period: normalizeOptionalString(entry.period) ?? undefined,
+        leaveReason: normalizeOptionalString(entry.leaveReason) ?? undefined,
+      }))
+      .filter((entry) => entry.company || entry.position || entry.period || entry.leaveReason),
+    departmentId: normalizeOptionalString(form.departmentId),
+    profileCompleted: Boolean(form.profileCompleted),
+    languagePref: normalizeOptionalString(form.languagePref) as CandidateAnketaInput["languagePref"],
+  };
+}
+
+function formatDateInputValue(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+  return date.toISOString().slice(0, 10);
 }

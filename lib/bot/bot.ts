@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleText, handleCallbackQuery, handlePhoto } from "./handlers";
+import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleText, handleCallbackQuery, handlePhoto, handleContact } from "./handlers";
 import { persistenceMiddleware } from "./middleware";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -19,6 +19,7 @@ bot.command("cancel", handleCancel);
 
 bot.on("callback_query:data", handleCallbackQuery);
 bot.on("message:photo", handlePhoto);
+bot.on("message:contact", handleContact);
 bot.on("message:document", handleText); // CV uploads (also saves inbound attachments outside flow)
 bot.on("message:text", handleText);
 

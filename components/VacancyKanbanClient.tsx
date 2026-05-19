@@ -76,6 +76,7 @@ type DbAppRow = {
     candidateId: string;
     vacancyId: string;
     currentStageId: string;
+    status: string;
     appliedAt: Date;
     lastActivityAt: Date;
   };
@@ -139,7 +140,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
       telegram: cand.telegramUsername ? `@${cand.telegramUsername}` : "",
       stage: stage?.name ?? "",
       stageColor: stage?.color ?? "",
-      status: (app as Record<string, unknown>).status as string ?? "",
+      status: app.status ?? "",
       appliedAt: appliedAt ? appliedAt.toLocaleDateString("en-GB") : "",
       lastActivityAt: lastActivityAt ? lastActivityAt.toLocaleDateString("en-GB") : "",
     };

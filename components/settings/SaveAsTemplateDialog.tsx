@@ -9,6 +9,7 @@ type WizardStage = {
   color: string;
   isFinal: boolean;
   isRejected: boolean;
+  isReserve?: boolean;
 };
 
 interface Props {
@@ -44,6 +45,7 @@ export function SaveAsTemplateDialog({ open, stages, onClose }: Props) {
             color: s.color,
             isFinal: s.isFinal,
             isRejected: s.isRejected,
+            isReserve: s.isReserve ?? false,
             orderIndex: i,
           })),
         }),

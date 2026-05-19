@@ -18,7 +18,7 @@ export default function Error({
       <div className="max-w-md text-center">
         <h2 className="text-h2 text-text">Something went wrong</h2>
         <p className="mt-2 text-body-sm text-muted">
-          The page could not be loaded. Try again, or return to the dashboard.
+          The page could not be loaded. Try again, or return to applications.
         </p>
         <div className="mt-5 flex justify-center gap-3">
           <button
@@ -28,10 +28,10 @@ export default function Error({
             Try again
           </button>
           <a
-            href="/"
+            href="/applications"
             className="rounded-lg border border-border px-4 py-2 text-body-sm font-semibold text-muted transition-colors hover:text-text"
           >
-            Dashboard
+            Applications
           </a>
         </div>
       </div>

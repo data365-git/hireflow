@@ -15,6 +15,7 @@ const StageBody = z.object({
   color: z.string().min(1),
   isFinal: z.boolean(),
   isRejected: z.boolean(),
+  isReserve: z.boolean().optional(),
   orderIndex: z.number().int(),
 });
 
@@ -56,6 +57,7 @@ export async function PUT(
           color: stage.color,
           isFinal: stage.isFinal,
           isRejected: stage.isRejected,
+          isReserve: stage.isReserve ?? false,
           orderIndex: stage.orderIndex ?? i,
         });
       }

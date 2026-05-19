@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { db } from "@/lib/db/client";
 import {
+  applicationWatches,
   screeningAnswers,
   timelineEvents,
   internalNotes,
@@ -15,8 +16,12 @@ import {
   sources,
   automationRules,
   testTasks,
+  candidateRelationships,
+  candidateBlacklist,
+  feedback,
+  botSessions,
 } from "@/lib/db/schema";
-import { inArray, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { requirePermission } from "@/lib/auth/permissions";
 import { toResponse } from "@/lib/auth/session";
 import {
@@ -39,146 +44,174 @@ export async function POST(_req: Request) {
   try {
     await requirePermission("settings", "write");
 
-    // ── 1. Collect demo IDs ──────────────────────────────────────────────────
-    const demoVacancyIds = VACANCIES.map((v) => v.id);
-    const demoCandidateIds = CANDIDATES.map((c) => c.id);
+    const summary = await db.transaction(async (tx) => {
+      const existingDemoVacancies = await tx
+        .select({ id: vacancies.id })
+        .from(vacancies)
+        .where(eq(vacancies.isDemo, true));
+      const existingDemoCandidates = await tx
+        .select({ id: candidates.id })
+        .from(candidates)
+        .where(eq(candidates.isDemo, true));
 
-    // ── 2. Delete children first (FK order) ─────────────────────────────────
+      const demoVacancyIds = existingDemoVacancies.map((v) => v.id);
+      const demoCandidateIds = existingDemoCandidates.map((c) => c.id);
 
-    // screeningAnswers → applicationId in demo applications
-    const demoAppIds = APPLICATIONS.map((a) => a.id);
-    if (demoAppIds.length > 0) {
-      await db
-        .delete(screeningAnswers)
-        .where(inArray(screeningAnswers.applicationId, demoAppIds));
+      const demoAppIdSet = new Set<string>();
+      if (demoVacancyIds.length > 0) {
+        const rows = await tx
+          .select({ id: applications.id })
+          .from(applications)
+          .where(inArray(applications.vacancyId, demoVacancyIds));
+        rows.forEach((row) => demoAppIdSet.add(row.id));
+      }
+      if (demoCandidateIds.length > 0) {
+        const rows = await tx
+          .select({ id: applications.id })
+          .from(applications)
+          .where(inArray(applications.candidateId, demoCandidateIds));
+        rows.forEach((row) => demoAppIdSet.add(row.id));
+      }
+      const demoAppIds = Array.from(demoAppIdSet);
 
-      await db
-        .delete(timelineEvents)
-        .where(inArray(timelineEvents.applicationId, demoAppIds));
+      const demoTaskIds =
+        demoVacancyIds.length > 0
+          ? (
+              await tx
+                .select({ id: testTasks.id })
+                .from(testTasks)
+                .where(inArray(testTasks.vacancyId, demoVacancyIds))
+            ).map((row) => row.id)
+          : [];
 
-      await db
-        .delete(internalNotes)
-        .where(inArray(internalNotes.applicationId, demoAppIds));
+      if (demoAppIds.length > 0) {
+        await tx.delete(screeningAnswers).where(inArray(screeningAnswers.applicationId, demoAppIds));
+        await tx.delete(timelineEvents).where(inArray(timelineEvents.applicationId, demoAppIds));
+        await tx.delete(internalNotes).where(inArray(internalNotes.applicationId, demoAppIds));
+        await tx.delete(applicationWatches).where(inArray(applicationWatches.applicationId, demoAppIds));
+        await tx.delete(feedback).where(inArray(feedback.applicationId, demoAppIds));
+        await tx.delete(telegramMessages).where(inArray(telegramMessages.applicationId, demoAppIds));
+        await tx.delete(testTaskAssignments).where(inArray(testTaskAssignments.applicationId, demoAppIds));
+        await tx.delete(botSessions).where(inArray(botSessions.applicationId, demoAppIds));
+      }
 
-      await db
-        .delete(testTaskAssignments)
-        .where(inArray(testTaskAssignments.applicationId, demoAppIds));
-    }
+      if (demoTaskIds.length > 0) {
+        await tx.delete(testTaskAssignments).where(inArray(testTaskAssignments.taskId, demoTaskIds));
+      }
 
-    // telegramMessages → candidateId in demo candidates
-    if (demoCandidateIds.length > 0) {
-      await db
-        .delete(telegramMessages)
-        .where(inArray(telegramMessages.candidateId, demoCandidateIds));
-    }
+      if (demoCandidateIds.length > 0) {
+        await tx
+          .delete(candidateRelationships)
+          .where(
+            or(
+              inArray(candidateRelationships.candidateAId, demoCandidateIds),
+              inArray(candidateRelationships.candidateBId, demoCandidateIds)
+            )
+          );
+        await tx.delete(candidateBlacklist).where(inArray(candidateBlacklist.candidateId, demoCandidateIds));
+        await tx.delete(telegramMessages).where(inArray(telegramMessages.candidateId, demoCandidateIds));
+      }
 
-    // applications → vacancyId or candidateId is demo
-    if (demoVacancyIds.length > 0 || demoCandidateIds.length > 0) {
-      await db.delete(applications).where(
-        or(
-          inArray(applications.vacancyId, demoVacancyIds),
-          inArray(applications.candidateId, demoCandidateIds)
+      if (demoVacancyIds.length > 0) {
+        await tx.delete(feedback).where(inArray(feedback.vacancyId, demoVacancyIds));
+        await tx.delete(botSessions).where(inArray(botSessions.vacancyId, demoVacancyIds));
+        await tx.delete(automationRules).where(inArray(automationRules.vacancyId, demoVacancyIds));
+        await tx.delete(sources).where(inArray(sources.vacancyId, demoVacancyIds));
+        await tx.delete(screeningQuestions).where(inArray(screeningQuestions.vacancyId, demoVacancyIds));
+      }
+
+      if (demoAppIds.length > 0) {
+        await tx.delete(applications).where(inArray(applications.id, demoAppIds));
+      }
+
+      if (demoVacancyIds.length > 0) {
+        await tx.delete(testTasks).where(inArray(testTasks.vacancyId, demoVacancyIds));
+        await tx.delete(vacancyStages).where(inArray(vacancyStages.vacancyId, demoVacancyIds));
+      }
+
+      await tx.delete(vacancies).where(eq(vacancies.isDemo, true));
+      await tx.delete(candidates).where(eq(candidates.isDemo, true));
+
+      // ── Re-seed demo data ──────────────────────────────────────────────────
+
+      await tx
+        .insert(vacancies)
+        .values(
+          VACANCIES.map((v) => ({
+            id: v.id,
+            title: v.title,
+            department: v.department,
+            workType: v.workType,
+            employmentType: v.employmentType,
+            location: v.location,
+            salaryMin: v.salaryMin,
+            salaryMax: v.salaryMax,
+            description: v.description,
+            status: v.status,
+            language: v.language,
+            responsibleHrId: v.responsibleHrId,
+            stageIds: v.stageIds,
+            createdAt: new Date(v.createdAt),
+            introMessage: v.introMessage ?? null,
+            successMessage: v.successMessage ?? null,
+            isDemo: true,
+          }))
         )
+        .onConflictDoNothing();
+
+      const seededVacancyIds = new Set(
+        (
+          await tx
+            .select({ id: vacancies.id })
+            .from(vacancies)
+            .where(and(inArray(vacancies.id, VACANCIES.map((v) => v.id)), eq(vacancies.isDemo, true)))
+        )
+          .map((row) => row.id)
       );
-    }
+      const seededVacancyIdList = Array.from(seededVacancyIds);
 
-    // screeningQuestions, vacancyStages, sources, automationRules, testTasks → vacancyId
-    if (demoVacancyIds.length > 0) {
-      await db
-        .delete(screeningQuestions)
-        .where(inArray(screeningQuestions.vacancyId, demoVacancyIds));
+      const seedStages = STAGES.filter((s) => seededVacancyIds.has(s.vacancyId));
+      if (seedStages.length > 0) {
+        await tx
+          .insert(vacancyStages)
+          .values(
+            seedStages.map((s) => ({
+              id: s.id,
+              vacancyId: s.vacancyId,
+              name: s.name,
+              color: s.color,
+              isFinal: s.isFinal,
+              isRejected: s.isRejected,
+              isReserve: s.isReserve ?? false,
+              orderIndex: s.orderIndex,
+            }))
+          )
+          .onConflictDoNothing();
+      }
 
-      await db
-        .delete(vacancyStages)
-        .where(inArray(vacancyStages.vacancyId, demoVacancyIds));
+      const seedQuestions = QUESTIONS.filter((q) => seededVacancyIds.has(q.vacancyId));
+      if (seedQuestions.length > 0) {
+        await tx
+          .insert(screeningQuestions)
+          .values(
+            seedQuestions.map((q) => ({
+              id: q.id,
+              vacancyId: q.vacancyId,
+              text: q.text,
+              type: q.type,
+              options: q.options ?? null,
+              orderIndex: q.orderIndex,
+            }))
+          )
+          .onConflictDoNothing();
+      }
 
-      await db
-        .delete(sources)
-        .where(inArray(sources.vacancyId, demoVacancyIds));
-
-      await db
-        .delete(automationRules)
-        .where(inArray(automationRules.vacancyId, demoVacancyIds));
-
-      await db
-        .delete(testTasks)
-        .where(inArray(testTasks.vacancyId, demoVacancyIds));
-    }
-
-    // vacancies and candidates
-    if (demoVacancyIds.length > 0) {
-      await db
-        .delete(vacancies)
-        .where(inArray(vacancies.id, demoVacancyIds));
-    }
-
-    if (demoCandidateIds.length > 0) {
-      await db
-        .delete(candidates)
-        .where(inArray(candidates.id, demoCandidateIds));
-    }
-
-    // ── 3. Re-seed demo data ─────────────────────────────────────────────────
-
-    await db
-      .insert(vacancies)
-      .values(
-        VACANCIES.map((v) => ({
-          id: v.id,
-          title: v.title,
-          department: v.department,
-          workType: v.workType,
-          employmentType: v.employmentType,
-          location: v.location,
-          salaryMin: v.salaryMin,
-          salaryMax: v.salaryMax,
-          description: v.description,
-          status: v.status,
-          language: v.language,
-          responsibleHrId: v.responsibleHrId,
-          stageIds: v.stageIds,
-          createdAt: new Date(v.createdAt),
-          introMessage: v.introMessage ?? null,
-          successMessage: v.successMessage ?? null,
-          isDemo: true,
-        }))
-      )
-      .onConflictDoNothing();
-
-    await db
-      .insert(vacancyStages)
-      .values(
-        STAGES.map((s) => ({
-          id: s.id,
-          vacancyId: s.vacancyId,
-          name: s.name,
-          color: s.color,
-          isFinal: s.isFinal,
-          isRejected: s.isRejected,
-          orderIndex: s.orderIndex,
-        }))
-      )
-      .onConflictDoNothing();
-
-    await db
-      .insert(screeningQuestions)
-      .values(
-        QUESTIONS.map((q) => ({
-          id: q.id,
-          vacancyId: q.vacancyId,
-          text: q.text,
-          type: q.type,
-          options: q.options ?? null,
-          orderIndex: q.orderIndex,
-        }))
-      )
-      .onConflictDoNothing();
-
-    if (SOURCES.length > 0) {
-      await db
+      const seedSources = SOURCES.filter((s) => seededVacancyIds.has(s.vacancyId));
+      if (seedSources.length > 0) {
+        await tx
         .insert(sources)
         .values(
-          SOURCES.map((s) => ({
+          seedSources.map((s) => ({
             id: s.id,
             vacancyId: s.vacancyId,
             name: s.name,
@@ -186,105 +219,195 @@ export async function POST(_req: Request) {
           }))
         )
         .onConflictDoNothing();
-    }
+      }
 
-    await db
-      .insert(candidates)
-      .values(
-        CANDIDATES.map((c) => ({
-          id: c.id,
-          fullName: c.fullName,
-          phone: c.phone,
-          telegramUsername: c.telegramUsername,
-          telegramFirstName: c.telegramFirstName,
-          telegramUserId: null,
-          language: c.language,
-          city: c.city,
-          createdAt: new Date(c.createdAt),
-          isDemo: true,
-        }))
-      )
-      .onConflictDoNothing();
+      await tx
+        .insert(candidates)
+        .values(
+          CANDIDATES.map((c) => ({
+            id: c.id,
+            fullName: c.fullName,
+            phone: c.phone,
+            telegramUsername: c.telegramUsername,
+            telegramFirstName: c.telegramFirstName,
+            telegramUserId: null,
+            language: c.language,
+            city: c.city,
+            createdAt: new Date(c.createdAt),
+            isDemo: true,
+          }))
+        )
+        .onConflictDoNothing();
 
-    await db
-      .insert(applications)
-      .values(
-        APPLICATIONS.map((a) => ({
-          id: a.id,
-          candidateId: a.candidateId,
-          vacancyId: a.vacancyId,
-          currentStageId: a.currentStageId,
-          appliedAt: new Date(a.appliedAt),
-          lastActivityAt: new Date(a.lastActivityAt),
-          status: "submitted" as const,
-        }))
-      )
-      .onConflictDoNothing();
+      const seededCandidateIds = new Set(
+        (
+          await tx
+            .select({ id: candidates.id })
+            .from(candidates)
+            .where(and(inArray(candidates.id, CANDIDATES.map((c) => c.id)), eq(candidates.isDemo, true)))
+        )
+          .map((row) => row.id)
+      );
+      const seededCandidateIdList = Array.from(seededCandidateIds);
 
-    await db
-      .insert(screeningAnswers)
-      .values(
-        ANSWERS.map((a) => ({
-          id: a.id,
-          applicationId: a.applicationId,
-          questionId: a.questionId,
-          answerText: a.answerText,
-          answeredAt: new Date(a.answeredAt),
-        }))
-      )
-      .onConflictDoNothing();
+      const seededStageIds = new Set(
+        seedStages.length > 0
+          ? (
+              await tx
+                .select({ id: vacancyStages.id })
+                .from(vacancyStages)
+                .where(
+                  and(
+                    inArray(vacancyStages.id, seedStages.map((s) => s.id)),
+                    inArray(vacancyStages.vacancyId, seededVacancyIdList)
+                  )
+                )
+            ).map((row) => row.id)
+          : []
+      );
+      const seededStageIdList = Array.from(seededStageIds);
 
-    await db
-      .insert(timelineEvents)
-      .values(
-        TIMELINE.map((t) => ({
-          id: t.id,
-          applicationId: t.applicationId,
-          type: t.type,
-          description: t.description,
-          fromStageId: t.fromStageId ?? null,
-          toStageId: t.toStageId ?? null,
-          createdAt: new Date(t.createdAt),
-        }))
-      )
-      .onConflictDoNothing();
+      const seedApplications = APPLICATIONS.filter(
+        (a) =>
+          seededVacancyIds.has(a.vacancyId) &&
+          seededCandidateIds.has(a.candidateId) &&
+          seededStageIds.has(a.currentStageId)
+      );
 
-    await db
-      .insert(telegramMessages)
-      .values(
-        MESSAGES.map((m) => ({
-          id: m.id,
-          candidateId: m.candidateId,
-          applicationId: m.applicationId ?? null,
-          direction: m.direction,
-          senderType: m.senderType,
-          senderName: m.senderName ?? null,
-          text: m.text,
-          sentAt: new Date(m.sentAt),
-          readByUserIds: m.readByUserIds,
-        }))
-      )
-      .onConflictDoNothing();
+      if (seedApplications.length > 0) {
+        await tx
+          .insert(applications)
+          .values(
+            seedApplications.map((a) => ({
+              id: a.id,
+              candidateId: a.candidateId,
+              vacancyId: a.vacancyId,
+              currentStageId: a.currentStageId,
+              appliedAt: new Date(a.appliedAt),
+              lastActivityAt: new Date(a.lastActivityAt),
+              status: a.status,
+            }))
+          )
+          .onConflictDoNothing();
+      }
 
-    await db
-      .insert(internalNotes)
-      .values(
-        NOTES.map((n) => ({
-          id: n.id,
-          applicationId: n.applicationId,
-          userId: n.userId,
-          text: n.text,
-          createdAt: new Date(n.createdAt),
-          isPinned: n.isPinned,
-        }))
-      )
-      .onConflictDoNothing();
+      const seededAppIds = new Set(
+        seedApplications.length > 0
+          ? (
+              await tx
+                .select({ id: applications.id })
+                .from(applications)
+                .where(
+                  and(
+                    inArray(applications.id, seedApplications.map((a) => a.id)),
+                    inArray(applications.vacancyId, seededVacancyIdList),
+                    inArray(applications.candidateId, seededCandidateIdList),
+                    inArray(applications.currentStageId, seededStageIdList)
+                  )
+                )
+            ).map((row) => row.id)
+          : []
+      );
 
-    if (AUTOMATION_RULES.length > 0) {
-      await db
+      const seededQuestionIds = new Set(
+        seedQuestions.length > 0
+          ? (
+              await tx
+                .select({ id: screeningQuestions.id })
+                .from(screeningQuestions)
+                .where(
+                  and(
+                    inArray(screeningQuestions.id, seedQuestions.map((q) => q.id)),
+                    inArray(screeningQuestions.vacancyId, seededVacancyIdList)
+                  )
+                )
+            ).map((row) => row.id)
+          : []
+      );
+
+      const seedAnswers = ANSWERS.filter(
+        (a) => seededAppIds.has(a.applicationId) && seededQuestionIds.has(a.questionId)
+      );
+      if (seedAnswers.length > 0) {
+        await tx
+          .insert(screeningAnswers)
+          .values(
+            seedAnswers.map((a) => ({
+              id: a.id,
+              applicationId: a.applicationId,
+              questionId: a.questionId,
+              answerText: a.answerText,
+              answeredAt: new Date(a.answeredAt),
+            }))
+          )
+          .onConflictDoNothing();
+      }
+
+      const seedTimeline = TIMELINE.filter((t) => seededAppIds.has(t.applicationId));
+      if (seedTimeline.length > 0) {
+        await tx
+          .insert(timelineEvents)
+          .values(
+            seedTimeline.map((t) => ({
+              id: t.id,
+              applicationId: t.applicationId,
+              type: t.type,
+              description: t.description,
+              fromStageId: t.fromStageId ?? null,
+              toStageId: t.toStageId ?? null,
+              createdAt: new Date(t.createdAt),
+            }))
+          )
+          .onConflictDoNothing();
+      }
+
+      const seedMessages = MESSAGES.filter(
+        (m) =>
+          seededCandidateIds.has(m.candidateId) &&
+          (m.applicationId == null || seededAppIds.has(m.applicationId))
+      );
+      if (seedMessages.length > 0) {
+        await tx
+          .insert(telegramMessages)
+          .values(
+            seedMessages.map((m) => ({
+              id: m.id,
+              candidateId: m.candidateId,
+              applicationId: m.applicationId ?? null,
+              direction: m.direction,
+              senderType: m.senderType,
+              senderName: m.senderName ?? null,
+              text: m.text,
+              sentAt: new Date(m.sentAt),
+              readByUserIds: m.readByUserIds,
+            }))
+          )
+          .onConflictDoNothing();
+      }
+
+      const seedNotes = NOTES.filter((n) => seededAppIds.has(n.applicationId));
+      if (seedNotes.length > 0) {
+        await tx
+          .insert(internalNotes)
+          .values(
+            seedNotes.map((n) => ({
+              id: n.id,
+              applicationId: n.applicationId,
+              userId: n.userId,
+              text: n.text,
+              createdAt: new Date(n.createdAt),
+              isPinned: n.isPinned,
+            }))
+          )
+          .onConflictDoNothing();
+      }
+
+      const seedAutomationRules = AUTOMATION_RULES.filter((r) => seededVacancyIds.has(r.vacancyId));
+      if (seedAutomationRules.length > 0) {
+        await tx
         .insert(automationRules)
         .values(
-          AUTOMATION_RULES.map((r) => ({
+          seedAutomationRules.map((r) => ({
             id: r.id,
             vacancyId: r.vacancyId,
             name: r.name,
@@ -298,13 +421,14 @@ export async function POST(_req: Request) {
           }))
         )
         .onConflictDoNothing();
-    }
+      }
 
-    if (TEST_TASKS.length > 0) {
-      await db
+      const seedTestTasks = TEST_TASKS.filter((t) => seededVacancyIds.has(t.vacancyId));
+      if (seedTestTasks.length > 0) {
+        await tx
         .insert(testTasks)
         .values(
-          TEST_TASKS.map((t) => ({
+          seedTestTasks.map((t) => ({
             id: t.id,
             vacancyId: t.vacancyId,
             title: t.title,
@@ -313,13 +437,32 @@ export async function POST(_req: Request) {
           }))
         )
         .onConflictDoNothing();
-    }
+      }
 
-    if (TEST_TASK_ASSIGNMENTS.length > 0) {
-      await db
+      const seededTaskIds = new Set(
+        seedTestTasks.length > 0
+          ? (
+              await tx
+                .select({ id: testTasks.id })
+                .from(testTasks)
+                .where(
+                  and(
+                    inArray(testTasks.id, seedTestTasks.map((t) => t.id)),
+                    inArray(testTasks.vacancyId, seededVacancyIdList)
+                  )
+                )
+            ).map((row) => row.id)
+          : []
+      );
+
+      const seedTaskAssignments = TEST_TASK_ASSIGNMENTS.filter(
+        (a) => seededTaskIds.has(a.taskId) && seededAppIds.has(a.applicationId)
+      );
+      if (seedTaskAssignments.length > 0) {
+        await tx
         .insert(testTaskAssignments)
         .values(
-          TEST_TASK_ASSIGNMENTS.map((a) => ({
+          seedTaskAssignments.map((a) => ({
             id: a.id,
             taskId: a.taskId,
             applicationId: a.applicationId,
@@ -330,9 +473,23 @@ export async function POST(_req: Request) {
           }))
         )
         .onConflictDoNothing();
-    }
+      }
 
-    return Response.json({ ok: true });
+      return {
+        deleted: {
+          vacancies: demoVacancyIds.length,
+          candidates: demoCandidateIds.length,
+          applications: demoAppIds.length,
+        },
+        seeded: {
+          vacancies: seededVacancyIds.size,
+          candidates: seededCandidateIds.size,
+          applications: seededAppIds.size,
+        },
+      };
+    });
+
+    return Response.json({ ok: true, ...summary });
   } catch (err) {
     return toResponse(err);
   }

@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useStore } from "@/lib/store";
 import type { CreateVacancyInput, ScreeningQuestion } from "@/lib/types";
 import { SaveAsTemplateDialog } from "@/components/settings/SaveAsTemplateDialog";
+import { createVacancy } from "@/app/actions/vacancies";
+import { getAssignableHrUsers, type AssignableHrUser } from "@/app/actions/users";
 
 type TemplateStage = {
   id: string;
@@ -13,6 +15,7 @@ type TemplateStage = {
   color: string;
   isFinal: boolean;
   isRejected: boolean;
+  isReserve?: boolean;
   orderIndex: number;
 };
 
@@ -65,6 +68,7 @@ type StageDraft = {
   color: string;
   isFinal: boolean;
   isRejected: boolean;
+  isReserve?: boolean;
 };
 
 type SourceDraft = {
@@ -74,11 +78,14 @@ type SourceDraft = {
 
 export default function NewVacancyPage() {
   const router = useRouter();
-  const users = useStore((s) => s.users);
   const questionTemplates = useStore((s) => s.questionTemplates);
-  const createVacancy = useStore((s) => s.createVacancy);
 
   const [step, setStep] = useState(1);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [responsibleHrs, setResponsibleHrs] = useState<AssignableHrUser[]>([]);
+  const [isLoadingHrs, setIsLoadingHrs] = useState(true);
+  const [hrLoadError, setHrLoadError] = useState<string | null>(null);
 
   const [form, setForm] = useState<CreateVacancyInput>({
     title: "",
@@ -90,7 +97,7 @@ export default function NewVacancyPage() {
     salaryMax: 0,
     description: "",
     language: "uz",
-    responsibleHrId: users[0]?.id ?? "",
+    responsibleHrId: "",
     introMessage: "",
     successMessage: "",
     stages: [
@@ -132,6 +139,38 @@ export default function NewVacancyPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadResponsibleHrs() {
+      try {
+        setIsLoadingHrs(true);
+        setHrLoadError(null);
+        const hrs = await getAssignableHrUsers();
+        if (cancelled) return;
+        setResponsibleHrs(hrs);
+        setForm((current) =>
+          current.responsibleHrId || hrs.length === 0
+            ? current
+            : { ...current, responsibleHrId: hrs[0].id }
+        );
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load assignable HR users", err);
+          setHrLoadError("Could not load responsible HR users.");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingHrs(false);
+      }
+    }
+
+    loadResponsibleHrs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function applyTemplate() {
     const tpl = templates.find((t) => t.id === selectedTemplateId);
     if (!tpl) return;
@@ -141,6 +180,7 @@ export default function NewVacancyPage() {
       color: s.color,
       isFinal: s.isFinal,
       isRejected: s.isRejected,
+      isReserve: s.isReserve ?? false,
     }));
     setStages(mapped);
     setSelectedTemplateId("");
@@ -249,7 +289,18 @@ export default function NewVacancyPage() {
     if (step > 1) setStep(step - 1);
   }
 
-  function handleCreate() {
+  function stepForCreateField(field?: string) {
+    if (!field) return step;
+    if (["title", "department", "location", "salaryMin", "salaryMax", "responsibleHrId"].includes(field)) return 1;
+    if (["stages"].includes(field)) return 4;
+    if (["sources"].includes(field)) return 5;
+    return step;
+  }
+
+  async function handleCreate() {
+    if (isCreating) return;
+    setCreateError(null);
+
     const finalQuestions = questions.map((q) => ({
       text: q.text,
       type: q.type,
@@ -263,6 +314,7 @@ export default function NewVacancyPage() {
       color: s.color,
       isFinal: s.isFinal,
       isRejected: s.isRejected,
+      isReserve: s.isReserve ?? false,
     }));
 
     const finalSources = sources.map((s) => ({ name: s.name }));
@@ -274,8 +326,21 @@ export default function NewVacancyPage() {
       sources: finalSources,
     };
 
-    const newId = createVacancy(input);
-    router.push(`/vacancies/${newId}`);
+    try {
+      setIsCreating(true);
+      const result = await createVacancy(input);
+      if (!result.ok) {
+        setCreateError(result.error.message);
+        setStep(stepForCreateField(result.error.field));
+        return;
+      }
+      router.push(`/vacancies/${result.vacancyId}`);
+    } catch (err) {
+      console.error("Vacancy create failed", err);
+      setCreateError(err instanceof Error ? err.message : "Could not create vacancy. Please try again.");
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   // ── Render steps ─────────────────────────────────────────────────────────
@@ -374,13 +439,19 @@ export default function NewVacancyPage() {
               className={INPUT_CLS}
               value={form.responsibleHrId}
               onChange={(e) => patchForm({ responsibleHrId: e.target.value })}
+              disabled={isLoadingHrs || responsibleHrs.length === 0}
             >
-              {users.map((u) => (
+              {isLoadingHrs && <option value="">Loading HR users...</option>}
+              {!isLoadingHrs && responsibleHrs.length === 0 && (
+                <option value="">No active HR users found</option>
+              )}
+              {responsibleHrs.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
                 </option>
               ))}
             </select>
+            {hrLoadError && <p className="mt-1 text-caption text-danger">{hrLoadError}</p>}
           </div>
         </div>
       </div>
@@ -743,7 +814,7 @@ export default function NewVacancyPage() {
   }
 
   function renderStep6() {
-    const hr = users.find((u) => u.id === form.responsibleHrId);
+    const hr = responsibleHrs.find((u) => u.id === form.responsibleHrId);
     const workTypeLabels = { office: "Office", remote: "Remote", hybrid: "Hybrid" };
     const empTypeLabels = {
       "full-time": "Full-time",
@@ -946,9 +1017,14 @@ export default function NewVacancyPage() {
 
         {/* Sticky bottom nav bar */}
         <div className="shrink-0 border-t border-border bg-bg px-6 py-4 flex items-center justify-between">
+          {createError && (
+            <p className="text-body-sm text-danger mr-4 truncate" role="alert">
+              {createError}
+            </p>
+          )}
           <button
             onClick={handleBack}
-            disabled={step === 1}
+            disabled={step === 1 || isCreating}
             className="h-9 px-5 border border-border rounded-lg text-body-sm text-text hover:bg-surface-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             Back
@@ -964,9 +1040,10 @@ export default function NewVacancyPage() {
           ) : (
             <button
               onClick={handleCreate}
-              className="h-9 px-5 bg-primary text-primary-fg text-body-sm rounded-lg hover:opacity-90 transition-opacity"
+              disabled={isCreating}
+              className="h-9 px-5 bg-primary text-primary-fg text-body-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Vacancy
+              {isCreating ? "Creating..." : "Create Vacancy"}
             </button>
           )}
         </div>

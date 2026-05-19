@@ -21,7 +21,7 @@ interface RoleWithPerms extends Role {
 }
 
 export function RolesList() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [roles, setRoles] = useState<RoleWithPerms[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -115,16 +115,32 @@ export function RolesList() {
       )}
 
       <div className="space-y-2">
-        {roles.map((role) => (
-          <RoleRow
-            key={role.name}
-            role={role}
-            permissions={role.permissions}
-            onEdit={() => handleEditClick(role)}
-            onDelete={() => handleDeleteClick(role)}
-            onEditMeta={() => setEditingMeta(role)}
-          />
-        ))}
+        {roles.map((role) => {
+          const canEditSystemPermissions = user?.isSuperadmin && role.isSystem && !role.isSuperadmin;
+
+          return (
+            <div key={role.name} className="space-y-2">
+              <RoleRow
+                role={role}
+                permissions={role.permissions}
+                onEdit={() => handleEditClick(role)}
+                onDelete={() => handleDeleteClick(role)}
+                onEditMeta={() => setEditingMeta(role)}
+              />
+              {canEditSystemPermissions && (
+                <div className="flex justify-end px-3">
+                  <button
+                    type="button"
+                    onClick={() => handleEditClick(role)}
+                    className="text-body-xs font-medium text-primary hover:text-primary-hover transition-colors"
+                  >
+                    Edit system role permissions
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Edit modal */}

@@ -2,6 +2,7 @@ import {
   pgTable,
   text,
   timestamp,
+  date,
   boolean,
   integer,
   jsonb,
@@ -60,6 +61,7 @@ export const vacancyStages = pgTable("vacancy_stages", {
   color: text("color").notNull(),
   isFinal: boolean("is_final").notNull().default(false),
   isRejected: boolean("is_rejected").notNull().default(false),
+  isReserve: boolean("is_reserve").notNull().default(false),
   orderIndex: integer("order_index").notNull(),
 });
 
@@ -74,7 +76,24 @@ export const screeningQuestions = pgTable("screening_questions", {
   orderIndex: integer("order_index").notNull(),
 });
 
+// ─── Departments ─────────────────────────────────────────────────────────────
+
+export const departments = pgTable("departments", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Candidates ───────────────────────────────────────────────────────────────
+
+export type WorkExperienceEntry = {
+  company?: string;
+  position?: string;
+  period?: string;
+  leaveReason?: string;
+};
 
 export const candidates = pgTable("candidates", {
   id: text("id").primaryKey(),
@@ -87,6 +106,18 @@ export const candidates = pgTable("candidates", {
   city: text("city").notNull(),
   createdAt: timestamp("created_at").notNull(),
   isDemo: boolean("is_demo").notNull().default(false),
+  dateOfBirth: date("date_of_birth", { mode: "date" }),
+  address: text("address"),
+  maritalStatus: text("marital_status"), // "single" | "married" | "divorced" | "other"
+  isStudent: boolean("is_student"),
+  educationField: text("education_field"),
+  englishLevel: text("english_level"), // "none" | "a1_a2" | "b1_b2" | "c1_c2" | "native"
+  russianLevel: text("russian_level"),
+  workExperience: jsonb("work_experience").$type<WorkExperienceEntry[]>(),
+  departmentId: text("department_id").references(() => departments.id, { onDelete: "set null" }),
+  profileCompleted: boolean("profile_completed").notNull().default(false),
+  isBlacklisted: boolean("is_blacklisted").notNull().default(false),
+  languagePref: text("language_pref"), // "ru" | "uz" | "en"
 });
 
 // ─── Applications ─────────────────────────────────────────────────────────────
@@ -120,6 +151,7 @@ export const timelineEvents = pgTable("timeline_events", {
   description: text("description").notNull(),
   fromStageId: text("from_stage_id"),
   toStageId: text("to_stage_id"),
+  comment: text("comment"),
   createdAt: timestamp("created_at").notNull(),
 });
 
@@ -163,6 +195,26 @@ export const automationRules = pgTable("automation_rules", {
   actionType: text("action_type").notNull(), // "send_message" | "move_to_stage"
   actionStageId: text("action_stage_id"),
   actionMessageText: text("action_message_text"),
+  createdAt: timestamp("created_at").notNull(),
+});
+
+// ─── Automation Runs ──────────────────────────────────────────────────────────
+
+export const automationRuns = pgTable("automation_runs", {
+  id: text("id").primaryKey(),
+  ruleId: text("rule_id").references(() => automationRules.id, { onDelete: "set null" }),
+  vacancyId: text("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  applicationId: text("application_id").references(() => applications.id, { onDelete: "cascade" }),
+  candidateId: text("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
+  ruleName: text("rule_name").notNull(),
+  vacancyTitle: text("vacancy_title").notNull(),
+  candidateName: text("candidate_name"),
+  triggerType: text("trigger_type").notNull(),
+  triggerStageId: text("trigger_stage_id"),
+  actionType: text("action_type").notNull(),
+  status: text("status").notNull(), // "success" | "skipped" | "failed"
+  messageText: text("message_text"),
+  error: text("error"),
   createdAt: timestamp("created_at").notNull(),
 });
 
@@ -323,5 +375,53 @@ export const stageTemplateStages = pgTable("stage_template_stages", {
   color: text("color").notNull(),
   isFinal: boolean("is_final").notNull().default(false),
   isRejected: boolean("is_rejected").notNull().default(false),
+  isReserve: boolean("is_reserve").notNull().default(false),
   orderIndex: integer("order_index").notNull(),
 });
+
+// ─── HR Flow V2 ───────────────────────────────────────────────────────────────
+
+export const applicationWatches = pgTable("application_watches", {
+  id: text("id").primaryKey(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  watcherId: text("watcher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqApplicationWatcher: uniqueIndex("application_watches_application_watcher_uniq").on(t.applicationId, t.watcherId),
+  applicationIdx: index("application_watches_application_idx").on(t.applicationId),
+  watcherIdx: index("application_watches_watcher_idx").on(t.watcherId),
+}));
+
+export const candidateRelationships = pgTable("candidate_relationships", {
+  id: text("id").primaryKey(),
+  candidateAId: text("candidate_a_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  candidateBId: text("candidate_b_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "referral" | "family" | "alumni" | "other"
+  note: text("note"),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  candidateAIdx: index("candidate_relationships_candidate_a_idx").on(t.candidateAId),
+  candidateBIdx: index("candidate_relationships_candidate_b_idx").on(t.candidateBId),
+}));
+
+export const candidateBlacklist = pgTable("candidate_blacklist", {
+  candidateId: text("candidate_id").primaryKey().references(() => candidates.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  addedBy: text("added_by").references(() => users.id, { onDelete: "set null" }),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const feedback = pgTable("feedback", {
+  id: text("id").primaryKey(),
+  source: text("source").notNull(), // "candidate" | "hr"
+  applicationId: text("application_id").references(() => applications.id, { onDelete: "cascade" }),
+  vacancyId: text("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  rating: integer("rating"),
+  comment: text("comment"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  applicationIdx: index("feedback_application_idx").on(t.applicationId),
+  vacancyIdx: index("feedback_vacancy_idx").on(t.vacancyId),
+}));

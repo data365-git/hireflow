@@ -16,6 +16,23 @@ const CARD_ACCENT_COLOR: Record<string, string> = {
   rejected:   "var(--color-stage-rejected)",
 };
 
+const DIMMED_APPLICATION_STATUSES = new Set<Application["status"]>(["browsing", "in_progress"]);
+
+const APPLICATION_STATUS_PILLS: Partial<Record<Application["status"], { label: string; className: string }>> = {
+  browsing: {
+    label: "Browsing",
+    className: "bg-surface-2 text-muted border-border",
+  },
+  in_progress: {
+    label: "In progress",
+    className: "bg-warning-soft text-warning border-warning/30",
+  },
+  abandoned: {
+    label: "Abandoned",
+    className: "bg-surface-3 text-muted border-border",
+  },
+};
+
 type Props = {
   application: Application;
   candidate: Candidate;
@@ -50,13 +67,17 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
 
   const lastMsg = messages.length > 0 ? messages[messages.length - 1] : undefined;
   const unread = messages.filter(m => m.direction === "inbound" && !m.readByUserIds.includes(currentUserId)).length;
+  const statusPill = APPLICATION_STATUS_PILLS[application.status];
+  const isDimmedStatus = DIMMED_APPLICATION_STATUSES.has(application.status);
 
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      className="relative bg-surface border border-border border-l-2 rounded-lg p-3 cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group select-none"
+      className={`relative bg-surface border border-border border-l-2 rounded-lg p-3 cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group select-none ${
+        isDimmedStatus ? "opacity-[0.68]" : ""
+      }`}
       style={{ borderLeftColor: accentColor }}
     >
       {onToggleSelect !== undefined && (
@@ -94,15 +115,12 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <span className="text-micro text-subtle">{candidate.phone}</span>
         <div className="flex items-center gap-1.5 shrink-0">
-          {application.status === "in_progress" && (
-            <span className="text-micro bg-warning-soft text-warning px-1.5 h-5 rounded-full inline-flex items-center gap-1">
-              <span className="size-1.5 rounded-full bg-warning inline-block" />
-              In progress
-            </span>
-          )}
-          {application.status === "abandoned" && (
-            <span className="text-micro bg-surface-3 text-muted px-1.5 h-5 rounded-full inline-flex items-center">
-              Abandoned
+          {statusPill && (
+            <span className={`text-micro border px-1.5 h-5 rounded-full inline-flex items-center gap-1 ${statusPill.className}`}>
+              {application.status === "in_progress" && (
+                <span className="size-1.5 rounded-full bg-warning inline-block" />
+              )}
+              {statusPill.label}
             </span>
           )}
           {unread > 0 && (

@@ -1,8 +1,10 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { candidates, applications, screeningAnswers, timelineEvents, botSessions, vacancyStages, vacancies, telegramMessages } from "@/lib/db/schema";
+import { candidates, applications, screeningAnswers, timelineEvents, botSessions, vacancyStages, vacancies } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { fireApplicationSubmittedAutomations } from "@/lib/automations/runner";
+import { saveBotMessageRecord } from "@/lib/bot/messageLog";
 
 export async function createApplicationFromBot(args: {
   telegramUserId: string;
@@ -178,19 +180,74 @@ export async function saveBotMessage(args: {
   attachmentType?: "photo" | "document";
   attachmentFilename?: string;
 }): Promise<void> {
-  await db.insert(telegramMessages).values({
-    id: crypto.randomUUID(),
+  await saveBotMessageRecord(args);
+}
+
+export async function getLatestApplicationIdForTelegramUser(telegramUserId: string): Promise<string | null> {
+  const rows = await db
+    .select({ app: applications })
+    .from(candidates)
+    .innerJoin(applications, eq(applications.candidateId, candidates.id))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false)))
+    .where(eq(candidates.telegramUserId, telegramUserId))
+    .orderBy(asc(applications.appliedAt));
+
+  return rows.at(-1)?.app.id ?? null;
+}
+
+async function getFirstVacancyStageId(vacancyId: string): Promise<string> {
+  const stages = await db
+    .select()
+    .from(vacancyStages)
+    .where(eq(vacancyStages.vacancyId, vacancyId))
+    .orderBy(asc(vacancyStages.orderIndex));
+  const firstStage = stages[0];
+  if (!firstStage) throw new Error(`No stages found for vacancy ${vacancyId}`);
+  return firstStage.id;
+}
+
+export async function getOrCreateBrowsingApplication(args: {
+  candidateId: string;
+  vacancyId: string;
+}): Promise<string> {
+  const existing = await db
+    .select()
+    .from(applications)
+    .where(
+      and(
+        eq(applications.candidateId, args.candidateId),
+        eq(applications.vacancyId, args.vacancyId)
+      )
+    );
+  if (existing[0]) {
+    await db
+      .update(applications)
+      .set({ lastActivityAt: new Date() })
+      .where(eq(applications.id, existing[0].id));
+    return existing[0].id;
+  }
+
+  const appId = crypto.randomUUID();
+  await db.insert(applications).values({
+    id: appId,
     candidateId: args.candidateId,
-    applicationId: args.applicationId ?? null,
-    direction: args.direction,
-    senderType: args.direction === "inbound" ? "candidate" : "system",
-    text: args.text,
-    sentAt: new Date(),
-    readByUserIds: [],
-    attachmentFileId: args.attachmentFileId ?? null,
-    attachmentType: args.attachmentType ?? null,
-    attachmentFilename: args.attachmentFilename ?? null,
+    vacancyId: args.vacancyId,
+    currentStageId: await getFirstVacancyStageId(args.vacancyId),
+    appliedAt: new Date(),
+    lastActivityAt: new Date(),
+    status: "browsing",
   });
+
+  await db.insert(timelineEvents).values({
+    id: crypto.randomUUID(),
+    applicationId: appId,
+    type: "application_started",
+    description: "Viewed vacancy via Telegram bot",
+    createdAt: new Date(),
+  });
+
+  revalidatePath(`/vacancies/${args.vacancyId}`);
+  return appId;
 }
 
 export async function getOrCreateInProgressApplication(args: {
@@ -206,30 +263,72 @@ export async function getOrCreateInProgressApplication(args: {
         eq(applications.vacancyId, args.vacancyId)
       )
     );
-  if (existing[0]) return existing[0].id;
+  if (existing[0]) {
+    if (existing[0].status === "submitted") return existing[0].id;
 
-  // Get Pre-screening stage (orderIndex 0)
-  const stages = await db
-    .select()
-    .from(vacancyStages)
-    .where(eq(vacancyStages.vacancyId, args.vacancyId))
-    .orderBy(asc(vacancyStages.orderIndex));
-  const preScreeningStage = stages[0];
-  if (!preScreeningStage) throw new Error(`No stages found for vacancy ${args.vacancyId}`);
+    if (existing[0].status !== "in_progress") {
+      await db
+        .update(applications)
+        .set({ status: "in_progress", lastActivityAt: new Date() })
+        .where(eq(applications.id, existing[0].id));
+
+      await db.insert(timelineEvents).values({
+        id: crypto.randomUUID(),
+        applicationId: existing[0].id,
+        type: "application_started",
+        description: "Application started via Telegram bot",
+        createdAt: new Date(),
+      });
+    }
+    revalidatePath(`/vacancies/${args.vacancyId}`);
+    return existing[0].id;
+  }
 
   const appId = crypto.randomUUID();
   await db.insert(applications).values({
     id: appId,
     candidateId: args.candidateId,
     vacancyId: args.vacancyId,
-    currentStageId: preScreeningStage.id,
+    currentStageId: await getFirstVacancyStageId(args.vacancyId),
     appliedAt: new Date(),
     lastActivityAt: new Date(),
     status: "in_progress",
   });
 
+  await db.insert(timelineEvents).values({
+    id: crypto.randomUUID(),
+    applicationId: appId,
+    type: "application_started",
+    description: "Application started via Telegram bot",
+    createdAt: new Date(),
+  });
+
   revalidatePath(`/vacancies/${args.vacancyId}`);
   return appId;
+}
+
+export async function ensureApplicationInProgress(applicationId: string): Promise<void> {
+  const appRows = await db
+    .select()
+    .from(applications)
+    .where(eq(applications.id, applicationId));
+  const app = appRows[0];
+  if (!app || app.status === "in_progress" || app.status === "submitted") return;
+
+  await db
+    .update(applications)
+    .set({ status: "in_progress", lastActivityAt: new Date() })
+    .where(eq(applications.id, applicationId));
+
+  await db.insert(timelineEvents).values({
+    id: crypto.randomUUID(),
+    applicationId,
+    type: "application_started",
+    description: "Application started via Telegram bot",
+    createdAt: new Date(),
+  });
+
+  revalidatePath(`/vacancies/${app.vacancyId}`);
 }
 
 export async function saveScreeningAnswerLive(args: {
@@ -291,6 +390,10 @@ export async function submitApplication(applicationId: string): Promise<void> {
 
   await notifyCandidateOfStageChange(applicationId).catch((err) => {
     console.error("Submit notification failed:", err);
+  });
+
+  await fireApplicationSubmittedAutomations(applicationId).catch((err) => {
+    console.error("Application submission automation failed:", err);
   });
 }
 

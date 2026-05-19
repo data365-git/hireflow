@@ -19,6 +19,38 @@ export type InboxConversation = {
   unreadCount: number;
 };
 
+export type InboxMessage = {
+  id: string;
+  candidateId: string;
+  applicationId: string | null;
+  direction: string;
+  senderType: string;
+  senderName: string | null;
+  text: string;
+  sentAt: string;
+  readByUserIds: string[];
+  attachmentFileId: string | null;
+  attachmentType: string | null;
+  attachmentFilename: string | null;
+};
+
+function toInboxMessage(row: typeof telegramMessages.$inferSelect): InboxMessage {
+  return {
+    id: row.id,
+    candidateId: row.candidateId,
+    applicationId: row.applicationId,
+    direction: row.direction,
+    senderType: row.senderType,
+    senderName: row.senderName,
+    text: row.text,
+    sentAt: row.sentAt.toISOString(),
+    readByUserIds: row.readByUserIds ?? [],
+    attachmentFileId: row.attachmentFileId,
+    attachmentType: row.attachmentType,
+    attachmentFilename: row.attachmentFilename,
+  };
+}
+
 export async function getInboxConversations(): Promise<InboxConversation[]> {
   const isDemo = await getCurrentDataMode();
 
@@ -84,8 +116,11 @@ export async function getInboxConversations(): Promise<InboxConversation[]> {
   return result;
 }
 
-export async function sendMessageToCandidate(applicationId: string, text: string) {
-  if (!text.trim()) return;
+export async function sendMessageToCandidate(applicationId: string, text: string): Promise<InboxMessage> {
+  const messageText = text.trim();
+  if (!messageText) {
+    throw new Error("Message cannot be empty");
+  }
 
   const isDemo = await getCurrentDataMode();
 
@@ -109,7 +144,7 @@ export async function sendMessageToCandidate(applicationId: string, text: string
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: row.cand.telegramUserId,
-      text,
+      text: messageText,
       parse_mode: "Markdown",
     }),
   });
@@ -121,36 +156,39 @@ export async function sendMessageToCandidate(applicationId: string, text: string
   }
 
   // 3. Save to DB
-  await db.insert(telegramMessages).values({
+  const [inserted] = await db.insert(telegramMessages).values({
     id: crypto.randomUUID(),
     candidateId: row.cand.id,
     applicationId,
     direction: "outbound",
     senderType: "hr",
-    text,
+    text: messageText,
     sentAt: new Date(),
     readByUserIds: [],
-  });
+  }).returning();
 
+  revalidatePath("/inbox");
   revalidatePath(`/candidates/${applicationId}`);
-  return result;
+  return toInboxMessage(inserted);
 }
 
-export async function getMessagesForApplication(applicationId: string) {
-  return db
+export async function getMessagesForApplication(applicationId: string): Promise<InboxMessage[]> {
+  const rows = await db
     .select()
     .from(telegramMessages)
     .where(eq(telegramMessages.applicationId, applicationId))
     .orderBy(telegramMessages.sentAt);
+  return rows.map(toInboxMessage);
 }
 
 // Used when a conversation has no applicationId (pre-application bot messages)
-export async function getMessagesByCandidateId(candidateId: string) {
-  return db
+export async function getMessagesByCandidateId(candidateId: string): Promise<InboxMessage[]> {
+  const rows = await db
     .select()
     .from(telegramMessages)
     .where(eq(telegramMessages.candidateId, candidateId))
     .orderBy(telegramMessages.sentAt);
+  return rows.map(toInboxMessage);
 }
 
 export async function getInboxUnreadCount(): Promise<number> {

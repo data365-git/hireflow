@@ -59,6 +59,7 @@ type Props = {
   stages: DbVacancyStage[];
   applications: DbApplication[];
   users: DbUser[];
+  statusFilter?: "active" | "closed";
 };
 
 const WORK_TYPE_LABELS: Record<string, string> = { office: "Office", remote: "Remote", hybrid: "Hybrid" };
@@ -68,7 +69,7 @@ const STATUS_STYLES: Record<string, string> = {
   closed: "bg-surface-3 text-muted",
 };
 
-export function VacanciesView({ vacancies: initialVacancies, stages: initialStages, applications: initialApplications, users: initialUsers }: Props) {
+export function VacanciesView({ vacancies: initialVacancies, stages: initialStages, applications: initialApplications, users: initialUsers, statusFilter }: Props) {
   const [view, setView] = useState<"cards" | "table">("cards");
   const router = useRouter();
   const { mode } = useDataMode();
@@ -119,12 +120,20 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
       })) as Application[];
   }
 
+  const visibleVacancies = statusFilter
+    ? vacancies.filter((vacancy) => vacancy.status === statusFilter)
+    : vacancies;
+
+  const title = statusFilter
+    ? `${statusFilter.charAt(0).toUpperCase()}${statusFilter.slice(1)} Vacancies`
+    : "Vacancies";
+
   return (
     <div className="px-8 py-8 max-w-[900px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-h1 text-text">Vacancies</h1>
+          <h1 className="text-h1 text-text">{title}</h1>
           <p className="text-body-sm text-muted mt-1">
             {vacancies.filter((v) => v.status === "active").length} active positions
           </p>
@@ -153,11 +162,11 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
         </div>
       </div>
 
-      {vacancies.length === 0 ? (
+      {visibleVacancies.length === 0 ? (
         <div className="bg-surface border border-border rounded-xl">
           <EmptyState
-            title="No vacancies yet"
-            description="Create the first vacancy to start collecting candidates."
+            title={statusFilter ? `No ${statusFilter} vacancies` : "No vacancies yet"}
+            description={statusFilter ? "Try another vacancy status or create a new vacancy." : "Create the first vacancy to start collecting candidates."}
             action={
               <Link
                 href="/vacancies/new"
@@ -173,7 +182,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
           {/* Cards view */}
           {view === "cards" && (
             <div className="space-y-3">
-              {vacancies.map((vacancy) => {
+              {visibleVacancies.map((vacancy) => {
                 const hr = users.find((u) => u.id === vacancy.responsibleHrId);
                 const total = getTotalCandidates(vacancy.id);
                 const newCount = getNewCandidates(vacancy.id);
@@ -270,7 +279,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                   </tr>
                 </thead>
                 <tbody>
-                  {vacancies.map((vacancy) => {
+                  {visibleVacancies.map((vacancy) => {
                     const hr = users.find((u) => u.id === vacancy.responsibleHrId);
                     const total = getTotalCandidates(vacancy.id);
                     const newCount = getNewCandidates(vacancy.id);

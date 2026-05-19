@@ -119,6 +119,34 @@ export default function AnalyticsPage() {
   const conversionRate = totalApps > 0 ? ((hiredCount / totalApps) * 100).toFixed(1) : "0.0";
   const avgTime        = avgDaysInPipeline(hiredApps);
 
+  const dropOffFunnelRows = useMemo(() => {
+    const scopedVacancies =
+      selectedVacancyId === "all"
+        ? vacancies
+        : vacancies.filter((vacancy) => vacancy.id === selectedVacancyId);
+
+    return scopedVacancies.map((vacancy) => {
+      const vacancyApps = applications.filter((app) => app.vacancyId === vacancy.id);
+      const vacancyStages = stages.filter((stage) => stage.vacancyId === vacancy.id);
+      const vacancyHiredStages = vacancyStages.filter((stage) => stage.isFinal && !stage.isRejected);
+      const viewed = vacancyApps.length;
+      const started = vacancyApps.filter((app) => app.status !== "browsing").length;
+      const submitted = vacancyApps.filter((app) => app.status === "submitted").length;
+      const hired = vacancyApps.filter((app) =>
+        vacancyHiredStages.some((stage) => stage.id === app.currentStageId)
+      ).length;
+
+      return {
+        id: vacancy.id,
+        title: vacancy.title,
+        viewed,
+        started,
+        submitted,
+        hired,
+      };
+    }).filter((row) => row.viewed > 0);
+  }, [applications, selectedVacancyId, stages, vacancies]);
+
   // ── Section 2: Source Breakdown ──────────────────────────────────────────────
   const sources = useMemo(
     () => (selectedVacancyId !== "all" ? data.sources.filter((s) => s.vacancyId === selectedVacancyId) : []),
@@ -392,6 +420,46 @@ export default function AnalyticsPage() {
       </section>
 
       {/* ── Section 2: Source Breakdown ────────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold text-text">Funnel Drop-off</h2>
+        {dropOffFunnelRows.length === 0 ? (
+          <p className="text-sm text-muted">No vacancy views yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {dropOffFunnelRows.map((row) => {
+              const startedPct = row.viewed > 0 ? Math.round((row.started / row.viewed) * 100) : 0;
+              const submittedPct = row.started > 0 ? Math.round((row.submitted / row.started) * 100) : 0;
+              const hiredPct = row.submitted > 0 ? Math.round((row.hired / row.submitted) * 100) : 0;
+
+              return (
+                <div key={row.id} className="border border-border rounded-lg p-4 bg-surface-2">
+                  <p className="text-sm font-semibold text-text mb-3">{row.title}</p>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div>
+                      <p className="text-2xl font-semibold text-text">{row.viewed}</p>
+                      <p className="text-xs text-muted">Viewed</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold text-text">{row.started}</p>
+                      <p className="text-xs text-muted">Started · {startedPct}%</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold text-text">{row.submitted}</p>
+                      <p className="text-xs text-muted">Submitted · {submittedPct}%</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-semibold text-text">{row.hired}</p>
+                      <p className="text-xs text-muted">Hired · {hiredPct}%</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Section 3: Source Breakdown ────────────────────────────────────── */}
       {selectedVacancyId !== "all" && (
         <section className="space-y-4">
           <h2 className="text-base font-semibold text-text">Source Breakdown</h2>

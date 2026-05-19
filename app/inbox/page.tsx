@@ -1,18 +1,43 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { ChatBubble } from "@/components/ChatBubble";
 import { KbdHint } from "@/components/ui/KbdHint";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { useDataMode } from "@/context/DataModeContext";
-import { getInboxConversations, type InboxConversation } from "@/app/actions/messages";
+import { getInboxConversations, type InboxConversation, type InboxMessage } from "@/app/actions/messages";
 import { getMessagesForApplication, getMessagesByCandidateId, markMessagesRead, sendMessageToCandidate } from "@/app/actions/messages";
+import { toast } from "@/lib/hooks/useToast";
 import { formatRelativeTime } from "@/lib/utils";
 
 type Filter = "all" | "unread" | "stale";
 type DateFilter = "all" | "today" | "week" | "month";
 type StatusFilter = "all" | "browsing" | "in_progress" | "submitted" | "abandoned";
+
+const STATUS_LABELS: Record<Exclude<StatusFilter, "all">, string> = {
+  browsing: "Browsing",
+  in_progress: "In progress",
+  submitted: "Submitted",
+  abandoned: "Abandoned",
+};
+
+const STATUS_PILL_CLASSES: Record<Exclude<StatusFilter, "all">, string> = {
+  browsing: "bg-surface-2 text-muted border-border",
+  in_progress: "bg-warning-soft text-warning border-warning/30",
+  submitted: "bg-primary/10 text-primary border-primary/20",
+  abandoned: "bg-surface-3 text-muted border-border",
+};
+
+function applicationStatusLabel(status: string): string | null {
+  return status in STATUS_LABELS ? STATUS_LABELS[status as Exclude<StatusFilter, "all">] : null;
+}
+
+function applicationStatusPillClass(status: string): string {
+  return status in STATUS_PILL_CLASSES
+    ? STATUS_PILL_CLASSES[status as Exclude<StatusFilter, "all">]
+    : "bg-surface-2 text-muted border-border";
+}
 
 function isToday(dateStr: string): boolean {
   const d = new Date(dateStr);
@@ -38,21 +63,6 @@ function isThisMonth(dateStr: string): boolean {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
 }
 
-type DbMessage = {
-  id: string;
-  candidateId: string;
-  applicationId: string | null;
-  direction: string;
-  senderType: string;
-  senderName: string | null;
-  text: string;
-  sentAt: Date | null;
-  readByUserIds: string[] | null;
-  attachmentFileId: string | null;
-  attachmentType: string | null;
-  attachmentFilename: string | null;
-};
-
 export default function InboxPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [vacancyFilter, setVacancyFilter] = useState("all");
@@ -61,8 +71,10 @@ export default function InboxPage() {
   // Key is applicationId when present, else candidateId — always non-empty when something is selected
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
-  const [threadMessages, setThreadMessages] = useState<Record<string, DbMessage[]>>({});
+  const [threadMessages, setThreadMessages] = useState<Record<string, InboxMessage[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { mode } = useDataMode();
@@ -102,7 +114,7 @@ export default function InboxPage() {
     (r) => r.lastMessageAt && Date.now() - new Date(r.lastMessageAt).getTime() > 3 * 86400000
   ).length;
 
-  const filtered = conversations.filter((r) => {
+  const filtered = useMemo(() => conversations.filter((r) => {
     if (filter === "unread" && r.unreadCount === 0) return false;
     if (filter === "stale" && r.lastMessageAt && Date.now() - new Date(r.lastMessageAt).getTime() <= 3 * 86400000) return false;
     if (vacancyFilter !== "all" && r.vacancyId !== vacancyFilter) return false;
@@ -111,7 +123,23 @@ export default function InboxPage() {
     if (dateFilter === "month" && r.lastMessageAt && !isThisMonth(r.lastMessageAt)) return false;
     if (statusFilter !== "all" && r.applicationStatus !== statusFilter) return false;
     return true;
-  });
+  }), [conversations, dateFilter, filter, statusFilter, vacancyFilter]);
+
+  useEffect(() => {
+    if (filtered.length === 0) {
+      if (selectedKey !== null) setSelectedKey(null);
+      return;
+    }
+
+    const selectedStillVisible = selectedKey
+      ? filtered.some((r) => (r.applicationId || r.candidateId) === selectedKey)
+      : false;
+
+    if (!selectedStillVisible) {
+      const first = filtered[0];
+      setSelectedKey(first.applicationId || first.candidateId);
+    }
+  }, [filtered, selectedKey]);
 
   useKeyboardShortcuts({
     j: () => {
@@ -138,9 +166,94 @@ export default function InboxPage() {
   const currentThreadMessages = selectedKey ? (threadMessages[selectedKey] ?? []) : [];
 
   // Unique vacancies from conversations for the filter dropdown
-  const uniqueVacancies = Array.from(
+  const uniqueVacancies = useMemo(() => Array.from(
     new Map(conversations.map((c) => [c.vacancyId, c.vacancyTitle])).entries()
-  ).filter(([id]) => id);
+  ).filter(([id]) => id), [conversations]);
+
+  async function handleSendMessage() {
+    if (!selectedKey || !selectedConv?.applicationId || isSending) return;
+
+    const messageText = chatInput.trim();
+    if (!messageText) return;
+
+    const tempId = `tmp-${crypto.randomUUID()}`;
+    const sentAt = new Date().toISOString();
+    const optimisticMessage: InboxMessage = {
+      id: tempId,
+      candidateId: selectedConv.candidateId,
+      applicationId: selectedConv.applicationId,
+      direction: "outbound",
+      senderType: "hr",
+      senderName: null,
+      text: messageText,
+      sentAt,
+      readByUserIds: [],
+      attachmentFileId: null,
+      attachmentType: null,
+      attachmentFilename: null,
+    };
+
+    setSendError(null);
+    setIsSending(true);
+    setChatInput("");
+    setThreadMessages((prev) => ({
+      ...prev,
+      [selectedKey]: [...(prev[selectedKey] ?? []), optimisticMessage],
+    }));
+    setConversations((prev) => prev
+      .map((conv) => {
+        const convKey = conv.applicationId || conv.candidateId;
+        if (convKey !== selectedKey) return conv;
+        return {
+          ...conv,
+          lastMessageText: messageText,
+          lastMessageDirection: "outbound" as const,
+          lastMessageAt: sentAt,
+        };
+      })
+      .sort((a, b) => {
+        const aT = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bT = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bT - aT;
+      }));
+
+    try {
+      const savedMessage = await sendMessageToCandidate(selectedConv.applicationId, messageText);
+      setThreadMessages((prev) => ({
+        ...prev,
+        [selectedKey]: (prev[selectedKey] ?? []).map((msg) => (
+          msg.id === tempId ? savedMessage : msg
+        )),
+      }));
+      setConversations((prev) => prev
+        .map((conv) => {
+          const convKey = conv.applicationId || conv.candidateId;
+          if (convKey !== selectedKey) return conv;
+          return {
+            ...conv,
+            lastMessageText: savedMessage.text,
+            lastMessageDirection: "outbound" as const,
+            lastMessageAt: savedMessage.sentAt,
+          };
+        })
+        .sort((a, b) => {
+          const aT = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const bT = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return bT - aT;
+        }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to send message";
+      setThreadMessages((prev) => ({
+        ...prev,
+        [selectedKey]: (prev[selectedKey] ?? []).filter((msg) => msg.id !== tempId),
+      }));
+      setChatInput(messageText);
+      setSendError(message);
+      toast.error(message);
+    } finally {
+      setIsSending(false);
+    }
+  }
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -208,6 +321,7 @@ export default function InboxPage() {
             className="w-full text-body-sm bg-surface border border-border rounded-lg px-2 py-1 text-text outline-none focus:border-primary"
           >
             <option value="all">All statuses</option>
+            <option value="browsing">Browsing</option>
             <option value="in_progress">In progress</option>
             <option value="submitted">Submitted</option>
             <option value="abandoned">Abandoned</option>
@@ -225,6 +339,7 @@ export default function InboxPage() {
             filtered.map((conv) => {
               const convKey = conv.applicationId || conv.candidateId;
               const isSelected = selectedKey === convKey;
+              const statusLabel = applicationStatusLabel(conv.applicationStatus);
               return (
                 <button
                   key={convKey}
@@ -269,6 +384,11 @@ export default function InboxPage() {
                     </p>
                     {conv.vacancyTitle && (
                       <p className="text-micro text-subtle truncate mt-0.5">{conv.vacancyTitle}</p>
+                    )}
+                    {statusLabel && (
+                      <span className={`mt-1 inline-flex h-5 items-center rounded-full border px-1.5 text-micro font-medium ${applicationStatusPillClass(conv.applicationStatus)}`}>
+                        {statusLabel}
+                      </span>
                     )}
                   </div>
                 </button>
@@ -319,8 +439,8 @@ export default function InboxPage() {
                   senderType: msg.senderType as "candidate" | "hr" | "system",
                   senderName: msg.senderName ?? undefined,
                   text: msg.text,
-                  sentAt: msg.sentAt?.toISOString() ?? new Date().toISOString(),
-                  readByUserIds: (msg.readByUserIds as string[]) ?? [],
+                  sentAt: msg.sentAt,
+                  readByUserIds: msg.readByUserIds ?? [],
                   attachmentFileId: msg.attachmentFileId ?? undefined,
                   attachmentType: msg.attachmentType as "photo" | "document" | undefined,
                   attachmentFilename: msg.attachmentFilename ?? undefined,
@@ -331,17 +451,20 @@ export default function InboxPage() {
 
             {/* Composer */}
             <div className="px-6 py-3 border-t border-border bg-bg shrink-0">
+              {sendError && (
+                <p className="mb-2 text-body-sm text-danger">{sendError}</p>
+              )}
               <div className="flex items-end gap-2 bg-surface border border-border rounded-xl px-4 py-3 focus-within:border-primary transition-colors">
                 <textarea
                   value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
+                  onChange={(e) => {
+                    setChatInput(e.target.value);
+                    if (sendError) setSendError(null);
+                  }}
                   onKeyDown={(e) => {
                     if ((e.key === "Enter" && !e.shiftKey) || (e.key === "Enter" && e.metaKey)) {
                       e.preventDefault();
-                      if (chatInput.trim() && selectedConv?.applicationId) {
-                        sendMessageToCandidate(selectedConv.applicationId, chatInput.trim());
-                        setChatInput("");
-                      }
+                      void handleSendMessage();
                     }
                   }}
                   placeholder="Type a message… (Enter to send)"
@@ -350,14 +473,10 @@ export default function InboxPage() {
                   style={{ maxHeight: "96px" }}
                 />
                 <button
-                  onClick={() => {
-                    if (chatInput.trim() && selectedConv?.applicationId) {
-                      sendMessageToCandidate(selectedConv.applicationId, chatInput.trim());
-                      setChatInput("");
-                    }
-                  }}
-                  disabled={!chatInput.trim() || !selectedConv?.applicationId}
+                  onClick={() => void handleSendMessage()}
+                  disabled={!chatInput.trim() || !selectedConv?.applicationId || isSending}
                   className="shrink-0 h-8 w-8 rounded-lg bg-primary text-primary-fg flex items-center justify-center disabled:opacity-30 transition-opacity"
+                  aria-label={isSending ? "Sending message" : "Send message"}
                 >
                   ↑
                 </button>

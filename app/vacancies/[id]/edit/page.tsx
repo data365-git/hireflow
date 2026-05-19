@@ -1,17 +1,28 @@
 "use client";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { useStore } from "@/lib/store";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/lib/hooks/useToast";
-import type { ScreeningQuestion, VacancyStage, Vacancy, User, Source, TestTask } from "@/lib/types";
+import type { ScreeningQuestion, VacancyStage, Vacancy, User, Source, TestTask, Application } from "@/lib/types";
 import {
+  getVacancyEditData,
   getScreeningQuestions,
   createScreeningQuestion,
   updateScreeningQuestion,
   deleteScreeningQuestion,
   reorderScreeningQuestions,
+  getVacancyModeInfo,
+  updateVacancyDetails,
+  addVacancyStage,
+  updateVacancyStage,
+  removeVacancyStage,
+  reorderVacancyStages,
+  addVacancySource,
+  removeVacancySource,
+  createVacancyTestTask,
+  removeVacancyTestTask,
+  type VacancyEditData,
 } from "@/app/actions/vacancies";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -74,32 +85,44 @@ type Tab = "details" | "questions" | "stages" | "sources" | "tasks";
 export default function EditVacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
-  const vacancy = useStore((s) => s.vacancies).find((v) => v.id === id);
-  const users = useStore((s) => s.users);
+  const [modeInfo, setModeInfo] = useState<Awaited<ReturnType<typeof getVacancyModeInfo>> | null>(null);
+  const [editData, setEditData] = useState<VacancyEditData | null>(null);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
-  const getStagesForVacancy = useStore((s) => s.getStagesForVacancy);
-  const getSourcesForVacancy = useStore((s) => s.getSourcesForVacancy);
-  const stages = getStagesForVacancy(id);
-  const sources = getSourcesForVacancy(id);
-  const applications = useStore((s) => s.applications);
+  const vacancy = editData?.vacancy ?? null;
+  const users = editData?.users ?? [];
+  const stages = editData?.stages ?? [];
+  const sources = editData?.sources ?? [];
+  const applications = editData?.applications ?? [];
+  const testTasks = editData?.testTasks ?? [];
 
   useEffect(() => {
-    getScreeningQuestions(id).then((rows) =>
-      setQuestions(rows as ScreeningQuestion[])
-    );
+    let cancelled = false;
+    setModeInfo(null);
+    setEditData(null);
+    setQuestions([]);
+
+    Promise.all([getVacancyModeInfo(id), getVacancyEditData(id), getScreeningQuestions(id)])
+      .then(([info, data, questionRows]) => {
+        if (cancelled) return;
+        setModeInfo(info);
+        setEditData(data);
+        setQuestions(questionRows as ScreeningQuestion[]);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setModeInfo({ exists: false, currentIsDemo: false });
+          setEditData(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  const updateVacancy = useStore((s) => s.updateVacancy);
-  const addStage = useStore((s) => s.addStage);
-  const removeStage = useStore((s) => s.removeStage);
-  const reorderStages = useStore((s) => s.reorderStages);
-  const addSource = useStore((s) => s.addSource);
-  const removeSource = useStore((s) => s.removeSource);
-  const getTestTasksForVacancy = useStore((s) => s.getTestTasksForVacancy);
-  const createTestTask = useStore((s) => s.createTestTask);
-  const removeTestTask = useStore((s) => s.removeTestTask);
-  const getApplicationsInStage = useStore((s) => s.getApplicationsInStage);
-  const testTasks = getTestTasksForVacancy(id);
+  async function refreshEditData() {
+    const data = await getVacancyEditData(id);
+    setEditData(data);
+  }
 
   // Confirm dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -114,7 +137,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
   }
 
   function handleRemoveStage(stageId: string) {
-    const count = getApplicationsInStage(stageId).length;
+    const count = applications.filter((application) => application.currentStageId === stageId).length;
     if (count > 0) {
       setConfirmDialog({
         open: true,
@@ -127,7 +150,16 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
         open: true,
         title: "Delete stage?",
         message: "This will permanently remove the stage. This cannot be undone.",
-        onConfirm: () => { removeStage(stageId); closeConfirm(); },
+        onConfirm: async () => {
+          try {
+            await removeVacancyStage(stageId);
+            await refreshEditData();
+            toast.success("Stage deleted");
+            closeConfirm();
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not delete stage");
+          }
+        },
       });
     }
   }
@@ -137,7 +169,16 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
       open: true,
       title: "Delete test task?",
       message: "This will permanently remove the test task. This cannot be undone.",
-      onConfirm: () => { removeTestTask(taskId); closeConfirm(); },
+      onConfirm: async () => {
+        try {
+          await removeVacancyTestTask(taskId);
+          await refreshEditData();
+          toast.success("Test task deleted");
+          closeConfirm();
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Could not delete test task");
+        }
+      },
     });
   }
   const activeApplicationCount = applications.filter((application) => {
@@ -152,7 +193,37 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
   const [newTaskDays, setNewTaskDays] = useState(3);
   const [showAddTask, setShowAddTask] = useState(false);
 
-  if (!vacancy) {
+  if (modeInfo === null) {
+    return (
+      <div className="px-8 py-8">
+        <EmptyState title="Checking vacancy mode" description="One moment while we verify where this vacancy lives." />
+      </div>
+    );
+  }
+
+  if (modeInfo.exists && modeInfo.isDemo !== modeInfo.currentIsDemo) {
+    const targetMode = modeInfo.isDemo ? "Demo" : "Live";
+    return (
+      <div className="px-8 py-8">
+        <div className="bg-surface border border-border rounded-xl">
+          <EmptyState
+            title={`This vacancy is in ${targetMode} mode`}
+            description={`Switch to ${targetMode} mode to view "${modeInfo.title}".`}
+          />
+          <div className="flex justify-center pb-10">
+            <Link
+              href="/vacancies"
+              className="h-9 px-4 inline-flex items-center rounded-lg border border-border text-body-sm text-text hover:bg-surface-2 transition-colors"
+            >
+              Back to vacancies
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!modeInfo.exists || !vacancy) {
     return (
       <div className="px-8 py-8">
         <EmptyState title="Vacancy not found" description="This vacancy does not exist or was deleted." />
@@ -226,13 +297,23 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
             vacancy={vacancy}
             users={users}
             activeApplicationCount={activeApplicationCount}
-            onSave={(patch) => updateVacancy(id, patch)}
+            onSave={async (patch) => {
+              const updated = await updateVacancyDetails(id, patch);
+              setEditData((current) => current ? { ...current, vacancy: updated } : current);
+            }}
             onConfirm={(message, action) =>
               setConfirmDialog({
                 open: true,
                 title: "Confirm",
                 message,
-                onConfirm: () => { action(); closeConfirm(); },
+                onConfirm: async () => {
+                  try {
+                    await action();
+                    closeConfirm();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Could not save changes");
+                  }
+                },
               })
             }
           />
@@ -283,16 +364,72 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
           <StagesTab
             stages={stages}
             vacancyId={id}
-            onAdd={(s) => addStage(id, s)}
+            onAdd={async (s) => {
+              try {
+                const stage = await addVacancyStage(id, s);
+                setEditData((current) =>
+                  current
+                    ? {
+                        ...current,
+                        vacancy: { ...current.vacancy, stageIds: [...current.vacancy.stageIds, stage.id] },
+                        stages: [...current.stages, stage],
+                      }
+                    : current
+                );
+                toast.success("Stage added");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not add stage");
+              }
+            }}
+            onUpdate={async (stageId, patch) => {
+              try {
+                const stage = await updateVacancyStage(stageId, patch);
+                setEditData((current) =>
+                  current
+                    ? { ...current, stages: current.stages.map((item) => (item.id === stage.id ? stage : item)) }
+                    : current
+                );
+                toast.success("Stage updated");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not update stage");
+              }
+            }}
             onRemove={handleRemoveStage}
-            onReorder={(orderedIds) => reorderStages(id, orderedIds)}
+            onReorder={async (orderedIds) => {
+              try {
+                const rows = await reorderVacancyStages(id, orderedIds);
+                setEditData((current) =>
+                  current ? { ...current, vacancy: { ...current.vacancy, stageIds: orderedIds }, stages: rows } : current
+                );
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not reorder stages");
+              }
+            }}
           />
         )}
         {activeTab === "sources" && (
           <SourcesTab
             sources={sources}
-            onAdd={(name) => addSource(id, name)}
-            onRemove={removeSource}
+            onAdd={async (name) => {
+              try {
+                const source = await addVacancySource(id, name);
+                setEditData((current) => current ? { ...current, sources: [...current.sources, source] } : current);
+                toast.success("Source added");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not add source");
+              }
+            }}
+            onRemove={async (sourceId) => {
+              try {
+                await removeVacancySource(sourceId);
+                setEditData((current) =>
+                  current ? { ...current, sources: current.sources.filter((source) => source.id !== sourceId) } : current
+                );
+                toast.success("Source removed");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not remove source");
+              }
+            }}
           />
         )}
         {activeTab === "tasks" && (
@@ -341,10 +478,22 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!newTaskTitle.trim()) return;
-                      createTestTask(id, { title: newTaskTitle.trim(), description: newTaskDesc.trim(), dueInDays: newTaskDays });
-                      setNewTaskTitle(""); setNewTaskDesc(""); setNewTaskDays(3); setShowAddTask(false);
+                      try {
+                        const task = await createVacancyTestTask(id, {
+                          title: newTaskTitle.trim(),
+                          description: newTaskDesc.trim(),
+                          dueInDays: newTaskDays,
+                        });
+                        setEditData((current) =>
+                          current ? { ...current, testTasks: [...current.testTasks, task] } : current
+                        );
+                        setNewTaskTitle(""); setNewTaskDesc(""); setNewTaskDays(3); setShowAddTask(false);
+                        toast.success("Test task saved");
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Could not save test task");
+                      }
                     }}
                     className="h-8 px-4 bg-primary text-primary-fg text-body-sm font-medium rounded-lg"
                   >Save task</button>
@@ -447,11 +596,12 @@ function DetailsTab({
   vacancy: Vacancy;
   users: User[];
   activeApplicationCount: number;
-  onSave: (patch: VacancyPatch) => void;
-  onConfirm: (message: string, action: () => void) => void;
+  onSave: (patch: VacancyPatch) => Promise<void>;
+  onConfirm: (message: string, action: () => Promise<void>) => void;
 }) {
   const [form, setForm] = useState<DetailsForm>(() => getDetailsForm(vacancy));
   const [submitted, setSubmitted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setForm(getDetailsForm(vacancy));
@@ -473,7 +623,20 @@ function DetailsTab({
     setSubmitted(false);
   }
 
-  function handleSave() {
+  async function savePatch(patch: VacancyPatch) {
+    setIsSaving(true);
+    try {
+      await onSave(patch);
+      toast.success("Saved");
+      setSubmitted(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save changes");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSave() {
     setSubmitted(true);
     if (hasErrors) return;
 
@@ -501,12 +664,10 @@ function DetailsTab({
     if (needsConfirm) {
       onConfirm(
         `Close this vacancy with ${activeApplicationCount} active application${activeApplicationCount === 1 ? "" : "s"}?`,
-        () => { onSave(patch); toast.success("Saved"); setSubmitted(false); }
+        () => savePatch(patch)
       );
     } else {
-      onSave(patch);
-      toast.success("Saved");
-      setSubmitted(false);
+      await savePatch(patch);
     }
   }
 
@@ -699,10 +860,10 @@ function DetailsTab({
           <button
             type="button"
             onClick={handleSave}
-            disabled={!isDirty}
+            disabled={!isDirty || isSaving}
             className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-hover transition-colors"
           >
-            Save changes
+            {isSaving ? "Saving..." : "Save changes"}
           </button>
         </div>
       </div>
@@ -992,12 +1153,14 @@ function StagesTab({
   stages,
   vacancyId,
   onAdd,
+  onUpdate,
   onRemove,
   onReorder,
 }: {
   stages: VacancyStage[];
   vacancyId: string;
   onAdd: (s: { name: string; color: string; isFinal: boolean; isRejected: boolean }) => void;
+  onUpdate: (id: string, patch: Partial<Pick<VacancyStage, "name" | "color" | "isFinal" | "isRejected" | "isReserve">>) => void;
   onRemove: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
 }) {

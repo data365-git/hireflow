@@ -10,6 +10,19 @@ export function detectLang(ctx: { from?: { language_code?: string } }): Lang {
 export const t: Record<Lang, Record<string, string>> = {
   en: {
     welcome_no_payload: "👋 Welcome to data365 HR!\nI help you apply for open positions.",
+    welcome_dual: `👋 *Добро пожаловать в Data365!*
+Я — HR-бот компании Data365 🤖
+🚀 Помогу вам познакомиться с нашей компанией, узнать об актуальных вакансиях и карьерных возможностях.
+📋 Подскажу подходящую позицию и помогу быстро заполнить анкету.
+Станьте частью команды Data365 — развивайтесь вместе с нами, получайте ценный опыт и достойный доход!
+
+━━━━━━━━━━━━━━━━━━━━
+
+👋 *Data365'ga xush kelibsiz!*
+Men — Data365 kompaniyasining HR botiman 🤖
+🚀 Sizga kompaniyamiz, ochiq vakansiyalar va karyera imkoniyatlari haqida ma'lumot beraman.
+📋 O'zingizga mos ish o'rnini topish va anketani tez to'ldirishda yordam beraman.
+Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring va yaxshi daromadga ega bo'ling!`,
     welcome_browse: "What would you like to do?",
     btn_browse_jobs: "💼 Browse Open Jobs",
     btn_my_applications: "📋 My Applications",
@@ -53,9 +66,48 @@ export const t: Record<Lang, Record<string, string>> = {
     error_generic: "⚠️ Something went wrong. Please try again in a moment.",
     session_timeout: "Your previous session expired. Send /start from a job link or /jobs to browse.",
     position_closed: "Sorry, *{vacancy}* is no longer accepting applications.",
+    ask_language: "Choose your language:",
+    ask_department: "Choose a department.",
+    ask_full_name: "👤 Enter your full name",
+    ask_dob: "📅 Enter your date of birth (dd.mm.yyyy)",
+    ask_address: "🏠 Your address",
+    ask_phone: "📱 Send your phone number using the button below, or type it manually.",
+    ask_marital: "Choose your marital status",
+    ask_student: "Are you a student?",
+    ask_education: "Your education field",
+    ask_english: "Your English level",
+    ask_russian: "Your Russian level",
+    ask_work_company: "🏢 Company name. If you have no experience, tap No experience.",
+    ask_work_position: "👤 Your position",
+    ask_work_period: "📅 Work period (for example: 2022-2024)",
+    ask_work_reason: "📝 Reason for leaving",
+    ask_work_more: "Do you have another work experience?",
+    profile_complete: "✅ Profile completed.",
+    err_dob_format: "Please use dd.mm.yyyy format and age 14-99.",
+    err_short_text: "Please send a short text answer.",
+    btn_no_experience: "No experience",
+    btn_yes: "Yes",
+    btn_no: "No",
+    marital_single: "Single",
+    marital_married: "Married",
+    marital_divorced: "Divorced",
+    marital_other: "Other",
   },
   ru: {
     welcome_no_payload: "👋 Добро пожаловать в data365 HR!\nЯ помогу вам откликнуться на вакансии.",
+    welcome_dual: `👋 *Добро пожаловать в Data365!*
+Я — HR-бот компании Data365 🤖
+🚀 Помогу вам познакомиться с нашей компанией, узнать об актуальных вакансиях и карьерных возможностях.
+📋 Подскажу подходящую позицию и помогу быстро заполнить анкету.
+Станьте частью команды Data365 — развивайтесь вместе с нами, получайте ценный опыт и достойный доход!
+
+━━━━━━━━━━━━━━━━━━━━
+
+👋 *Data365'ga xush kelibsiz!*
+Men — Data365 kompaniyasining HR botiman 🤖
+🚀 Sizga kompaniyamiz, ochiq vakansiyalar va karyera imkoniyatlari haqida ma'lumot beraman.
+📋 O'zingizga mos ish o'rnini topish va anketani tez to'ldirishda yordam beraman.
+Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring va yaxshi daromadga ega bo'ling!`,
     welcome_browse: "Что вы хотите сделать?",
     btn_browse_jobs: "💼 Просмотреть вакансии",
     btn_my_applications: "📋 Мои отклики",
@@ -99,9 +151,48 @@ export const t: Record<Lang, Record<string, string>> = {
     error_generic: "⚠️ Что-то пошло не так. Попробуйте через минуту.",
     session_timeout: "Сессия истекла. Откройте /jobs.",
     position_closed: "К сожалению, *{vacancy}* больше не принимает отклики.",
+    ask_language: "Выберите язык:",
+    ask_department: "Выберите отдел.",
+    ask_full_name: "👤 Введите Ф.И.О.",
+    ask_dob: "📅 Укажите дату рождения (dd.mm.yyyy)",
+    ask_address: "🏠 Ваш адрес проживания",
+    ask_phone: "📱 Отправьте номер телефона кнопкой ниже или введите вручную.",
+    ask_marital: "Выберите семейное положение",
+    ask_student: "Вы студент?",
+    ask_education: "Укажите направление образования",
+    ask_english: "Уровень английского языка",
+    ask_russian: "Уровень русского языка",
+    ask_work_company: "🏢 Название компании. Если опыта нет, нажмите Нет опыта.",
+    ask_work_position: "👤 Ваша должность",
+    ask_work_period: "📅 Период работы (например: 2022-2024)",
+    ask_work_reason: "📝 Причина ухода",
+    ask_work_more: "Есть ещё опыт работы?",
+    profile_complete: "✅ Анкета заполнена.",
+    err_dob_format: "Пожалуйста, используйте формат dd.mm.yyyy, возраст 14-99.",
+    err_short_text: "Пожалуйста, отправьте короткий текстовый ответ.",
+    btn_no_experience: "Нет опыта",
+    btn_yes: "Да",
+    btn_no: "Нет",
+    marital_single: "Не женат/не замужем",
+    marital_married: "Женат/замужем",
+    marital_divorced: "Разведён/разведена",
+    marital_other: "Другое",
   },
   uz: {
     welcome_no_payload: "👋 data365 HR botiga xush kelibsiz!\nMen sizga ish o'rinlariga murojaat qilishda yordam beraman.",
+    welcome_dual: `👋 *Добро пожаловать в Data365!*
+Я — HR-бот компании Data365 🤖
+🚀 Помогу вам познакомиться с нашей компанией, узнать об актуальных вакансиях и карьерных возможностях.
+📋 Подскажу подходящую позицию и помогу быстро заполнить анкету.
+Станьте частью команды Data365 — развивайтесь вместе с нами, получайте ценный опыт и достойный доход!
+
+━━━━━━━━━━━━━━━━━━━━
+
+👋 *Data365'ga xush kelibsiz!*
+Men — Data365 kompaniyasining HR botiman 🤖
+🚀 Sizga kompaniyamiz, ochiq vakansiyalar va karyera imkoniyatlari haqida ma'lumot beraman.
+📋 O'zingizga mos ish o'rnini topish va anketani tez to'ldirishda yordam beraman.
+Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring va yaxshi daromadga ega bo'ling!`,
     welcome_browse: "Nima qilmoqchisiz?",
     btn_browse_jobs: "💼 Ish o'rinlarini ko'rish",
     btn_my_applications: "📋 Mening murojaalatlarim",
@@ -145,6 +236,32 @@ export const t: Record<Lang, Record<string, string>> = {
     error_generic: "⚠️ Xatolik yuz berdi. Bir daqiqadan so'ng qayta urinib ko'ring.",
     session_timeout: "Sessiya tugadi. /jobs orqali ko'ring.",
     position_closed: "Kechirasiz, *{vacancy}* hozir murojaat qabul qilmayapti.",
+    ask_language: "Tilni tanlang:",
+    ask_department: "Bo'limni tanlang.",
+    ask_full_name: "👤 F.I.SH ni kiriting",
+    ask_dob: "📅 Tug'ilgan kuningizni ko'rsating (dd.mm.yyyy)",
+    ask_address: "🏠 Yashash manzilingiz",
+    ask_phone: "📱 Telefon raqamingizni tugma orqali yuboring yoki qo'lda kiriting.",
+    ask_marital: "Oilaviy ahvolingizni tanlang",
+    ask_student: "Talabamisiz?",
+    ask_education: "Ta'lim sohangizni ko'rsating",
+    ask_english: "Ingliz tilini bilish darajangiz qanday?",
+    ask_russian: "Rus tilini bilish darajangiz qanday?",
+    ask_work_company: "🏢 Kompaniya nomi. Tajribangiz bo'lmasa, Tajriba yo'q tugmasini bosing.",
+    ask_work_position: "👤 Lavozimingiz",
+    ask_work_period: "📅 Ishlagan davringiz (masalan: 2022-2024)",
+    ask_work_reason: "📝 Ishdan ketish sababi",
+    ask_work_more: "Yana ish tajribangiz bormi?",
+    profile_complete: "✅ Anketa to'ldirildi.",
+    err_dob_format: "Iltimos, dd.mm.yyyy formatida yuboring, yosh 14-99.",
+    err_short_text: "Iltimos, qisqa matn yuboring.",
+    btn_no_experience: "Tajriba yo'q",
+    btn_yes: "Ha",
+    btn_no: "Yo'q",
+    marital_single: "Turmush qurmagan",
+    marital_married: "Turmush qurgan",
+    marital_divorced: "Ajrashgan",
+    marital_other: "Boshqa",
   },
 };
 

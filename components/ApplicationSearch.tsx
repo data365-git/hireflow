@@ -9,7 +9,7 @@ type AppRow = {
     currentStageId: string;
     appliedAt: Date;
     lastActivityAt: Date;
-    status?: string;
+    status: string;
   };
   candidate: {
     id: string;
@@ -99,8 +99,10 @@ export function ApplicationSearch({ appRows, stages, onFilter }: Props) {
         className="bg-surface-2 border border-border rounded-lg px-3 py-2 text-body-sm text-text outline-none focus:border-primary"
       >
         <option value="all">All statuses</option>
+        <option value="browsing">Browsing</option>
         <option value="in_progress">In progress</option>
         <option value="submitted">Submitted</option>
+        <option value="abandoned">Abandoned</option>
       </select>
     </div>
   );

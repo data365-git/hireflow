@@ -29,6 +29,7 @@ export type VacancyStage = {
   color: string; // key into STAGE_COLORS map: "new" | "screening" | "qualified" | "test" | "interview" | "hired" | "rejected"
   isFinal: boolean;
   isRejected: boolean;
+  isReserve?: boolean;
   orderIndex: number;
 };
 
@@ -41,6 +42,18 @@ export type Candidate = {
   language: Language;
   city: string;
   createdAt: ISODate;
+  dateOfBirth?: ISODate | null;
+  address?: string | null;
+  maritalStatus?: string | null;
+  isStudent?: boolean | null;
+  educationField?: string | null;
+  englishLevel?: string | null;
+  russianLevel?: string | null;
+  workExperience?: Array<{ company?: string; position?: string; period?: string; leaveReason?: string }> | null;
+  departmentId?: string | null;
+  profileCompleted?: boolean;
+  isBlacklisted?: boolean;
+  languagePref?: Language | null;
 };
 
 export type Application = {
@@ -50,7 +63,7 @@ export type Application = {
   currentStageId: UUID;
   appliedAt: ISODate;
   lastActivityAt: ISODate;
-  status: "in_progress" | "submitted" | "abandoned";
+  status: "browsing" | "in_progress" | "submitted" | "abandoned";
 };
 
 export type ScreeningQuestion = {
@@ -83,6 +96,7 @@ export type TimelineEvent = {
   description: string;
   fromStageId?: UUID;
   toStageId?: UUID;
+  comment?: string | null;
   createdAt: ISODate;
 };
 
@@ -144,7 +158,7 @@ export type CreateVacancyInput = {
   responsibleHrId: UUID;
   introMessage: string;
   successMessage: string;
-  stages: Array<{ name: string; color: string; isFinal: boolean; isRejected: boolean }>;
+  stages: Array<{ name: string; color: string; isFinal: boolean; isRejected: boolean; isReserve?: boolean }>;
   questions: Array<{ text: string; type: ScreeningQuestion["type"]; options?: string[] }>;
   sources: Array<{ name: string }>;
 };

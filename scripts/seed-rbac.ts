@@ -4,7 +4,8 @@ import { systemRoles, rolePermissions, users, userRoles, profiles } from "../lib
 import { hashPassword } from "../lib/auth/password";
 
 const SYSTEM_ROLES = [
-  { name: "admin",    displayName: "Admin",    color: "#ef4444", isSystem: true, isSuperadmin: true },
+  { name: "superadmin", displayName: "Superadmin", color: "#7c3aed", isSystem: true, isSuperadmin: true },
+  { name: "admin",    displayName: "Admin",    color: "#ef4444", isSystem: true, isSuperadmin: false },
   { name: "manager",  displayName: "Manager",  color: "#3b82f6", isSystem: true, isSuperadmin: false },
   { name: "employee", displayName: "Employee", color: "#10b981", isSystem: true, isSuperadmin: false },
   { name: "hr",       displayName: "HR",       color: "#8b5cf6", isSystem: true, isSuperadmin: false },
@@ -78,13 +79,15 @@ async function seed() {
   await db.insert(profiles).values({ id, fullName: "Admin" }).onConflictDoNothing();
   console.log("  profile done");
 
-  // 5. User role assignment
-  await db.insert(userRoles).values({
-    id: crypto.randomUUID(),
-    userId: id,
-    role: "admin",
-    isActive: true,
-  }).onConflictDoNothing();
+  // 5. User role assignments
+  for (const role of ["admin", "superadmin"]) {
+    await db.insert(userRoles).values({
+      id: crypto.randomUUID(),
+      userId: id,
+      role,
+      isActive: true,
+    }).onConflictDoNothing();
+  }
   console.log("  user_roles done");
 
   console.log(`\nSeeded. Admin login: ${email} / ${password}`);

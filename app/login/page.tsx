@@ -13,7 +13,7 @@ export default function LoginPage() {
 
   // Redirect if already logged in (must be in effect, not render body)
   useEffect(() => {
-    if (user) router.replace("/");
+    if (user) router.replace("/applications");
   }, [user, router]);
 
   if (user) return null;
@@ -24,7 +24,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      router.replace("/");
+      router.replace("/applications");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

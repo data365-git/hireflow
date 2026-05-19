@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
+import { fireStageEnteredAutomations } from "@/lib/automations/runner";
 
 export type PipelineApplication = {
   id: string;
@@ -150,14 +151,17 @@ export async function getAllPipelineApplications(): Promise<UnifiedApplication[]
   }));
 }
 
-export async function moveApplicationToStage(applicationId: string, toStageId: string) {
-  await requirePermission("candidates", "edit");
+export async function moveApplicationToStage(applicationId: string, toStageId: string, comment?: string, automationDepth = 0) {
+  if (automationDepth === 0) {
+    await requirePermission("candidates", "edit");
+  }
   const appRows = await db
     .select()
     .from(applications)
     .where(eq(applications.id, applicationId));
   const app = appRows[0];
   if (!app) return;
+  if (app.currentStageId === toStageId) return;
 
   const stageRows = await db
     .select()
@@ -176,6 +180,9 @@ export async function moveApplicationToStage(applicationId: string, toStageId: s
     applicationId,
     type: "stage_changed",
     description: `Moved to ${toStage.name}`,
+    fromStageId: app.currentStageId,
+    toStageId,
+    comment: comment?.trim() || null,
     createdAt: new Date(),
   });
 
@@ -185,5 +192,9 @@ export async function moveApplicationToStage(applicationId: string, toStageId: s
   // Notify candidate via Telegram if they have a linked account
   await notifyCandidateOfStageChange(applicationId).catch((err) => {
     console.error("Stage notification failed:", err);
+  });
+
+  await fireStageEnteredAutomations(applicationId, toStageId, automationDepth).catch((err) => {
+    console.error("Stage automation failed:", err);
   });
 }
