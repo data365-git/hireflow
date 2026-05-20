@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-echo "Running migrations..."
-# Timeout after 60s — Railway internal DB can occasionally hang on first connect
-timeout 60 npm run db:migrate || {
-  echo "Warning: db:migrate timed out or failed — continuing startup (table may already exist)"
-}
 echo "Starting app..."
+# Run migrations in the background with a 120s timeout to avoid blocking app startup.
+# Railway healthcheck will begin after app is listening, giving migrations time to complete.
+(timeout 120 npm run db:migrate || {
+  echo "Warning: db:migrate timed out or failed after 120s (table may already exist)"
+}) &
 npm start
