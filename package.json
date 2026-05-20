@@ -19,7 +19,8 @@
     "db:seed-rbac": "tsx scripts/seed-rbac.ts",
     "db:retag-demo": "tsx scripts/retag-all-as-demo.ts",
     "db:split-superadmin": "tsx scripts/split-superadmin.ts",
-    "db:seed-stage-templates": "tsx scripts/seed-stage-templates.ts"
+    "db:seed-stage-templates": "tsx scripts/seed-stage-templates.ts",
+    "db:seed-question-templates": "tsx scripts/seed-question-templates.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

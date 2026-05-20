@@ -258,10 +258,30 @@ export const botSessions = pgTable("bot_sessions", {
   telegramUserId: text("telegram_user_id").primaryKey(),
   vacancyId: text("vacancy_id"),
   applicationId: text("application_id"),
-  state: text("state").notNull(), // "awaiting_name" | "awaiting_question" | "complete"
+  state: text("state").notNull(), // see ANKETA_STATES in lib/bot/handlers.ts for the full list
   currentQuestionIndex: integer("current_question_index").default(0),
   collectedData: jsonb("collected_data").$type<Record<string, unknown>>().default({}),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ─── Question Templates ───────────────────────────────────────────────────────
+
+export const questionTemplates = pgTable("question_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const questionTemplateItems = pgTable("question_template_items", {
+  id: text("id").primaryKey(),
+  templateId: text("template_id").notNull().references(() => questionTemplates.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  type: text("type").notNull(), // "short-text" | "long-text" | "phone" | "single-choice" | "yes-no" | "rating"
+  options: jsonb("options").$type<string[]>(),
+  orderIndex: integer("order_index").notNull(),
 });
 
 // ─── RBAC — Profiles ──────────────────────────────────────────────────────────

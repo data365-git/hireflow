@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
-import type { CreateVacancyInput, ScreeningQuestion } from "@/lib/types";
+import type { CreateVacancyInput, ScreeningQuestion, QuestionTemplate } from "@/lib/types";
 import { SaveAsTemplateDialog } from "@/components/settings/SaveAsTemplateDialog";
 import { createVacancy } from "@/app/actions/vacancies";
 import { getAssignableHrUsers, type AssignableHrUser } from "@/app/actions/users";
@@ -78,7 +78,12 @@ type SourceDraft = {
 
 export default function NewVacancyPage() {
   const router = useRouter();
-  const questionTemplates = useStore((s) => s.questionTemplates);
+  const [questionTemplates, setQuestionTemplates] = useState<QuestionTemplate[]>([]);
+  useEffect(() => {
+    import("@/app/actions/question-templates").then(({ listQuestionTemplates }) => {
+      listQuestionTemplates().then(setQuestionTemplates).catch(() => setQuestionTemplates([]));
+    });
+  }, []);
 
   const [step, setStep] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
@@ -515,8 +520,44 @@ export default function NewVacancyPage() {
           )}
         </div>
 
+        <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3 mb-4 text-body-sm">
+          <p className="font-semibold text-text mb-1">📌 Bot already collects from every applicant:</p>
+          <p className="text-muted">Full name · Date of birth · Address · Phone · Marital status · Education · Languages · Work history · Email · CV · Notes</p>
+          <p className="text-subtle mt-1">Add <strong>vacancy-specific</strong> questions below (e.g. "Years of experience?", "Portfolio URL?").</p>
+        </div>
+
         {questions.length === 0 && (
-          <p className="text-body-sm text-muted italic">No questions yet. Add one below.</p>
+          <div className="rounded-xl border border-dashed border-border bg-surface-2 p-5 text-center space-y-3">
+            <p className="text-body-sm font-semibold text-text">No screening questions yet</p>
+            <p className="text-body-sm text-muted">
+              These are <strong>vacancy-specific</strong> questions — the bot already collects
+              name, email, CV, and notes from every applicant automatically.
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center mt-2">
+              {[
+                { text: "Years of experience?",          type: "short-text" as const },
+                { text: "Why are you interested?",       type: "long-text"  as const },
+                { text: "Preferred salary (USD)?",       type: "short-text" as const },
+                { text: "When can you start?",           type: "short-text" as const },
+                { text: "GitHub or portfolio URL?",      type: "short-text" as const },
+                { text: "Open to relocation?",           type: "yes-no"     as const },
+              ].map((s) => (
+                <button
+                  key={s.text}
+                  type="button"
+                  onClick={() => {
+                    setQuestions((qs) => [
+                      ...qs,
+                      { id: `q_${Date.now()}_${Math.random()}`, text: s.text, type: s.type, options: undefined, optionsRaw: "" },
+                    ]);
+                  }}
+                  className="text-body-sm px-3 py-1.5 rounded-full bg-surface border border-border hover:border-primary hover:text-primary transition-colors"
+                >
+                  + {s.text}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="space-y-3">
@@ -975,6 +1016,9 @@ export default function NewVacancyPage() {
                     }`}
                   >
                     {s.label}
+                    {s.label === "Questions" && questions.length > 0 && (
+                      <span className="ml-1 text-xs bg-primary/15 text-primary rounded-full px-1.5">{questions.length}</span>
+                    )}
                   </span>
                 </button>
                 {/* Connector line */}

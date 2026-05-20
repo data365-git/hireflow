@@ -11,6 +11,7 @@ const tabs = [
   { label: "Roles", icon: Shield, href: "/settings/roles", gated: true },
   { label: "Automations", icon: Zap, href: "/settings/automations", gated: true },
   { label: "Stage Templates", icon: Layers, href: "/settings/stage-templates", gated: true },
+  { label: "Question Templates", icon: Layers, href: "/settings/question-templates", gated: true },
   { label: "Demo", icon: FlaskConical, href: "/settings/demo", gated: true },
 ];
 

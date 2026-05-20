@@ -143,8 +143,10 @@ export type Source = {
 export type QuestionTemplate = {
   id: string;
   name: string;
-  description: string;
-  questions: Array<{ text: string; type: ScreeningQuestion["type"]; options?: string[] }>;
+  description: string | null;
+  isSystem: boolean;
+  createdAt: string;
+  questions: Array<{ id: string; text: string; type: ScreeningQuestion["type"]; options?: string[]; orderIndex: number }>;
 };
 
 export type CreateVacancyInput = {
