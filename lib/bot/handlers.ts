@@ -1,7 +1,7 @@
 import { InlineKeyboard, Keyboard } from "grammy";
 import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
-import { vacancies, vacancyStages, screeningQuestions, applications, candidates, departments } from "@/lib/db/schema";
+import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, getOrCreateInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
@@ -192,6 +192,10 @@ export async function handleCallbackQuery(ctx: Context) {
     return handleAnketaCallback(ctx, data, lang);
   }
 
+  if (data.startsWith("qans_")) {
+    return handleQansCallback(ctx, data, lang);
+  }
+
   if (data.startsWith("view_")) {
     const vacancyId = data.replace("view_", "");
     return startVacancyFlow(ctx, vacancyId, lang);
@@ -236,15 +240,58 @@ export async function handleCallbackQuery(ctx: Context) {
       applicationId = await getOrCreateInProgressApplication({ candidateId, vacancyId });
     }
 
+    // B1+B3: Skip steps already done. If candidate has a name, skip awaiting_name.
+    // If they have partial screening answers, resume from where they left off.
+    const existingName = existingCand[0]?.fullName;
+    const collectedData: Record<string, unknown> = { totalSteps };
+
+    let startState: string = "awaiting_name";
+    let resumeQuestionIdx = 0;
+
+    if (existingName) {
+      collectedData.fullName = existingName;
+      // Check existing answers for this application
+      const existingAnswers = applicationId
+        ? await db.select().from(screeningAnswers).where(eq(screeningAnswers.applicationId, applicationId))
+        : [];
+      const answeredIds = new Set(existingAnswers.map((a) => a.questionId));
+      const preloadedAnswers: Record<string, string> = {};
+      for (const a of existingAnswers) preloadedAnswers[a.questionId] = a.answerText ?? "";
+      collectedData.answers = preloadedAnswers;
+
+      // Find first unanswered question
+      resumeQuestionIdx = questions.findIndex((q) => !answeredIds.has(q.id));
+      if (resumeQuestionIdx === -1) resumeQuestionIdx = questions.length;
+
+      if (resumeQuestionIdx >= questions.length) {
+        startState = "awaiting_cv";
+      } else {
+        startState = resumeQuestionIdx > 0 ? "awaiting_question" : "awaiting_email";
+      }
+    }
+
     await saveBotSession(telegramUserId, {
       vacancyId,
       applicationId: applicationId ?? null,
-      state: "awaiting_name",
-      currentQuestionIndex: 0,
-      collectedData: { totalSteps },
+      state: startState,
+      currentQuestionIndex: resumeQuestionIdx,
+      collectedData,
     });
 
-    await ctx.reply(tr(lang, "ask_name", { step: 1, total: totalSteps }), { parse_mode: "Markdown" });
+    if (existingName && startState !== "awaiting_email") {
+      await ctx.reply(tr(lang, "resuming_application"), { parse_mode: "Markdown" });
+    }
+
+    if (startState === "awaiting_name") {
+      await ctx.reply(tr(lang, "ask_name", { step: 1, total: totalSteps }), { parse_mode: "Markdown" });
+    } else if (startState === "awaiting_email") {
+      await ctx.reply(tr(lang, "ask_email", { step: 2, total: totalSteps }), { parse_mode: "Markdown" });
+    } else if (startState === "awaiting_question") {
+      await askQuestion(ctx, questions[resumeQuestionIdx], 3 + resumeQuestionIdx, totalSteps, lang);
+    } else if (startState === "awaiting_cv") {
+      const cvStep = 3 + questions.length;
+      await ctx.reply(tr(lang, "ask_cv", { step: cvStep, total: totalSteps }), { parse_mode: "Markdown" });
+    }
     return;
   }
 
@@ -378,11 +425,16 @@ async function getApplicationAndCandidateForUser(telegramUserId: string): Promis
 export async function handlePhoto(ctx: Context) {
   const telegramUserId = String(ctx.from!.id);
   const session = await getBotSession(telegramUserId);
+  const lang = detectLang(ctx);
 
-  // If in an active flow state, ignore — flow handlers deal with documents but not photos
+  if (session?.state === "awaiting_cv") {
+    // Photo sent instead of document — give a helpful error
+    return ctx.reply(tr(lang, "err_cv_must_be_document"), { parse_mode: "Markdown" });
+  }
+
   if (session?.state && session.state !== "complete") {
-    const lang = detectLang(ctx);
-    return ctx.reply(tr(lang, "session_timeout"), { parse_mode: "Markdown" });
+    // Photo during other active states — not expected
+    return ctx.reply(tr(lang, "err_send_text"), { parse_mode: "Markdown" });
   }
 
   // Inbound persistence is handled by middleware, including attachment metadata.
@@ -430,10 +482,13 @@ export async function handleText(ctx: Context) {
   }
 
   if (session.state === "awaiting_email") {
-    if (!isValidEmail(text)) {
+    if (text === "/skip") {
+      // Email is optional — skip it
+    } else if (!isValidEmail(text)) {
       return ctx.reply(tr(lang, "invalid_email"), { parse_mode: "Markdown" });
+    } else {
+      data.email = text;
     }
-    data.email = text;
 
     if (questions.length === 0) {
       const cvStep = 3;
@@ -686,10 +741,13 @@ async function handleAnketaText(ctx: Context, text: string, fallbackLang: Lang) 
   }
 
   if (session.state === "awaiting_dob") {
-    const dob = parseDob(text);
-    if (!dob) return ctx.reply(tr(lang, "err_dob_format"), { parse_mode: "Markdown" });
+    const dobResult = parseDob(text);
+    if ("error" in dobResult) {
+      const key = dobResult.error === "age" ? "err_dob_age" : "err_dob_format";
+      return ctx.reply(tr(lang, key), { parse_mode: "Markdown" });
+    }
     await db.update(candidates)
-      .set({ dateOfBirth: dob })
+      .set({ dateOfBirth: dobResult.date })
       .where(eq(candidates.id, candidate.id));
     await saveBotSession(telegramUserId, { state: "awaiting_address", collectedData: data });
     return ctx.reply(tr(lang, "ask_address"), { parse_mode: "Markdown" });
@@ -704,9 +762,14 @@ async function handleAnketaText(ctx: Context, text: string, fallbackLang: Lang) 
   }
 
   if (session.state === "awaiting_phone") {
-    await db.update(candidates)
-      .set({ phone: text })
-      .where(eq(candidates.id, candidate.id));
+    const phoneRaw = text === "/skip" ? null : text.replace(/\s+/g, "");
+    if (phoneRaw !== null) {
+      const normalized = phoneRaw.startsWith("+") ? phoneRaw : `+${phoneRaw}`;
+      if (!/^\+\d{9,15}$/.test(normalized)) {
+        return ctx.reply(tr(lang, "err_phone_format"), { parse_mode: "Markdown" });
+      }
+      await db.update(candidates).set({ phone: normalized }).where(eq(candidates.id, candidate.id));
+    }
     await saveBotSession(telegramUserId, { state: "awaiting_marital_status", collectedData: data });
     return askMarital(ctx, lang);
   }
@@ -755,20 +818,35 @@ async function handleAnketaText(ctx: Context, text: string, fallbackLang: Lang) 
     await saveBotSession(telegramUserId, { state: "awaiting_work_company", collectedData: data });
     return askWorkMore(ctx, lang);
   }
+
+  // B5: States that are button-only — text input is not expected here
+  const buttonOnlyStates = new Set([
+    "awaiting_lang_pref",
+    "awaiting_department",
+    "awaiting_marital_status",
+    "awaiting_student_status",
+    "awaiting_english_level",
+    "awaiting_russian_level",
+  ]);
+  if (session.state && buttonOnlyStates.has(session.state)) {
+    return ctx.reply(tr(lang, "err_click_button"), { parse_mode: "Markdown" });
+  }
 }
 
 async function askDepartment(ctx: Context, lang: Lang) {
   const rows = await getBotVisibleDepartments();
+
+  if (rows.length === 0) {
+    // No departments configured — end the flow gracefully instead of leaving user stuck
+    await clearBotSession(String(ctx.from!.id));
+    await ctx.reply(tr(lang, "back_later"), { parse_mode: "Markdown" });
+    return;
+  }
+
   const kb = new InlineKeyboard();
   for (const department of rows) {
     kb.text(department.displayName, `anketa_department_${department.id}`).row();
   }
-
-  if (rows.length === 0) {
-    await ctx.reply(tr(lang, "no_jobs"), { parse_mode: "Markdown" });
-    return;
-  }
-
   await ctx.reply(tr(lang, "ask_department"), { reply_markup: kb, parse_mode: "Markdown" });
 }
 
@@ -839,16 +917,18 @@ function isLanguageLevel(value: string): value is "none" | "a1_a2" | "b1_b2" | "
   return ["none", "a1_a2", "b1_b2", "c1_c2", "native"].includes(value);
 }
 
-function parseDob(value: string): Date | null {
+type DobResult = { date: Date } | { error: "format" | "age" };
+
+function parseDob(value: string): DobResult {
   const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(value);
-  if (!match) return null;
+  if (!match) return { error: "format" };
 
   const day = Number(match[1]);
   const month = Number(match[2]);
   const year = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-    return null;
+    return { error: "format" };
   }
 
   const now = new Date();
@@ -857,7 +937,54 @@ function parseDob(value: string): Date | null {
   const currentDay = now.getUTCDate();
   if (currentMonth < month || (currentMonth === month && currentDay < day)) age -= 1;
 
-  return age >= 14 && age <= 99 ? date : null;
+  return age >= 14 && age <= 99 ? { date } : { error: "age" };
+}
+
+// B27: Handle qans_<index> callback for single-choice screening questions
+async function handleQansCallback(ctx: Context, data: string, lang: Lang) {
+  const telegramUserId = String(ctx.from!.id);
+  const session = await getBotSession(telegramUserId);
+  if (!session || session.state !== "awaiting_question") return;
+
+  const optionIndex = Number(data.replace("qans_", ""));
+  const qIdx = session.currentQuestionIndex ?? 0;
+  const collectedData = ((session.collectedData as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  const totalSteps = (collectedData.totalSteps as number) ?? 6;
+
+  const questions = await db.select().from(screeningQuestions)
+    .where(eq(screeningQuestions.vacancyId, session.vacancyId!))
+    .orderBy(asc(screeningQuestions.orderIndex));
+
+  const q = questions[qIdx];
+  if (!q) return;
+
+  const opts = Array.isArray(q.options) ? (q.options as string[]) : [];
+  const answerText = opts[optionIndex] ?? String(optionIndex);
+
+  const answers = ((collectedData.answers as Record<string, string>) ?? {});
+  answers[q.id] = answerText;
+  collectedData.answers = answers;
+
+  const applicationId = (session as any).applicationId as string | undefined;
+  if (applicationId) {
+    await saveScreeningAnswerLive({ applicationId, questionId: q.id, answerText }).catch((err) => {
+      console.error("[handleQansCallback] saveScreeningAnswerLive failed:", err);
+    });
+  }
+
+  const nextIdx = qIdx + 1;
+  if (nextIdx >= questions.length) {
+    const cvStep = 3 + questions.length;
+    await saveBotSession(telegramUserId, { state: "awaiting_cv", collectedData });
+    await ctx.reply(
+      `${tr(lang, "got_answer")}\n\n${tr(lang, "ask_cv", { step: cvStep, total: totalSteps })}`,
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    await saveBotSession(telegramUserId, { state: "awaiting_question", currentQuestionIndex: nextIdx, collectedData });
+    await ctx.reply(tr(lang, "got_answer"), { parse_mode: "Markdown" });
+    await askQuestion(ctx, questions[nextIdx], 3 + nextIdx, totalSteps, lang);
+  }
 }
 
 async function askQuestion(
