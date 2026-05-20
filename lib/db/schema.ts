@@ -448,3 +448,16 @@ export const feedback = pgTable("feedback", {
   applicationIdx: index("feedback_application_idx").on(t.applicationId),
   vacancyIdx: index("feedback_vacancy_idx").on(t.vacancyId),
 }));
+
+// ─── Backup Runs ──────────────────────────────────────────────────────────────
+
+export const backupRuns = pgTable("backup_runs", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),          // "csv" | "pg_dump"
+  status: text("status").notNull(),       // "success" | "failed"
+  rowCount: integer("row_count"),
+  durationMs: integer("duration_ms"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});

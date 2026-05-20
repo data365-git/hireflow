@@ -20,7 +20,8 @@
     "db:retag-demo": "tsx scripts/retag-all-as-demo.ts",
     "db:split-superadmin": "tsx scripts/split-superadmin.ts",
     "db:seed-stage-templates": "tsx scripts/seed-stage-templates.ts",
-    "db:seed-question-templates": "tsx scripts/seed-question-templates.ts"
+    "db:seed-question-templates": "tsx scripts/seed-question-templates.ts",
+    "db:backup-pg": "tsx scripts/backup-pg.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
