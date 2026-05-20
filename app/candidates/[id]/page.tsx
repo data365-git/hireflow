@@ -26,6 +26,7 @@ export default async function CandidateProfilePage({ params }: { params: Promise
         applicationId={applicationId}
         initialConversation={initialConversation}
         sourceName={data.sourceName}
+        initialSourceId={data.application.sourceId ?? null}
         initialApplication={{
           id: data.application.id,
           candidateId: data.application.candidateId,

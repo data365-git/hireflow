@@ -2,10 +2,13 @@
 import { type ReactNode, useState, useRef, useEffect, Suspense, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Pencil } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { sendMessageToCandidate } from "@/app/actions/messages";
 import { moveApplicationToStage as moveApplicationToStageAction } from "@/app/actions/applications";
 import { updateCandidateAnketa, type CandidateAnketaInput } from "@/app/actions/candidate-actions";
+import { listSourcesForVacancy, setApplicationSource } from "@/app/actions/sources";
+import { addVacancySource } from "@/app/actions/vacancies";
 import { Avatar } from "@/components/Avatar";
 import { StagePill } from "@/components/StagePill";
 import { ScreeningAnswerRow } from "@/components/ScreeningAnswerRow";
@@ -18,7 +21,7 @@ import { KbdHint } from "@/components/ui/KbdHint";
 import { CandidateActionControls } from "@/components/candidates/CandidateActionControls";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { formatRelativeTime, daysAgo } from "@/lib/utils";
-import type { Application, Candidate, TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent } from "@/lib/types";
+import type { Application, Candidate, TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent, Source } from "@/lib/types";
 
 type Tab = "activity" | "anketa" | "chat" | "notes" | "tasks" | "screening" | "timeline" | "conversation";
 
@@ -97,6 +100,7 @@ function ProfileContent({
   initialCandidate,
   initialTimeline,
   sourceName,
+  initialSourceId,
 }: {
   applicationId: string;
   initialConversation: ConversationMessage[];
@@ -104,6 +108,7 @@ function ProfileContent({
   initialCandidate?: Candidate;
   initialTimeline?: TimelineEvent[];
   sourceName?: string | null;
+  initialSourceId?: string | null;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -123,6 +128,16 @@ function ProfileContent({
   const [anketaError, setAnketaError] = useState<string | null>(null);
   const [candidateOverrides, setCandidateOverrides] = useState<Partial<Candidate> | null>(null);
   const [anketaPending, startAnketaTransition] = useTransition();
+  // Source editing state
+  const [isSourceOpen, setIsSourceOpen] = useState(false);
+  const [currentSourceId, setCurrentSourceId] = useState<string | null>(initialSourceId ?? null);
+  const [currentSourceName, setCurrentSourceName] = useState<string | null>(sourceName ?? null);
+  const [sourcePending, startSourceTransition] = useTransition();
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [availableSources, setAvailableSources] = useState<Source[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string>("");
+  const [newSourceName, setNewSourceName] = useState("");
+  const [showNewSourceInput, setShowNewSourceInput] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const applications = useStore((s) => s.applications);
@@ -289,6 +304,60 @@ function ProfileContent({
     if (anketaPending) return;
     setIsAnketaOpen(false);
     setAnketaError(null);
+  }
+
+  function openSourceModal() {
+    if (!application) return;
+    setSelectedSourceId(currentSourceId ?? "");
+    setNewSourceName("");
+    setShowNewSourceInput(false);
+    setSourceError(null);
+    listSourcesForVacancy(application.vacancyId).then(setAvailableSources).catch(() => {});
+    setIsSourceOpen(true);
+  }
+
+  function closeSourceModal() {
+    if (sourcePending) return;
+    setIsSourceOpen(false);
+    setSourceError(null);
+  }
+
+  function handleSaveSource() {
+    if (!application) return;
+    startSourceTransition(async () => {
+      try {
+        setSourceError(null);
+        let resolvedSourceId: string | null = selectedSourceId || null;
+
+        if (showNewSourceInput) {
+          const trimmed = newSourceName.trim();
+          if (!trimmed) {
+            setSourceError("Source name is required.");
+            return;
+          }
+          const created = await addVacancySource(application.vacancyId, trimmed);
+          resolvedSourceId = created.id;
+        }
+
+        await setApplicationSource({ applicationId, sourceId: resolvedSourceId });
+
+        if (resolvedSourceId) {
+          const src = showNewSourceInput
+            ? { id: resolvedSourceId, name: newSourceName.trim() }
+            : availableSources.find((s) => s.id === resolvedSourceId);
+          setCurrentSourceId(resolvedSourceId);
+          setCurrentSourceName(src?.name ?? null);
+        } else {
+          setCurrentSourceId(null);
+          setCurrentSourceName(null);
+        }
+
+        setIsSourceOpen(false);
+        router.refresh();
+      } catch (err) {
+        setSourceError(err instanceof Error ? err.message : "Failed to save source.");
+      }
+    });
   }
 
   function updateAnketaField<K extends keyof AnketaFormState>(field: K, value: AnketaFormState[K]) {
@@ -461,13 +530,42 @@ function ProfileContent({
               },
               { label: "Pipeline", value: `${daysAgo(application.appliedAt)}d` },
               { label: "Last seen", value: formatRelativeTime(application.lastActivityAt) },
-              ...(sourceName ? [{ label: "Source", value: sourceName }] : []),
             ].map(({ label, value }) => (
               <div key={label} className="flex items-start gap-2 mb-2 last:mb-0">
                 <span className="text-body-sm text-muted w-20 shrink-0">{label}</span>
                 <span className="text-body-sm text-text font-medium truncate">{value}</span>
               </div>
             ))}
+            {/* Source row — always visible, editable */}
+            <div className="flex items-start gap-2 mt-2">
+              <span className="text-body-sm text-muted w-20 shrink-0">Source</span>
+              <div className="flex items-center gap-1 min-w-0">
+                {currentSourceName ? (
+                  <>
+                    <span className="text-body-sm text-text font-medium truncate">{currentSourceName}</span>
+                    <button
+                      type="button"
+                      onClick={openSourceModal}
+                      className="shrink-0 text-subtle hover:text-text transition-colors ml-1"
+                      title="Edit source"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-body-sm text-muted">—</span>
+                    <button
+                      type="button"
+                      onClick={openSourceModal}
+                      className="text-body-sm text-primary hover:underline ml-1"
+                    >
+                      Set source
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Quick actions */}
@@ -1124,6 +1222,89 @@ function ProfileContent({
         </div>
       </Dialog>
 
+      {/* Set source modal */}
+      <Dialog open={isSourceOpen} onClose={closeSourceModal} title="Set source" size="sm">
+        <div className="space-y-4">
+          {sourceError && (
+            <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-body-sm text-danger">
+              {sourceError}
+            </div>
+          )}
+
+          {!showNewSourceInput ? (
+            <>
+              <p className="text-body-sm text-muted">Choose where this candidate came from:</p>
+              <select
+                value={selectedSourceId}
+                onChange={(e) => setSelectedSourceId(e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              >
+                <option value="">— No source —</option>
+                {availableSources.map((src) => (
+                  <option key={src.id} value={src.id}>
+                    {src.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowNewSourceInput(true)}
+                className="text-body-sm text-primary hover:underline"
+              >
+                Or create new
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-body-sm text-muted">Enter a new source name:</p>
+              <input
+                autoFocus
+                value={newSourceName}
+                onChange={(e) => setNewSourceName(e.target.value)}
+                placeholder="e.g. Referral"
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+              <button
+                type="button"
+                onClick={() => { setShowNewSourceInput(false); setNewSourceName(""); }}
+                className="text-body-sm text-muted hover:text-text"
+              >
+                ← Back to list
+              </button>
+            </>
+          )}
+
+          {!showNewSourceInput && (
+            <button
+              type="button"
+              onClick={() => { setSelectedSourceId(""); }}
+              className="block text-body-sm text-danger hover:underline"
+            >
+              Clear attribution
+            </button>
+          )}
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={closeSourceModal}
+              disabled={sourcePending}
+              className="h-9 px-4 rounded-lg border border-border text-body-sm text-muted hover:text-text hover:bg-surface-2 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveSource}
+              disabled={sourcePending}
+              className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-medium disabled:opacity-50"
+            >
+              {sourcePending ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
       {selectedCommentStage && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
           <div className="w-full max-w-md bg-surface border border-border rounded-xl shadow-xl p-5">
@@ -1181,6 +1362,7 @@ export function CandidateProfileClient({
   initialCandidate,
   initialTimeline = [],
   sourceName,
+  initialSourceId,
 }: {
   applicationId: string;
   initialConversation?: ConversationMessage[];
@@ -1188,6 +1370,7 @@ export function CandidateProfileClient({
   initialCandidate?: Candidate;
   initialTimeline?: TimelineEvent[];
   sourceName?: string | null;
+  initialSourceId?: string | null;
 }) {
   return (
     <Suspense
@@ -1204,6 +1387,7 @@ export function CandidateProfileClient({
         initialCandidate={initialCandidate}
         initialTimeline={initialTimeline}
         sourceName={sourceName}
+        initialSourceId={initialSourceId}
       />
     </Suspense>
   );

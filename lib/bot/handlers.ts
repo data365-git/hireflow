@@ -2,7 +2,7 @@ import { InlineKeyboard, Keyboard } from "grammy";
 import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments } from "@/lib/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, getOrCreateInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
 
@@ -141,7 +141,37 @@ export async function handleStart(ctx: Context) {
 async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang, sourceId?: string) {
   const vacancy = await getLiveActiveVacancy(vacancyId);
   if (!vacancy) {
-    return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
+    // Fetch closed vacancy to get its department for similar-vacancy matching
+    const closedRows = await db
+      .select()
+      .from(vacancies)
+      .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
+    const closedVacancy = closedRows[0];
+
+    let similarVacancies = await db
+      .select()
+      .from(vacancies)
+      .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)))
+      .orderBy(desc(vacancies.createdAt))
+      .limit(3);
+
+    // Prefer matches in the same department when possible
+    if (closedVacancy?.department) {
+      const byDept = similarVacancies.filter((v) => v.department === closedVacancy.department);
+      if (byDept.length > 0) similarVacancies = byDept;
+    }
+
+    if (similarVacancies.length > 0) {
+      const kb = new InlineKeyboard();
+      for (const v of similarVacancies) {
+        kb.text(v.title, `view_${v.id}`).row();
+      }
+      await ctx.reply(tr(lang, "position_closed_with_suggestions"), { reply_markup: kb, parse_mode: "Markdown" });
+    } else {
+      const kb = new InlineKeyboard().text(tr(lang, "btn_browse_all_jobs"), "browse_jobs");
+      await ctx.reply(tr(lang, "position_closed_no_matches"), { reply_markup: kb, parse_mode: "Markdown" });
+    }
+    return;
   }
 
   const candidateId = (ctx as any).state?.candidateId as string | undefined;

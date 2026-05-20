@@ -1,6 +1,6 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { candidates, applications, screeningAnswers, timelineEvents, botSessions, vacancyStages, vacancies } from "@/lib/db/schema";
+import { candidates, applications, screeningAnswers, timelineEvents, botSessions, vacancyStages, vacancies, sources } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { fireApplicationSubmittedAutomations } from "@/lib/automations/runner";
@@ -228,6 +228,24 @@ export async function getOrCreateBrowsingApplication(args: {
     return existing[0].id;
   }
 
+  // Validate sourceId belongs to this vacancy — null it out if mismatched/missing
+  let validatedSourceId: string | null = null;
+  if (args.sourceId) {
+    try {
+      const srcRows = await db.select().from(sources).where(eq(sources.id, args.sourceId));
+      const src = srcRows[0];
+      if (src && src.vacancyId === args.vacancyId) {
+        validatedSourceId = src.id;
+      } else {
+        console.warn(
+          `[getOrCreateBrowsingApplication] sourceId ${args.sourceId} does not belong to vacancy ${args.vacancyId} — nulling`
+        );
+      }
+    } catch (err) {
+      console.warn("[getOrCreateBrowsingApplication] source lookup failed:", err);
+    }
+  }
+
   const appId = crypto.randomUUID();
   await db.insert(applications).values({
     id: appId,
@@ -237,7 +255,7 @@ export async function getOrCreateBrowsingApplication(args: {
     appliedAt: new Date(),
     lastActivityAt: new Date(),
     status: "browsing",
-    sourceId: args.sourceId ?? null,
+    sourceId: validatedSourceId,
   });
 
   await db.insert(timelineEvents).values({

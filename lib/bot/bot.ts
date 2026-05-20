@@ -1,6 +1,10 @@
 import { Bot } from "grammy";
 import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleBack, handleText, handleCallbackQuery, handlePhoto, handleContact } from "./handlers";
 import { persistenceMiddleware } from "./middleware";
+import { validateEnv } from "@/lib/env";
+
+// Warn about missing env vars before the hard throw below, so logs show all missing vars at once
+validateEnv();
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error("TELEGRAM_BOT_TOKEN is not set");

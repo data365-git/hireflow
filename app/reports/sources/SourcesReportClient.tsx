@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
+import { Download } from "lucide-react";
 import type { SourcePerformanceRow, SourcePerformanceByNameRow } from "@/app/actions/sources";
 
 type GroupBy = "name" | "vacancy";
@@ -38,6 +40,42 @@ export function SourcesReportClient({ rowsByVacancy, rowsByName, initialDays, in
 
   const isEmpty = groupBy === "name" ? rowsByName.length === 0 : rowsByVacancy.length === 0;
 
+  function handleExport() {
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `source-performance-${groupBy}-${today}.xlsx`;
+
+    let sheetData: Record<string, string | number>[];
+    if (groupBy === "name") {
+      sheetData = rowsByName.map((row) => ({
+        "Source": row.name,
+        "# Vacancies": row.vacancyCount,
+        "Views": row.views,
+        "Submitted": row.submitted,
+        "Hired": row.hired,
+        "Submission %": pct(row.submissionRate),
+        "Hire %": pct(row.hireRate),
+      }));
+    } else {
+      sheetData = rowsByVacancy.map((row) => {
+        const subRate = row.total > 0 ? row.submitted / row.total : 0;
+        return {
+          "Source": row.sourceName,
+          "Vacancy": row.vacancyTitle,
+          "Views": row.total,
+          "Submitted": row.submitted,
+          "Hired": 0,
+          "Submission %": pct(subRate),
+          "Hire %": "—",
+        };
+      });
+    }
+
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Source Performance");
+    XLSX.writeFile(wb, filename);
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header row */}
@@ -70,6 +108,17 @@ export function SourcesReportClient({ rowsByVacancy, rowsByName, initialDays, in
               Source × Vacancy
             </button>
           </div>
+
+          {/* Export button */}
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isEmpty}
+            className="h-9 px-4 rounded-lg border border-border bg-surface text-body-sm font-medium text-text hover:bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            <Download className="size-4" />
+            Export
+          </button>
 
           {/* Time-window filter */}
           <form

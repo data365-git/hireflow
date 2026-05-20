@@ -1,11 +1,14 @@
 "use server";
 
+import { validateEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { sources, applications, vacancies, vacancyStages } from "@/lib/db/schema";
 import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { requirePermission } from "@/lib/auth/permissions";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import type { Source } from "@/lib/types";
+
+validateEnv();
 
 function toIso(value: Date | string): string {
   if (value instanceof Date) return value.toISOString();
@@ -56,6 +59,56 @@ export async function archiveSource(id: string): Promise<void> {
 export async function unarchiveSource(id: string): Promise<void> {
   await requirePermission("vacancies", "edit");
   await db.update(sources).set({ isArchived: false }).where(eq(sources.id, id));
+}
+
+export async function setApplicationSource(input: {
+  applicationId: string;
+  sourceId: string | null;
+}): Promise<void> {
+  const session = await requirePermission("candidates", "edit");
+
+  const [app] = await db
+    .select({ id: applications.id, vacancyId: applications.vacancyId, sourceId: applications.sourceId })
+    .from(applications)
+    .where(eq(applications.id, input.applicationId));
+
+  if (!app) throw new Error("Application not found.");
+
+  if (input.sourceId !== null) {
+    const [src] = await db
+      .select({ id: sources.id, vacancyId: sources.vacancyId })
+      .from(sources)
+      .where(eq(sources.id, input.sourceId));
+
+    if (!src) throw new Error("Source not found.");
+    if (src.vacancyId !== app.vacancyId) {
+      throw new Error("Source does not belong to this vacancy.");
+    }
+  }
+
+  await db
+    .update(applications)
+    .set({ sourceId: input.sourceId })
+    .where(eq(applications.id, input.applicationId));
+
+  // Fire-and-forget audit log (table exists in schema)
+  void (async () => {
+    const { audit } = await import("@/lib/auth/audit");
+    const { revalidatePath } = await import("next/cache");
+    audit({
+      action: "application.source.set",
+      actorId: session.sub,
+      actorEmail: session.email,
+      entityType: "application",
+      entityId: input.applicationId,
+      description: input.sourceId
+        ? `Source set to ${input.sourceId}`
+        : "Source cleared",
+      before: { sourceId: app.sourceId },
+      after: { sourceId: input.sourceId },
+    });
+    revalidatePath(`/candidates/${input.applicationId}`);
+  })();
 }
 
 export type SourceStatRow = {
