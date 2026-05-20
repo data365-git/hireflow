@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import { useDataMode } from "@/context/DataModeContext";
 import { getAnalyticsData, type AnalyticsData } from "@/app/actions/analytics";
+import { getSourcePerformanceByName, type SourcePerformanceByNameRow } from "@/app/actions/sources";
 
 function DeltaChip({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) return null;
@@ -45,10 +47,18 @@ export default function AnalyticsPage() {
   const { mode } = useDataMode();
   const [data, setData] = useState<AnalyticsData>({ vacancies: [], applications: [], stages: [], sources: [], timeline: [], messages: [] });
   const [loading, setLoading] = useState(true);
+  const [sourceRows, setSourceRows] = useState<SourcePerformanceByNameRow[]>([]);
 
   useEffect(() => {
     setLoading(true);
-    getAnalyticsData().then((d) => { setData(d); setLoading(false); });
+    Promise.all([
+      getAnalyticsData(),
+      getSourcePerformanceByName({ days: 30 }),
+    ]).then(([d, src]) => {
+      setData(d);
+      setSourceRows(src);
+      setLoading(false);
+    });
   }, [mode]);
 
   const vacancies = data.vacancies;
@@ -496,6 +506,52 @@ export default function AnalyticsPage() {
           )}
         </section>
       )}
+
+      {/* ── Source Performance ────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-text">Source Performance</h2>
+          <Link href="/reports/sources" className="text-sm text-primary hover:opacity-80 transition-opacity">
+            View full report →
+          </Link>
+        </div>
+        <p className="text-xs text-muted -mt-2">Top 10 sources · last 30 days · all vacancies</p>
+        {sourceRows.length === 0 ? (
+          <p className="text-sm text-muted">No source data yet.</p>
+        ) : (
+          <div className="border border-border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-surface-2 border-b border-border">
+                  <th className="text-left px-4 py-2.5 font-medium text-muted">Source</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted">Views</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted">Submitted</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted">Hired</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted">Sub %</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted">Hire %</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted"># Vac</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sourceRows.slice(0, 10).map((row, i) => (
+                  <tr
+                    key={row.name}
+                    className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-surface-2" : ""}`}
+                  >
+                    <td className="px-4 py-2.5 text-text font-medium">{row.name}</td>
+                    <td className="px-4 py-2.5 text-right text-muted">{row.views}</td>
+                    <td className="px-4 py-2.5 text-right text-muted">{row.submitted}</td>
+                    <td className="px-4 py-2.5 text-right text-muted">{row.hired}</td>
+                    <td className="px-4 py-2.5 text-right text-muted">{(row.submissionRate * 100).toFixed(1)}%</td>
+                    <td className="px-4 py-2.5 text-right text-muted">{(row.hireRate * 100).toFixed(1)}%</td>
+                    <td className="px-4 py-2.5 text-right text-subtle">{row.vacancyCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* ── Section 3: Stage Conversion Rates ─────────────────────────────── */}
       <section className="space-y-4">

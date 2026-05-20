@@ -41,9 +41,10 @@ type Props = {
   onDragStart: (e: React.DragEvent) => void;
   selected?: boolean;
   onToggleSelect?: () => void;
+  sourceName?: string | null;
 };
 
-export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect }: Props) {
+export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect, sourceName }: Props) {
   const allMessages = useStore(s => s.messages);
   const currentUserId = useStore(s => s.currentUserId);
   const messages = useMemo(
@@ -110,6 +111,11 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
               </span>
             )}
           </p>
+          {sourceName && (
+            <span className="mt-0.5 inline-flex items-center text-micro text-muted bg-surface-2 rounded-full px-2 py-0.5">
+              {sourceName}
+            </span>
+          )}
         </div>
       </div>
       <div className="mt-2.5 flex items-center justify-between gap-2">

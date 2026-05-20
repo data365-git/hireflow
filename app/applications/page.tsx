@@ -11,6 +11,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import { useDataMode } from "@/context/DataModeContext";
 import {
   getAllPipelineApplications,
+  listAllSourceNames,
   type UnifiedApplication,
 } from "@/app/actions/applications";
 import { getAllVacancies } from "@/app/actions/vacancies";
@@ -119,12 +120,14 @@ export default function PipelinePage() {
   const [view, setView] = useState<"kanban" | "list">(getInitialView);
   const [apps, setApps] = useState<UnifiedApplication[]>([]);
   const [vacancies, setVacancies] = useState<SimpleVacancy[]>([]);
+  const [sourceNames, setSourceNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
   const [filterVacancyId, setFilterVacancyId] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSearch, setFilterSearch] = useState("");
+  const [filterSource, setFilterSource] = useState("all");
 
   // Persist view choice
   function handleViewChange(v: "kanban" | "list") {
@@ -135,9 +138,10 @@ export default function PipelinePage() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getAllPipelineApplications(), getAllVacancies()]).then(([a, v]) => {
+    Promise.all([getAllPipelineApplications(), getAllVacancies(), listAllSourceNames()]).then(([a, v, s]) => {
       setApps(a);
       setVacancies(v.map((vac) => ({ id: vac.id, title: vac.title })));
+      setSourceNames(s);
       setLoading(false);
     });
   }, [mode]);
@@ -183,6 +187,7 @@ export default function PipelinePage() {
   const filteredApps = apps.filter((a) => {
     if (filterVacancyId !== "all" && a.vacancyId !== filterVacancyId) return false;
     if (filterStatus !== "all" && a.status !== filterStatus) return false;
+    if (filterSource !== "all" && a.sourceName !== filterSource) return false;
     if (
       filterSearch &&
       !a.candidateName.toLowerCase().includes(filterSearch.toLowerCase())
@@ -269,6 +274,9 @@ export default function PipelinePage() {
           onStatusChange={setFilterStatus}
           search={filterSearch}
           onSearchChange={setFilterSearch}
+          sourceNames={sourceNames}
+          source={filterSource}
+          onSourceChange={setFilterSource}
         />
         <PipelineViewToggle view={view} onChange={handleViewChange} />
       </div>

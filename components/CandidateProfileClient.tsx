@@ -96,12 +96,14 @@ function ProfileContent({
   initialApplication,
   initialCandidate,
   initialTimeline,
+  sourceName,
 }: {
   applicationId: string;
   initialConversation: ConversationMessage[];
   initialApplication?: Application;
   initialCandidate?: Candidate;
   initialTimeline?: TimelineEvent[];
+  sourceName?: string | null;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -459,6 +461,7 @@ function ProfileContent({
               },
               { label: "Pipeline", value: `${daysAgo(application.appliedAt)}d` },
               { label: "Last seen", value: formatRelativeTime(application.lastActivityAt) },
+              ...(sourceName ? [{ label: "Source", value: sourceName }] : []),
             ].map(({ label, value }) => (
               <div key={label} className="flex items-start gap-2 mb-2 last:mb-0">
                 <span className="text-body-sm text-muted w-20 shrink-0">{label}</span>
@@ -1177,12 +1180,14 @@ export function CandidateProfileClient({
   initialApplication,
   initialCandidate,
   initialTimeline = [],
+  sourceName,
 }: {
   applicationId: string;
   initialConversation?: ConversationMessage[];
   initialApplication?: Application;
   initialCandidate?: Candidate;
   initialTimeline?: TimelineEvent[];
+  sourceName?: string | null;
 }) {
   return (
     <Suspense
@@ -1198,6 +1203,7 @@ export function CandidateProfileClient({
         initialApplication={initialApplication}
         initialCandidate={initialCandidate}
         initialTimeline={initialTimeline}
+        sourceName={sourceName}
       />
     </Suspense>
   );

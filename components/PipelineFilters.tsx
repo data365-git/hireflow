@@ -10,6 +10,9 @@ type Props = {
   onStatusChange: (s: string) => void;
   search: string;
   onSearchChange: (s: string) => void;
+  sourceNames?: string[];
+  source?: string;
+  onSourceChange?: (s: string) => void;
 };
 
 const STATUS_OPTIONS = [
@@ -29,6 +32,9 @@ export function PipelineFilters({
   onStatusChange,
   search,
   onSearchChange,
+  sourceNames,
+  source,
+  onSourceChange,
 }: Props) {
   return (
     <div className="flex items-center gap-2">
@@ -56,6 +62,21 @@ export function PipelineFilters({
           </option>
         ))}
       </select>
+
+      {sourceNames && sourceNames.length > 0 && onSourceChange && (
+        <select
+          value={source ?? "all"}
+          onChange={(e) => onSourceChange(e.target.value)}
+          className="h-8 px-2 rounded-md border border-border bg-surface text-body-sm text-text outline-none"
+        >
+          <option value="all">All sources</option>
+          {sourceNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      )}
 
       <div className="relative">
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-subtle pointer-events-none" />

@@ -22,6 +22,7 @@ type AppRow = {
     city: string;
     createdAt: Date;
   };
+  sourceName?: string | null;
 };
 
 interface Props {

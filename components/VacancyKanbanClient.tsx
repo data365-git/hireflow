@@ -8,6 +8,8 @@ import { ApplicationSearch } from "@/components/ApplicationSearch";
 import { formatSalary } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import { ExportModal } from "@/components/export/ExportModal";
+import { SourcesTab } from "@/components/vacancies/SourcesTab";
+import { getSourcePerformance, type SourcePerformanceRow } from "@/app/actions/sources";
 import type { ExportRow } from "@/lib/export/types";
 import type { TestTask } from "@/lib/types";
 
@@ -91,6 +93,7 @@ type DbAppRow = {
     city: string;
     createdAt: Date;
   };
+  sourceName?: string | null;
 };
 
 type Props = {
@@ -114,7 +117,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
   const timeline = useStore((s) => s.timeline);
   const messages = useStore((s) => s.messages);
 
-  const [activeTab, setActiveTab] = useState<"pipeline" | "tasks" | "automations" | "analytics">("pipeline");
+  const [activeTab, setActiveTab] = useState<"pipeline" | "tasks" | "automations" | "analytics" | "sources">("pipeline");
   const [filteredAppRows, setFilteredAppRows] = useState<typeof appRows>(appRows);
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
   const [batchMsgText, setBatchMsgText] = useState("");
@@ -124,6 +127,9 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
   const [taskDays, setTaskDays] = useState<number>(7);
+  const [sourceDays, setSourceDays] = useState<number>(30);
+  const [sourcePerf, setSourcePerf] = useState<SourcePerformanceRow[]>([]);
+  const [sourcePerfLoading, setSourcePerfLoading] = useState(false);
 
   const router = useRouter();
 
@@ -151,6 +157,15 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
     const timerId = setInterval(() => router.refresh(), 10_000);
     return () => clearInterval(timerId);
   }, [router]);
+
+  // Fetch source performance when analytics tab is active
+  useEffect(() => {
+    if (activeTab !== "analytics") return;
+    setSourcePerfLoading(true);
+    getSourcePerformance({ vacancyId: id, days: sourceDays })
+      .then((rows) => { setSourcePerf(rows); setSourcePerfLoading(false); })
+      .catch(() => setSourcePerfLoading(false));
+  }, [activeTab, id, sourceDays]);
 
   const hr = users.find((u) => u.id === vacancy.responsibleHrId);
   const total = appRows.length;
@@ -263,6 +278,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
             { id: "tasks", label: "Tasks", badge: testTasks.length || undefined },
             { id: "automations", label: "Automations", badge: automations.filter((a) => a.isEnabled).length || undefined },
             { id: "analytics", label: "Analytics", badge: undefined },
+            { id: "sources", label: "Sources", badge: undefined },
           ] as Array<{ id: typeof activeTab; label: string; badge: number | undefined }>
         ).map(({ id: tabId, label, badge }) => (
           <button
@@ -548,8 +564,73 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
                 </div>
               </div>
             </div>
+
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-body-sm font-semibold text-text">Source Performance</h3>
+                <div className="flex items-center gap-1 text-body-sm">
+                  {([7, 30, 90, 0] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSourceDays(d)}
+                      className={`px-2.5 py-1 rounded-md text-micro font-medium transition-colors ${
+                        sourceDays === d
+                          ? "bg-primary text-primary-fg"
+                          : "text-muted hover:text-text hover:bg-surface-2"
+                      }`}
+                    >
+                      {d === 0 ? "All" : `${d}d`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {sourcePerfLoading ? (
+                <p className="text-body-sm text-muted">Loading…</p>
+              ) : sourcePerf.length === 0 ? (
+                <p className="text-body-sm text-muted">
+                  No source data for this vacancy yet. Add sources in the Sources tab to start tracking.
+                </p>
+              ) : (
+                <div className="border border-border rounded-xl overflow-hidden">
+                  <table className="w-full text-body-sm">
+                    <thead>
+                      <tr className="bg-surface-2 border-b border-border">
+                        <th className="text-left px-3 py-2 font-medium text-muted">Source</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted">Views</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted">Submitted</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted">Sub %</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted">Hire %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sourcePerf.map((row, i) => {
+                        const subRate = row.total > 0 ? (row.submitted / row.total * 100).toFixed(1) : "0.0";
+                        return (
+                          <tr
+                            key={`${row.sourceId}-${row.vacancyId}`}
+                            className={`border-b border-border last:border-0 ${i % 2 === 1 ? "bg-surface-2" : ""}`}
+                          >
+                            <td className="px-3 py-2 font-medium text-text">{row.sourceName}</td>
+                            <td className="px-3 py-2 text-right text-muted">{row.total}</td>
+                            <td className="px-3 py-2 text-right text-muted">{row.submitted}</td>
+                            <td className="px-3 py-2 text-right text-muted">{subRate}%</td>
+                            <td className="px-3 py-2 text-right text-muted">—</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Sources tab */}
+      {activeTab === "sources" && (
+        <SourcesTab vacancyId={id} />
       )}
 
       <ExportModal

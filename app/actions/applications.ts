@@ -1,6 +1,6 @@
 "use server";
 import { db } from "@/lib/db/client";
-import { applications, candidates, vacancyStages, timelineEvents, screeningAnswers, screeningQuestions, vacancies } from "@/lib/db/schema";
+import { applications, candidates, vacancyStages, timelineEvents, screeningAnswers, screeningQuestions, vacancies, sources } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
@@ -20,6 +20,7 @@ export type PipelineApplication = {
   lastActivityAt: string;
   appliedAt: string;
   hasUnread: boolean;
+  sourceName: string | null;
 };
 
 export async function getPipelineApplications(): Promise<PipelineApplication[]> {
@@ -38,16 +39,19 @@ export async function getPipelineApplications(): Promise<PipelineApplication[]> 
       status: applications.status,
       lastActivityAt: applications.lastActivityAt,
       appliedAt: applications.appliedAt,
+      sourceName: sources.name,
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
     .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.status, "active")))
     .innerJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .leftJoin(sources, eq(applications.sourceId, sources.id))
     .orderBy(desc(applications.lastActivityAt));
 
   return rows.map((r) => ({
     ...r,
     hasUnread: false,
+    sourceName: r.sourceName ?? null,
     lastActivityAt: r.lastActivityAt?.toISOString() ?? new Date().toISOString(),
     appliedAt: r.appliedAt?.toISOString() ?? new Date().toISOString(),
   }));
@@ -56,14 +60,22 @@ export async function getPipelineApplications(): Promise<PipelineApplication[]> 
 export async function getApplicationsForVacancy(vacancyId: string) {
   await requirePermission("candidates", "read");
   const isDemo = await getCurrentDataMode();
-  return db
+  const rows = await db
     .select({
       application: applications,
       candidate: candidates,
+      sourceName: sources.name,
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .leftJoin(sources, eq(applications.sourceId, sources.id))
     .where(eq(applications.vacancyId, vacancyId));
+
+  return rows.map((r) => ({
+    application: r.application,
+    candidate: r.candidate,
+    sourceName: r.sourceName ?? null,
+  }));
 }
 
 export async function getApplicationFull(applicationId: string) {
@@ -73,9 +85,11 @@ export async function getApplicationFull(applicationId: string) {
     .select({
       application: applications,
       candidate: candidates,
+      sourceName: sources.name,
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .leftJoin(sources, eq(applications.sourceId, sources.id))
     .where(eq(applications.id, applicationId));
 
   if (!rows[0]) return null;
@@ -95,7 +109,7 @@ export async function getApplicationFull(applicationId: string) {
     .where(eq(timelineEvents.applicationId, applicationId))
     .orderBy(timelineEvents.createdAt);
 
-  return { ...rows[0], answers: rawAnswers, timeline };
+  return { ...rows[0], sourceName: rows[0].sourceName ?? null, answers: rawAnswers, timeline };
 }
 
 export type UnifiedApplication = {
@@ -112,6 +126,7 @@ export type UnifiedApplication = {
   hasUnread: boolean;
   appliedAt: string;
   lastActivityAt: string;
+  sourceName: string | null;
 };
 
 export async function getAllPipelineApplications(): Promise<UnifiedApplication[]> {
@@ -132,11 +147,13 @@ export async function getAllPipelineApplications(): Promise<UnifiedApplication[]
       status: applications.status,
       lastActivityAt: applications.lastActivityAt,
       appliedAt: applications.appliedAt,
+      sourceName: sources.name,
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
     .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .leftJoin(sources, eq(applications.sourceId, sources.id))
     .orderBy(desc(applications.lastActivityAt));
 
   return rows.map((r) => ({
@@ -146,6 +163,7 @@ export async function getAllPipelineApplications(): Promise<UnifiedApplication[]
     stageName: r.stageName ?? null,
     stageColor: r.stageColor ?? null,
     hasUnread: false,
+    sourceName: r.sourceName ?? null,
     lastActivityAt: r.lastActivityAt?.toISOString() ?? new Date().toISOString(),
     appliedAt: r.appliedAt?.toISOString() ?? new Date().toISOString(),
   }));
@@ -197,4 +215,13 @@ export async function moveApplicationToStage(applicationId: string, toStageId: s
   await fireStageEnteredAutomations(applicationId, toStageId, automationDepth).catch((err) => {
     console.error("Stage automation failed:", err);
   });
+}
+
+export async function listAllSourceNames(): Promise<string[]> {
+  await requirePermission("candidates", "read");
+  const rows = await db
+    .selectDistinct({ name: sources.name })
+    .from(sources)
+    .where(eq(sources.isArchived, false));
+  return rows.map((r) => r.name).filter(Boolean).sort();
 }

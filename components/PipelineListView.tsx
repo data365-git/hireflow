@@ -62,6 +62,9 @@ export function PipelineListView({ apps }: Props) {
               Status
             </th>
             <th className="px-4 py-2.5 text-micro font-semibold text-subtle uppercase tracking-wide">
+              Source
+            </th>
+            <th className="px-4 py-2.5 text-micro font-semibold text-subtle uppercase tracking-wide">
               Last activity
             </th>
             <th className="px-4 py-2.5 text-micro font-semibold text-subtle uppercase tracking-wide">
@@ -102,6 +105,15 @@ export function PipelineListView({ apps }: Props) {
               </td>
               <td className="px-4 py-3">
                 <StatusPill status={app.status} />
+              </td>
+              <td className="px-4 py-3">
+                {app.sourceName ? (
+                  <span className="inline-flex items-center text-micro text-muted bg-surface-2 rounded-full px-2 py-0.5">
+                    {app.sourceName}
+                  </span>
+                ) : (
+                  <span className="text-subtle">—</span>
+                )}
               </td>
               <td className="px-4 py-3 text-muted">
                 {formatRelativeTime(app.lastActivityAt)}
