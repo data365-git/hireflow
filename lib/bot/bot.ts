@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleText, handleCallbackQuery, handlePhoto, handleContact } from "./handlers";
+import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleBack, handleText, handleCallbackQuery, handlePhoto, handleContact } from "./handlers";
 import { persistenceMiddleware } from "./middleware";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -16,6 +16,7 @@ bot.command("jobs", handleJobs);
 bot.command("status", handleStatus);
 bot.command("help", handleHelp);
 bot.command("cancel", handleCancel);
+bot.command("back", handleBack);
 
 bot.on("callback_query:data", handleCallbackQuery);
 bot.on("message:photo", handlePhoto);

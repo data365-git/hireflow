@@ -99,6 +99,7 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     marital_married: "Married",
     marital_divorced: "Divorced",
     marital_other: "Other",
+    confirm_cancel: "Are you sure you want to cancel? Your progress will be lost.",
   },
   ru: {
     welcome_no_payload: "👋 Добро пожаловать в data365 HR!\nЯ помогу вам откликнуться на вакансии.",
@@ -191,6 +192,7 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     marital_married: "Женат/замужем",
     marital_divorced: "Разведён/разведена",
     marital_other: "Другое",
+    confirm_cancel: "Вы уверены, что хотите отменить? Прогресс будет потерян.",
   },
   uz: {
     welcome_no_payload: "👋 data365 HR botiga xush kelibsiz!\nMen sizga ish o'rinlariga murojaat qilishda yordam beraman.",
@@ -283,6 +285,7 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     marital_married: "Turmush qurgan",
     marital_divorced: "Ajrashgan",
     marital_other: "Boshqa",
+    confirm_cancel: "Haqiqatan ham bekor qilmoqchimisiz? Jarayoningiz yo'qoladi.",
   },
 };
 

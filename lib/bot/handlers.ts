@@ -30,6 +30,15 @@ const ANKETA_STATES = new Set([
   "awaiting_work_leave_reason",
 ]);
 
+async function clearSessionAndAbandon(telegramUserId: string, applicationId?: string | null) {
+  if (applicationId) {
+    await abandonApplication(applicationId).catch((err) => {
+      console.error("[clearSessionAndAbandon] abandonApplication failed:", err);
+    });
+  }
+  await clearBotSession(telegramUserId);
+}
+
 type WorkExperienceDraft = {
   company?: string;
   position?: string;
@@ -300,31 +309,48 @@ export async function handleCallbackQuery(ctx: Context) {
   if (data === "help") return handleHelp(ctx);
   if (data === "not_interested") {
     const session = await getBotSession(String(ctx.from!.id));
-    if (session?.applicationId) {
-      await abandonApplication(session.applicationId).catch((err) => {
-        console.error("[handleCallbackQuery] abandonApplication failed:", err);
-      });
-    }
-    await clearBotSession(String(ctx.from!.id));
+    await clearSessionAndAbandon(String(ctx.from!.id), session?.applicationId);
     return ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
   }
   if (data === "submit_confirm") return handleSubmitConfirm(ctx, lang);
   if (data === "submit_cancel") {
+    const kb = new InlineKeyboard()
+      .text(tr(lang, "btn_yes"), "submit_cancel_confirm").row()
+      .text(tr(lang, "btn_no"), "submit_cancel_abort");
+    return ctx.reply(tr(lang, "confirm_cancel"), { reply_markup: kb, parse_mode: "Markdown" });
+  }
+  if (data === "submit_cancel_confirm") {
     const session = await getBotSession(String(ctx.from!.id));
-    if (session?.applicationId) {
-      await abandonApplication(session.applicationId).catch((err) => {
-        console.error("[handleCallbackQuery] abandonApplication (submit_cancel) failed:", err);
-      });
-    }
-    await clearBotSession(String(ctx.from!.id));
+    await clearSessionAndAbandon(String(ctx.from!.id), session?.applicationId);
     return ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
+  }
+  if (data === "submit_cancel_abort") {
+    const session = await getBotSession(String(ctx.from!.id));
+    if (session?.vacancyId) {
+      const data2 = (session.collectedData as Record<string, unknown>) ?? {};
+      await showReview(ctx, session.vacancyId, data2, lang);
+    }
+    return;
   }
 }
 
 // ---- /jobs ----
 export async function handleJobs(ctx: Context) {
+  return showJobs(ctx, null);
+}
+
+export async function showJobs(ctx: Context, departmentId: string | null) {
   const lang = detectLang(ctx);
-  const activeVacancies = await db.select().from(vacancies).where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
+  let activeVacancies = await db.select().from(vacancies).where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
+
+  if (departmentId) {
+    const deptRows = await db.select().from(departments).where(eq(departments.id, departmentId));
+    const deptName = deptRows[0]?.name;
+    if (deptName) {
+      const filtered = activeVacancies.filter((v) => normalizeDepartmentName(v.department) === deptName);
+      if (filtered.length > 0) activeVacancies = filtered;
+    }
+  }
 
   if (!activeVacancies.length) {
     return ctx.reply(tr(lang, "no_jobs"), { parse_mode: "Markdown" });
@@ -387,12 +413,7 @@ export async function handleHelp(ctx: Context) {
 export async function handleCancel(ctx: Context) {
   const lang = detectLang(ctx);
   const session = await getBotSession(String(ctx.from!.id));
-  if (session?.applicationId) {
-    await abandonApplication(session.applicationId).catch((err) => {
-      console.error("[handleCancel] abandonApplication failed:", err);
-    });
-  }
-  await clearBotSession(String(ctx.from!.id));
+  await clearSessionAndAbandon(String(ctx.from!.id), session?.applicationId);
   await ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
 }
 
@@ -838,7 +859,7 @@ async function askDepartment(ctx: Context, lang: Lang) {
 
   if (rows.length === 0) {
     // No departments configured — end the flow gracefully instead of leaving user stuck
-    await clearBotSession(String(ctx.from!.id));
+    await clearSessionAndAbandon(String(ctx.from!.id), null);
     await ctx.reply(tr(lang, "back_later"), { parse_mode: "Markdown" });
     return;
   }
@@ -902,14 +923,17 @@ async function finishAnketa(ctx: Context, candidateId: string, lang: Lang, data:
   await db.update(candidates)
     .set({ profileCompleted: true })
     .where(eq(candidates.id, candidateId));
-  await clearBotSession(telegramUserId);
+  await clearSessionAndAbandon(telegramUserId, null);
   await ctx.reply(tr(lang, "profile_complete"), { parse_mode: "Markdown" });
 
   const pendingVacancyId = typeof data.pendingVacancyId === "string" ? data.pendingVacancyId : null;
   if (pendingVacancyId) {
     await startVacancyFlow(ctx, pendingVacancyId, lang);
   } else {
-    await handleJobs(ctx);
+    // B9: Route to jobs filtered by the candidate's chosen department
+    const candRows = await db.select().from(candidates).where(eq(candidates.id, candidateId));
+    const departmentId = candRows[0]?.departmentId ?? null;
+    await showJobs(ctx, departmentId);
   }
 }
 
@@ -1170,4 +1194,32 @@ export async function notifyCandidateStageChange(
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// ---- /back ----
+export async function handleBack(ctx: Context) {
+  const lang = detectLang(ctx);
+  const telegramUserId = String(ctx.from!.id);
+  const session = await getBotSession(telegramUserId);
+
+  if (!session || session.state === "complete") {
+    // No active session — show main menu
+    return handleStart(ctx);
+  }
+
+  // Re-prompt current step based on state
+  if (session.state === "awaiting_question" && session.vacancyId) {
+    const questions = await db.select().from(screeningQuestions)
+      .where(eq(screeningQuestions.vacancyId, session.vacancyId))
+      .orderBy(asc(screeningQuestions.orderIndex));
+    const qIdx = session.currentQuestionIndex ?? 0;
+    const q = questions[qIdx];
+    const totalSteps = ((session.collectedData as Record<string, unknown>)?.totalSteps as number) ?? 6;
+    if (q) {
+      return askQuestion(ctx, q, 3 + qIdx, totalSteps, lang);
+    }
+  }
+
+  // For all other states, re-send the current prompt
+  return ctx.reply(tr(lang, "session_timeout"), { parse_mode: "Markdown" });
 }
