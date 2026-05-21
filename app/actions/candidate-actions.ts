@@ -7,6 +7,7 @@ import {
   applicationWatches,
   applications,
   candidateBlacklist,
+  candidateFilterViews,
   candidateRelationships,
   candidates,
   departments,
@@ -717,4 +718,41 @@ export async function listFilterableDepartments(): Promise<string[]> {
     .where(eq(vacancies.isDemo, isDemo))
     .orderBy(asc(vacancies.department));
   return rows.map((r) => r.department);
+}
+
+// ─── Saved filter views ───────────────────────────────────────────────────────
+
+export async function listMyFilterViews(): Promise<Array<{ id: string; name: string; filters: Record<string, string> }>> {
+  const session = await requirePermission("candidates", "read");
+  const rows = await db
+    .select({
+      id: candidateFilterViews.id,
+      name: candidateFilterViews.name,
+      filters: candidateFilterViews.filters,
+    })
+    .from(candidateFilterViews)
+    .where(eq(candidateFilterViews.userId, session.sub))
+    .orderBy(asc(candidateFilterViews.name));
+  return rows as Array<{ id: string; name: string; filters: Record<string, string> }>;
+}
+
+export async function saveFilterView(input: { name: string; filters: Record<string, string> }): Promise<{ id: string }> {
+  const session = await requirePermission("candidates", "read");
+  const trimmed = input.name.trim().slice(0, 80);
+  if (!trimmed) throw new Error("Name is required");
+  const id = crypto.randomUUID();
+  await db.insert(candidateFilterViews).values({
+    id,
+    userId: session.sub,
+    name: trimmed,
+    filters: input.filters,
+  });
+  return { id };
+}
+
+export async function deleteFilterView(id: string): Promise<void> {
+  const session = await requirePermission("candidates", "read");
+  await db
+    .delete(candidateFilterViews)
+    .where(and(eq(candidateFilterViews.id, id), eq(candidateFilterViews.userId, session.sub)));
 }

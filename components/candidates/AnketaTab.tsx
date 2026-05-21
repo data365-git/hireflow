@@ -3,6 +3,27 @@ import { useState } from "react";
 import { CandidatePhoto } from "@/components/candidates/CandidatePhoto";
 import type { Candidate, Application } from "@/lib/types";
 
+function LangDots({ level }: { level: string | null | undefined }) {
+  const map: Record<string, number> = {
+    none: 0,
+    a1_a2: 2,
+    b1_b2: 3,
+    c1_c2: 4,
+    native: 5,
+  };
+  const filled = level ? (map[level] ?? 0) : 0;
+  return (
+    <span className="inline-flex gap-0.5 ml-2 align-middle">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span
+          key={i}
+          className={`w-1.5 h-1.5 rounded-full ${i <= filled ? "bg-primary" : "bg-surface-2"}`}
+        />
+      ))}
+    </span>
+  );
+}
+
 type WorkEntry = {
   company?: string;
   position?: string;
@@ -106,6 +127,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function AnketaTab({ data }: Props) {
   const { candidate: cand, application: app } = data;
   const [motExpanded, setMotExpanded] = useState(false);
+  const [view, setView] = useState<"detailed" | "compact">("detailed");
 
   const portfolioLinks = (app as AnketaData["application"]).portfolioLinks ?? [];
   const motivationLetter = (app as AnketaData["application"]).motivationLetter ?? null;
@@ -150,6 +172,47 @@ export function AnketaTab({ data }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* ── Tab header: consent badge + compact toggle ── */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          {consentedAt ? (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
+              🟢 Consented · {formatConsentDate(consentedAt)}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              ⏳ Awaiting consent
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/candidates/${app.id}/print`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            📄 Download as PDF
+          </a>
+          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setView("compact")}
+              className={`px-3 py-1 rounded-md transition ${view === "compact" ? "bg-surface-2 text-text" : "text-muted hover:text-text"}`}
+            >
+              Compact
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("detailed")}
+              className={`px-3 py-1 rounded-md transition ${view === "detailed" ? "bg-surface-2 text-text" : "text-muted hover:text-text"}`}
+            >
+              Detailed
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ── Personal ── */}
       {hasPersonal && (
         <Section title="Personal">
@@ -197,14 +260,27 @@ export function AnketaTab({ data }: Props) {
             label="Year"
             value={studyYear ? (STUDY_YEAR_LABELS[studyYear] ?? studyYear) : null}
           />
-          <Row
-            label="English"
-            value={cand.englishLevel ? (LANG_LEVEL_LABELS[cand.englishLevel] ?? cand.englishLevel) : null}
-          />
-          <Row
-            label="Russian"
-            value={cand.russianLevel ? (LANG_LEVEL_LABELS[cand.russianLevel] ?? cand.russianLevel) : null}
-          />
+          {(cand.englishLevel || cand.russianLevel) && (
+            <div className="flex gap-3 py-1.5 border-b border-border last:border-0">
+              <span className="text-body-sm text-muted w-36 shrink-0">Languages</span>
+              <div className="text-body-sm text-text font-medium space-y-1">
+                {cand.englishLevel && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted font-normal">English:</span>{" "}
+                    <span>{LANG_LEVEL_LABELS[cand.englishLevel] ?? cand.englishLevel}</span>
+                    <LangDots level={cand.englishLevel} />
+                  </div>
+                )}
+                {cand.russianLevel && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted font-normal">Russian:</span>{" "}
+                    <span>{LANG_LEVEL_LABELS[cand.russianLevel] ?? cand.russianLevel}</span>
+                    <LangDots level={cand.russianLevel} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </Section>
       )}
 
@@ -238,7 +314,7 @@ export function AnketaTab({ data }: Props) {
       )}
 
       {/* ── This application ── */}
-      {hasApplication && (
+      {hasApplication && view === "detailed" && (
         <Section title="This application">
           {portfolioLinks.length > 0 && (
             <div className="mb-3">

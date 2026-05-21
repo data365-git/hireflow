@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { listMyFilterViews, saveFilterView, deleteFilterView } from "@/app/actions/candidate-actions";
 
 type Props = {
   vacancies: { id: string; title: string }[];
   stages: { id: string; name: string; vacancyTitle: string }[];
   departments: string[];
 };
+
+type FilterView = { id: string; name: string; filters: Record<string, string> };
 
 const LANG_LEVELS = [
   { value: "", label: "Any level" },
@@ -26,6 +29,8 @@ const MARITAL_OPTIONS = [
   { value: "other", label: "Other" },
 ];
 
+const FILTER_KEYS = ["q", "vacancyId", "stageId", "department", "englishMin", "russianMin", "marital"] as const;
+
 export function CandidateFilterBar({ vacancies, stages, departments }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -34,10 +39,34 @@ export function CandidateFilterBar({ vacancies, stages, departments }: Props) {
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Views state
+  const [views, setViews] = useState<FilterView[]>([]);
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const viewsRef = useRef<HTMLDivElement>(null);
+
   // Sync q input when URL changes externally (e.g. browser back)
   useEffect(() => {
     setQ(searchParams.get("q") ?? "");
   }, [searchParams]);
+
+  // Load saved views on mount
+  useEffect(() => {
+    listMyFilterViews().then(setViews).catch(() => {});
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!viewsOpen) return;
+    function onOutside(e: MouseEvent) {
+      if (viewsRef.current && !viewsRef.current.contains(e.target as Node)) {
+        setViewsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [viewsOpen]);
 
   function buildParams(overrides: Record<string, string>) {
     const next = new URLSearchParams(searchParams.toString());
@@ -66,6 +95,41 @@ export function CandidateFilterBar({ vacancies, stages, departments }: Props) {
   function handleClear() {
     setQ("");
     router.replace(pathname);
+  }
+
+  function applyView(view: FilterView) {
+    const next = new URLSearchParams();
+    for (const key of FILTER_KEYS) {
+      const val = view.filters[key];
+      if (val) next.set(key, val);
+    }
+    setQ(view.filters.q ?? "");
+    router.replace(`${pathname}?${next.toString()}`);
+    setViewsOpen(false);
+  }
+
+  async function handleSave() {
+    const name = saveName.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      const currentFilters: Record<string, string> = {};
+      for (const key of FILTER_KEYS) {
+        const val = key === "q" ? q : (searchParams.get(key) ?? "");
+        if (val) currentFilters[key] = val;
+      }
+      await saveFilterView({ name, filters: currentFilters });
+      const updated = await listMyFilterViews();
+      setViews(updated);
+      setSaveName("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    await deleteFilterView(id);
+    setViews((prev) => prev.filter((v) => v.id !== id));
   }
 
   const hasFilters =
@@ -182,6 +246,76 @@ export function CandidateFilterBar({ vacancies, stages, departments }: Props) {
           Clear
         </button>
       )}
+
+      {/* Views dropdown */}
+      <div className="relative" ref={viewsRef}>
+        <button
+          type="button"
+          onClick={() => setViewsOpen((o) => !o)}
+          className="h-9 px-3 rounded-lg border border-border bg-surface text-body-sm text-text hover:bg-surface-2 transition-colors flex items-center gap-1"
+        >
+          Views
+          <span className="text-xs text-muted">▾</span>
+        </button>
+
+        {viewsOpen && (
+          <div className="absolute right-0 top-10 z-20 w-64 rounded-lg border border-border bg-surface shadow-lg">
+            {/* Saved views list */}
+            {views.length === 0 ? (
+              <p className="px-3 py-2 text-body-sm text-muted">No saved views</p>
+            ) : (
+              <ul className="max-h-48 overflow-y-auto">
+                {views.map((view) => (
+                  <li
+                    key={view.id}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-surface-2 group"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => applyView(view)}
+                      className="flex-1 text-left text-body-sm text-text truncate"
+                    >
+                      {view.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(view.id)}
+                      className="text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity text-xs px-1"
+                      aria-label={`Delete view "${view.name}"`}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Divider */}
+            <div className="border-t border-border" />
+
+            {/* Save current filters */}
+            <div className="p-2 flex gap-1">
+              <input
+                type="text"
+                placeholder="View name…"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+                maxLength={80}
+                className="h-8 flex-1 rounded-md border border-border bg-canvas px-2 text-body-sm text-text placeholder:text-subtle focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !saveName.trim()}
+                className="h-8 px-2 rounded-md bg-primary text-white text-body-sm disabled:opacity-40 hover:opacity-90 transition-opacity"
+              >
+                {saving ? "…" : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -458,6 +458,16 @@ export const feedback = pgTable("feedback", {
   vacancyIdx: index("feedback_vacancy_idx").on(t.vacancyId),
 }));
 
+// ─── Candidate Filter Views ───────────────────────────────────────────────────
+
+export const candidateFilterViews = pgTable("candidate_filter_views", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  filters: jsonb("filters").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Backup Runs ──────────────────────────────────────────────────────────────
 
 export const backupRuns = pgTable("backup_runs", {
