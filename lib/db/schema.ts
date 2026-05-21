@@ -118,6 +118,13 @@ export const candidates = pgTable("candidates", {
   profileCompleted: boolean("profile_completed").notNull().default(false),
   isBlacklisted: boolean("is_blacklisted").notNull().default(false),
   languagePref: text("language_pref"), // "ru" | "uz" | "en"
+  photoFileId: text("photo_file_id"),
+  photoUrl: text("photo_url"),
+  consentedAt: timestamp("consented_at", { withTimezone: true }),
+  consentVersion: text("consent_version"),
+  educationInstitution: text("education_institution"),
+  studyForm: text("study_form"),
+  studyYear: text("study_year"),
 });
 
 // ─── Applications ─────────────────────────────────────────────────────────────
@@ -131,6 +138,8 @@ export const applications = pgTable("applications", {
   lastActivityAt: timestamp("last_activity_at").notNull(),
   status: text("status").notNull().default("submitted"), // "in_progress" | "submitted" | "abandoned"
   sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
+  motivationLetter: text("motivation_letter"),
+  portfolioLinks: jsonb("portfolio_links").$type<string[]>(),
 });
 
 // ─── Screening Answers ────────────────────────────────────────────────────────

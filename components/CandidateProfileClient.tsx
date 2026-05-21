@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Dialog } from "@/components/ui/Dialog";
 import { KbdHint } from "@/components/ui/KbdHint";
 import { CandidateActionControls } from "@/components/candidates/CandidateActionControls";
+import { AnketaTab } from "@/components/candidates/AnketaTab";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { formatRelativeTime, daysAgo } from "@/lib/utils";
 import type { Application, Candidate, TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent, Source } from "@/lib/types";
@@ -695,43 +696,7 @@ function ProfileContent({
                     Edit anketa
                   </button>
                 </div>
-
-                <div className="bg-surface border border-border rounded-xl p-4">
-                  <h3 className="text-body-sm font-semibold text-text mb-3">Personal info</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <ProfileRow label="Full name" value={candidate.fullName} />
-                    <ProfileRow label="Date of birth" value={formatDateValue(candidate.dateOfBirth)} />
-                    <ProfileRow label="Address" value={candidate.address} />
-                    <ProfileRow label="Phone" value={candidate.phone} />
-                    <ProfileRow label="Marital status" value={formatValue(candidate.maritalStatus)} />
-                    <ProfileRow label="Student" value={candidate.isStudent == null ? null : candidate.isStudent ? "Yes" : "No"} />
-                    <ProfileRow label="Education" value={candidate.educationField} />
-                    <ProfileRow label="English" value={formatLanguageLevel(candidate.englishLevel)} />
-                    <ProfileRow label="Russian" value={formatLanguageLevel(candidate.russianLevel)} />
-                    <ProfileRow label="Language" value={(candidate.languagePref ?? candidate.language)?.toUpperCase()} />
-                    <ProfileRow label="Department" value={candidate.departmentId} />
-                  </div>
-                </div>
-
-                <div className="bg-surface border border-border rounded-xl p-4">
-                  <h3 className="text-body-sm font-semibold text-text mb-3">Work experience</h3>
-                  {candidate.workExperience?.length ? (
-                    <div className="space-y-3">
-                      {candidate.workExperience.map((exp, index) => (
-                        <div key={`${exp.company ?? "experience"}-${index}`} className="rounded-lg border border-border bg-bg p-3">
-                          <p className="text-body-sm font-semibold text-text">{exp.position || "Position not recorded"}</p>
-                          <p className="text-body-sm text-muted">{exp.company || "Company not recorded"}</p>
-                          <p className="text-micro text-subtle mt-1">{exp.period || "Period not recorded"}</p>
-                          {exp.leaveReason && (
-                            <p className="text-body-sm text-text mt-2">{exp.leaveReason}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="No work experience recorded" description="This candidate did not add work history in the bot anketa." />
-                  )}
-                </div>
+                <AnketaTab data={{ candidate, application }} />
               </div>
             )}
 

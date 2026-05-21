@@ -35,6 +35,9 @@ export default async function CandidateProfilePage({ params }: { params: Promise
           status: data.application.status as Application["status"],
           appliedAt: data.application.appliedAt.toISOString(),
           lastActivityAt: data.application.lastActivityAt.toISOString(),
+          // New anketa v2 fields
+          ...(data.application.motivationLetter != null && { motivationLetter: data.application.motivationLetter }),
+          ...(data.application.portfolioLinks != null && { portfolioLinks: data.application.portfolioLinks }),
         }}
         initialCandidate={{
           id: data.candidate.id,
@@ -57,6 +60,14 @@ export default async function CandidateProfilePage({ params }: { params: Promise
           profileCompleted: data.candidate.profileCompleted,
           isBlacklisted: data.candidate.isBlacklisted,
           languagePref: data.candidate.languagePref as "uz" | "en" | "ru" | null,
+          // New anketa v2 fields
+          ...(data.candidate.photoFileId != null && { photoFileId: data.candidate.photoFileId }),
+          ...(data.candidate.photoUrl != null && { photoUrl: data.candidate.photoUrl }),
+          ...(data.candidate.consentedAt != null && { consentedAt: data.candidate.consentedAt.toISOString() }),
+          ...(data.candidate.consentVersion != null && { consentVersion: data.candidate.consentVersion }),
+          ...(data.candidate.educationInstitution != null && { educationInstitution: data.candidate.educationInstitution }),
+          ...(data.candidate.studyForm != null && { studyForm: data.candidate.studyForm }),
+          ...(data.candidate.studyYear != null && { studyYear: data.candidate.studyYear }),
         }}
         initialTimeline={data.timeline.map((event) => ({
           ...event,

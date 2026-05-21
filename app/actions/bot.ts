@@ -33,6 +33,7 @@ export async function createApplicationFromBot(args: {
         telegramUsername: args.telegramUsername ?? existing[0].telegramUsername,
         telegramFirstName: args.telegramFirstName,
         fullName: args.fullName,
+        isDemo: false,
         // Store email in phone field if provided and phone is empty
         ...(args.email && !existing[0].phone ? { phone: args.email } : {}),
       })
@@ -149,6 +150,7 @@ export async function upsertCandidateFromTelegram(args: {
       .set({
         telegramUsername: args.telegramUsername ?? existing[0].telegramUsername,
         telegramFirstName: args.telegramFirstName,
+        isDemo: false,
       })
       .where(eq(candidates.id, existing[0].id));
     return existing[0].id;
@@ -374,6 +376,23 @@ export async function saveScreeningAnswerLive(args: {
   });
 }
 
+async function notifyHrOfSubmitFailure(
+  err: unknown,
+  ctx: { telegramUserId?: string; vacancyTitle?: string }
+): Promise<void> {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.HR_NOTIFICATION_CHAT_ID;
+    if (!token || !chatId) return;
+    const msg = `❌ Bot submission failed\n\nUser: ${ctx.telegramUserId ?? "?"}\nVacancy: ${ctx.vacancyTitle ?? "?"}\n\nError:\n\`\`\`\n${String(err).slice(0, 500)}\n\`\`\``;
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" }),
+    });
+  } catch {}
+}
+
 export async function submitApplication(applicationId: string): Promise<void> {
   const appRows = await db
     .select()
@@ -381,6 +400,20 @@ export async function submitApplication(applicationId: string): Promise<void> {
     .where(eq(applications.id, applicationId));
   const app = appRows[0];
   if (!app) return;
+
+  // Fetch vacancy title for HR error notifications
+  const vacRows = await db
+    .select({ title: vacancies.title })
+    .from(vacancies)
+    .where(eq(vacancies.id, app.vacancyId));
+  const vacancyTitle = vacRows[0]?.title;
+
+  // Fetch telegramUserId for HR error notifications
+  const candRows = await db
+    .select({ telegramUserId: candidates.telegramUserId })
+    .from(candidates)
+    .where(eq(candidates.id, app.candidateId));
+  const telegramUserId = candRows[0]?.telegramUserId ?? undefined;
 
   // Find the stage after Pre-screening (orderIndex 1)
   const stages = await db
@@ -392,28 +425,36 @@ export async function submitApplication(applicationId: string): Promise<void> {
   const nextStage = stages.find((s) => s.orderIndex === 1) ?? stages[1];
   const targetStageId = nextStage ? nextStage.id : app.currentStageId;
 
-  await db
-    .update(applications)
-    .set({ status: "submitted", currentStageId: targetStageId, lastActivityAt: new Date() })
-    .where(eq(applications.id, applicationId));
+  try {
+    await db
+      .update(applications)
+      .set({ status: "submitted", currentStageId: targetStageId, lastActivityAt: new Date() })
+      .where(eq(applications.id, applicationId));
 
-  await db.insert(timelineEvents).values({
-    id: crypto.randomUUID(),
-    applicationId,
-    type: "application_completed",
-    description: "Application submitted via Telegram",
-    createdAt: new Date(),
-  });
+    await db.insert(timelineEvents).values({
+      id: crypto.randomUUID(),
+      applicationId,
+      type: "application_completed",
+      description: "Application submitted via Telegram",
+      createdAt: new Date(),
+    });
 
-  revalidatePath(`/vacancies/${app.vacancyId}`);
-  revalidatePath(`/candidates/${applicationId}`);
+    revalidatePath(`/vacancies/${app.vacancyId}`);
+    revalidatePath(`/candidates/${applicationId}`);
+  } catch (err) {
+    console.error("submitApplication DB write failed:", err);
+    await notifyHrOfSubmitFailure(err, { telegramUserId, vacancyTitle });
+    throw err;
+  }
 
   await notifyCandidateOfStageChange(applicationId).catch((err) => {
     console.error("Submit notification failed:", err);
+    notifyHrOfSubmitFailure(err, { telegramUserId, vacancyTitle }).catch(() => {});
   });
 
   await fireApplicationSubmittedAutomations(applicationId).catch((err) => {
     console.error("Application submission automation failed:", err);
+    notifyHrOfSubmitFailure(err, { telegramUserId, vacancyTitle }).catch(() => {});
   });
 }
 
@@ -424,6 +465,8 @@ export async function finalizeApplicationDetails(args: {
   notes?: string;
   cvFileId?: string;
   cvFilename?: string;
+  motivationLetter?: string;
+  portfolioLinks?: string[];
 }): Promise<void> {
   // Resolve candidateId from the application
   const appRows = await db
@@ -447,6 +490,18 @@ export async function finalizeApplicationDetails(args: {
   }
   await db.update(candidates).set(updateSet).where(eq(candidates.id, cand.id));
 
+  // Update application with new fields if provided
+  const appUpdateSet: Record<string, unknown> = {};
+  if (args.motivationLetter !== undefined) {
+    appUpdateSet.motivationLetter = args.motivationLetter;
+  }
+  if (args.portfolioLinks !== undefined) {
+    appUpdateSet.portfolioLinks = args.portfolioLinks;
+  }
+  if (Object.keys(appUpdateSet).length > 0) {
+    await db.update(applications).set(appUpdateSet).where(eq(applications.id, args.applicationId));
+  }
+
   // CV and notes go to timeline events
   if (args.cvFileId) {
     await db.insert(timelineEvents).values({
@@ -466,6 +521,26 @@ export async function finalizeApplicationDetails(args: {
       createdAt: new Date(),
     });
   }
+}
+
+export async function setCandidatePhotoFileId(opts: {
+  candidateId: string;
+  photoFileId: string;
+}): Promise<void> {
+  await db
+    .update(candidates)
+    .set({ photoFileId: opts.photoFileId })
+    .where(eq(candidates.id, opts.candidateId));
+}
+
+export async function recordConsent(opts: {
+  candidateId: string;
+  version: string;
+}): Promise<void> {
+  await db
+    .update(candidates)
+    .set({ consentedAt: new Date(), consentVersion: opts.version })
+    .where(eq(candidates.id, opts.candidateId));
 }
 
 export async function abandonApplication(applicationId: string): Promise<void> {
