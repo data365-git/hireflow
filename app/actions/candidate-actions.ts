@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, or } from "drizzle-orm";
+import { and, asc, desc, eq, or, ilike, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   applicationWatches,
@@ -13,6 +13,7 @@ import {
   type WorkExperienceEntry,
   vacancies,
   vacancyStages,
+  sources,
 } from "@/lib/db/schema";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { HttpError } from "@/lib/auth/session";
@@ -540,4 +541,180 @@ export async function removeCandidateRelationship(relationshipId: string) {
   const applicationIds = await getApplicationIdsForCandidate(relationship.candidateAId);
   revalidateCandidateSurfaces();
   applicationIds.forEach((application) => revalidatePath(`/candidates/${application.id}`));
+}
+
+// ─── Search / filter types ────────────────────────────────────────────────────
+
+export type LangLevel = "none" | "a1_a2" | "b1_b2" | "c1_c2" | "native";
+export type MaritalStatus = "single" | "married" | "divorced" | "other";
+
+export type CandidateSearchFilters = {
+  q?: string;
+  vacancyId?: string;
+  stageId?: string;
+  department?: string;
+  englishMin?: LangLevel;
+  russianMin?: LangLevel;
+  maritalStatus?: MaritalStatus;
+};
+
+export type CandidateSearchRow = {
+  candidateId: string;
+  fullName: string;
+  phone: string | null;
+  telegramUsername: string | null;
+  photoFileId: string | null;
+  englishLevel: string | null;
+  russianLevel: string | null;
+  applicationId: string | null;
+  vacancyId: string | null;
+  vacancyTitle: string | null;
+  stageName: string | null;
+  appliedAt: string | null;
+  sourceName: string | null;
+};
+
+const LEVEL_AT_LEAST: Record<LangLevel, LangLevel[]> = {
+  none: ["none", "a1_a2", "b1_b2", "c1_c2", "native"],
+  a1_a2: ["a1_a2", "b1_b2", "c1_c2", "native"],
+  b1_b2: ["b1_b2", "c1_c2", "native"],
+  c1_c2: ["c1_c2", "native"],
+  native: ["native"],
+};
+
+export async function searchCandidates(
+  filters: CandidateSearchFilters,
+): Promise<CandidateSearchRow[]> {
+  await requirePermission("candidates", "read");
+  const isDemo = await getCurrentDataMode();
+
+  const candidateConditions = [eq(candidates.isDemo, isDemo)];
+
+  if (filters.q) {
+    const like = `%${filters.q}%`;
+    candidateConditions.push(
+      or(
+        ilike(candidates.fullName, like),
+        ilike(candidates.phone, like),
+        ilike(candidates.telegramUsername, like),
+      )!,
+    );
+  }
+
+  if (filters.englishMin) {
+    candidateConditions.push(inArray(candidates.englishLevel, LEVEL_AT_LEAST[filters.englishMin]));
+  }
+
+  if (filters.russianMin) {
+    candidateConditions.push(inArray(candidates.russianLevel, LEVEL_AT_LEAST[filters.russianMin]));
+  }
+
+  if (filters.maritalStatus) {
+    candidateConditions.push(eq(candidates.maritalStatus, filters.maritalStatus));
+  }
+
+  const appConditions: Parameters<typeof and>[0][] = [];
+  if (filters.vacancyId) {
+    appConditions.push(eq(applications.vacancyId, filters.vacancyId));
+  }
+  if (filters.stageId) {
+    appConditions.push(eq(applications.currentStageId, filters.stageId));
+  }
+  if (filters.department) {
+    appConditions.push(eq(vacancies.department, filters.department));
+  }
+
+  const rows = await db
+    .select({
+      candidateId: candidates.id,
+      fullName: candidates.fullName,
+      phone: candidates.phone,
+      telegramUsername: candidates.telegramUsername,
+      photoFileId: candidates.photoFileId,
+      englishLevel: candidates.englishLevel,
+      russianLevel: candidates.russianLevel,
+      applicationId: applications.id,
+      vacancyId: vacancies.id,
+      vacancyTitle: vacancies.title,
+      stageName: vacancyStages.name,
+      appliedAt: applications.appliedAt,
+      sourceName: sources.name,
+    })
+    .from(candidates)
+    .leftJoin(applications, eq(applications.candidateId, candidates.id))
+    .leftJoin(
+      vacancies,
+      and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)),
+    )
+    .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .leftJoin(sources, eq(applications.sourceId, sources.id))
+    .where(and(...candidateConditions, ...appConditions))
+    .orderBy(desc(applications.appliedAt));
+
+  // Dedupe: keep most-recent application per candidate (already ordered desc)
+  const seen = new Set<string>();
+  const deduped: CandidateSearchRow[] = [];
+  for (const row of rows) {
+    if (seen.has(row.candidateId)) continue;
+    seen.add(row.candidateId);
+    deduped.push({
+      candidateId: row.candidateId,
+      fullName: row.fullName,
+      phone: row.phone ?? null,
+      telegramUsername: row.telegramUsername ?? null,
+      photoFileId: row.photoFileId ?? null,
+      englishLevel: row.englishLevel ?? null,
+      russianLevel: row.russianLevel ?? null,
+      applicationId: row.applicationId ?? null,
+      vacancyId: row.vacancyId ?? null,
+      vacancyTitle: row.vacancyTitle ?? null,
+      stageName: row.stageName ?? null,
+      appliedAt: row.appliedAt ? row.appliedAt.toISOString() : null,
+      sourceName: row.sourceName ?? null,
+    });
+    if (deduped.length >= 200) break;
+  }
+  return deduped;
+}
+
+// ─── Filter option helpers ────────────────────────────────────────────────────
+
+export async function listFilterableVacancies(): Promise<{ id: string; title: string }[]> {
+  await requirePermission("candidates", "read");
+  const isDemo = await getCurrentDataMode();
+  return db
+    .select({ id: vacancies.id, title: vacancies.title })
+    .from(vacancies)
+    .where(eq(vacancies.isDemo, isDemo))
+    .orderBy(asc(vacancies.title));
+}
+
+export async function listFilterableStages(): Promise<
+  { id: string; name: string; vacancyTitle: string }[]
+> {
+  await requirePermission("candidates", "read");
+  const isDemo = await getCurrentDataMode();
+  return db
+    .select({
+      id: vacancyStages.id,
+      name: vacancyStages.name,
+      vacancyTitle: vacancies.title,
+    })
+    .from(vacancyStages)
+    .innerJoin(
+      vacancies,
+      and(eq(vacancyStages.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)),
+    )
+    .orderBy(asc(vacancies.title), asc(vacancyStages.orderIndex));
+}
+
+export async function listFilterableDepartments(): Promise<string[]> {
+  await requirePermission("candidates", "read");
+  const isDemo = await getCurrentDataMode();
+  const rows = await db
+    .selectDistinct({ department: vacancies.department })
+    .from(vacancies)
+    .where(eq(vacancies.isDemo, isDemo))
+    .orderBy(asc(vacancies.department));
+  return rows.map((r) => r.department);
 }

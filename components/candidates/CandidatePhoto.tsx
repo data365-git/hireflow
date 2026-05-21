@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getCandidatePhotoUrl } from "@/app/actions/telegram-files";
 import { hashColor, initials } from "@/lib/utils";
 
@@ -17,6 +17,7 @@ const sizeMap = {
 
 export function CandidatePhoto({ candidateId, candidateName, size = "md" }: Props) {
   const [photoUrl, setPhotoUrl] = useState<string | null | undefined>(undefined);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,6 +26,15 @@ export function CandidatePhoto({ candidateId, candidateName, size = "md" }: Prop
     });
     return () => { cancelled = true; };
   }, [candidateId]);
+
+  const closeLightbox = useCallback(() => setLightboxOpen(false), []);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeLightbox(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightboxOpen, closeLightbox]);
 
   const { className } = sizeMap[size];
   const baseClass = `${className} rounded-lg object-cover shrink-0`;
@@ -42,14 +52,45 @@ export function CandidatePhoto({ candidateId, candidateName, size = "md" }: Prop
   // Photo loaded
   if (photoUrl) {
     return (
-      <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photoUrl}
-          alt={candidateName}
-          className={`${baseClass} hover:opacity-90 transition-opacity`}
-        />
-      </a>
+      <>
+        <button
+          type="button"
+          onClick={() => setLightboxOpen(true)}
+          className="block shrink-0 cursor-zoom-in"
+          aria-label={`View ${candidateName} photo full size`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photoUrl}
+            alt={candidateName}
+            className={`${baseClass} hover:opacity-90 transition-opacity`}
+          />
+        </button>
+        {lightboxOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+            onClick={closeLightbox}
+            role="dialog"
+            aria-modal="true"
+          >
+            <button
+              type="button"
+              onClick={closeLightbox}
+              className="absolute top-4 right-4 text-white/80 hover:text-white text-2xl leading-none w-10 h-10 flex items-center justify-center rounded-full bg-black/30"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photoUrl}
+              alt={candidateName}
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
+      </>
     );
   }
 

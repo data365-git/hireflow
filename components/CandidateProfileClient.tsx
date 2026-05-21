@@ -113,7 +113,8 @@ function ProfileContent({
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const initialTab = (searchParams.get("tab") as Tab) ?? "activity";
+  const urlTab = searchParams.get("tab") as Tab | null;
+  const initialTab: Tab = urlTab ?? (initialCandidate?.profileCompleted ? "anketa" : "activity");
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [chatInput, setChatInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
@@ -416,8 +417,8 @@ function ProfileContent({
   }
 
   const TABS: { id: Tab; label: string; badge?: number }[] = [
-    { id: "activity", label: "Activity" },
     { id: "anketa", label: "Anketa", badge: candidate?.profileCompleted ? 1 : undefined },
+    { id: "activity", label: "Activity" },
     { id: "chat", label: "Chat", badge: unreadCount > 0 ? unreadCount : undefined },
     { id: "conversation", label: "Conversation", badge: initialConversation.length > 0 ? initialConversation.length : undefined },
     { id: "notes", label: "Notes", badge: notes.length > 0 ? notes.length : undefined },
