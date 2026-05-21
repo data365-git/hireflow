@@ -22,6 +22,7 @@ type Props = {
   filterStale: boolean;
   nextStageConversion?: number;
   staleCount: number;
+  onDeleteApplication?: (appId: string) => void;
 };
 
 export function KanbanColumn({
@@ -39,6 +40,7 @@ export function KanbanColumn({
   filterStale,
   nextStageConversion,
   staleCount,
+  onDeleteApplication,
 }: Props) {
   const router = useRouter();
   const getCandidateForApplicationStore = useStore(s => s.getCandidateForApplication);
@@ -163,6 +165,7 @@ export function KanbanColumn({
                 }}
                 selected={selectedAppIds.has(app.id)}
                 onToggleSelect={() => onToggleSelect(app.id)}
+                onDelete={onDeleteApplication ? () => onDeleteApplication(app.id) : undefined}
                 applicationRank={applicationRankMap.get(app.id)}
               />
             );

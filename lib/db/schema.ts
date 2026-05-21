@@ -28,6 +28,7 @@ export const users = pgTable("users", {
   deactivationReason: text("deactivation_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  telegramUserId: text("telegram_user_id").unique(),
 });
 
 // ─── Vacancies ────────────────────────────────────────────────────────────────

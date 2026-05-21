@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, ShieldAlert, Star, Trash2, X } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import {
   addCandidateRelationship,
   addCandidateToBlacklist,
@@ -28,6 +29,7 @@ type Props = {
   initialBlacklistReason?: string | null;
   compact?: boolean;
   showRelationships?: boolean;
+  onDelete?: () => void;
 };
 
 const RELATIONSHIP_TYPES: Array<{ value: RelationshipType; label: string }> = [
@@ -46,8 +48,11 @@ export function CandidateActionControls({
   initialBlacklistReason,
   compact = false,
   showRelationships = false,
+  onDelete,
 }: Props) {
   const router = useRouter();
+  const { hasPermission } = useAuth();
+  const canDelete = hasPermission("candidates", "delete");
   const [pending, startTransition] = useTransition();
   const [isWatched, setIsWatched] = useState(initialIsWatched);
   const [isBlacklisted, setIsBlacklisted] = useState(initialIsBlacklisted);
@@ -212,6 +217,19 @@ export function CandidateActionControls({
         >
           <ShieldAlert className="size-4" />
           {!compact && <span>Blacklist</span>}
+        </button>
+      )}
+
+      {canDelete && onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={pending}
+          title="Delete this application"
+          className={`${buttonClass} inline-flex items-center gap-2 text-muted hover:text-danger hover:bg-danger-soft transition-colors disabled:opacity-50`}
+        >
+          <Trash2 className="size-4" />
+          {!compact && <span>Delete application</span>}
         </button>
       )}
 

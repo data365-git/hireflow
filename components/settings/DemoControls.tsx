@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDataMode } from "@/context/DataModeContext";
 import { useAuth } from "@/context/AuthContext";
+import { deleteMyTestApplications, setMyTelegramUserId, getMyTelegramUserId } from "@/app/actions/candidate-actions";
 
 export function DemoControls() {
   const router = useRouter();
@@ -13,6 +14,15 @@ export function DemoControls() {
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [resetStatus, setResetStatus] = useState<"idle" | "pending" | "done" | "error">("idle");
+
+  const [myTelegramId, setMyTelegramId] = useState("");
+  const [telegramIdSaved, setTelegramIdSaved] = useState(false);
+  const [cleanupPending, setCleanupPending] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMyTelegramUserId().then(id => { if (id) setMyTelegramId(id); });
+  }, []);
 
   async function handleReset() {
     setShowConfirm(false);
@@ -117,6 +127,51 @@ export function DemoControls() {
           )}
         </div>
       )}
+      {/* HR Testing Cleanup */}
+      <div className="border border-gray-100 rounded-xl p-5 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">HR Testing Cleanup</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Delete all applications you submitted via Telegram while testing. Your Anketa profile on the bot side is preserved.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={myTelegramId}
+            onChange={e => { setMyTelegramId(e.target.value); setTelegramIdSaved(false); }}
+            placeholder="Your Telegram user ID (numeric)"
+            className="flex-1 h-8 px-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={async () => {
+              const result = await setMyTelegramUserId(myTelegramId);
+              if (result.ok) setTelegramIdSaved(true);
+            }}
+            className="h-8 px-3 rounded-lg bg-primary text-white text-sm font-medium"
+          >
+            Save
+          </button>
+        </div>
+        {telegramIdSaved && <p className="text-xs text-green-600">Saved ✓</p>}
+        <button
+          type="button"
+          disabled={cleanupPending || !myTelegramId}
+          onClick={async () => {
+            if (!confirm("Delete all your test applications? This cannot be undone.")) return;
+            setCleanupPending(true);
+            setCleanupResult(null);
+            const result = await deleteMyTestApplications();
+            setCleanupPending(false);
+            setCleanupResult(result.ok ? `Deleted ${result.count} application(s).` : result.error);
+          }}
+          className="h-8 px-3 rounded-lg border border-red-300 text-red-600 text-sm hover:bg-red-50 disabled:opacity-50 transition-colors"
+        >
+          🧹 Delete all my test applications
+        </button>
+        {cleanupResult && <p className="text-sm text-gray-500 mt-1">{cleanupResult}</p>}
+      </div>
     </div>
   );
 }

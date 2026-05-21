@@ -12,6 +12,7 @@ import {
   candidates,
   departments,
   type WorkExperienceEntry,
+  users,
   vacancies,
   vacancyStages,
   sources,
@@ -755,4 +756,41 @@ export async function deleteFilterView(id: string): Promise<void> {
   await db
     .delete(candidateFilterViews)
     .where(and(eq(candidateFilterViews.id, id), eq(candidateFilterViews.userId, session.sub)));
+}
+
+// ─── HR Test Cleanup ──────────────────────────────────────────────────────────
+
+export async function deleteMyTestApplications(): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const session = await requirePermission("candidates", "delete");
+  const [me] = await db
+    .select({ telegramUserId: users.telegramUserId })
+    .from(users)
+    .where(eq(users.id, session.sub));
+  if (!me?.telegramUserId) {
+    return { ok: false, error: "Your profile has no Telegram ID set. Set it in your profile settings first." };
+  }
+  const [cand] = await db
+    .select({ id: candidates.id })
+    .from(candidates)
+    .where(eq(candidates.telegramUserId, me.telegramUserId));
+  if (!cand) return { ok: true, count: 0 };
+  const deleted = await db
+    .delete(applications)
+    .where(eq(applications.candidateId, cand.id))
+    .returning({ id: applications.id });
+  return { ok: true, count: deleted.length };
+}
+
+export async function setMyTelegramUserId(telegramUserId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requirePermission("settings", "write");
+  if (!telegramUserId.trim()) return { ok: false, error: "Telegram user ID cannot be empty" };
+  if (!/^\d+$/.test(telegramUserId.trim())) return { ok: false, error: "Telegram user ID must be numeric (e.g. 123456789)" };
+  await db.update(users).set({ telegramUserId: telegramUserId.trim() }).where(eq(users.id, session.sub));
+  return { ok: true };
+}
+
+export async function getMyTelegramUserId(): Promise<string | null> {
+  const session = await requirePermission("settings", "read");
+  const [me] = await db.select({ telegramUserId: users.telegramUserId }).from(users).where(eq(users.id, session.sub));
+  return me?.telegramUserId ?? null;
 }

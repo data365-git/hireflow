@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { moveApplicationToStage as moveApplicationToStageAction } from "@/app/actions/applications";
+import { moveApplicationToStage as moveApplicationToStageAction, deleteApplication as deleteApplicationAction } from "@/app/actions/applications";
 import { useStore } from "@/lib/store";
 import { KanbanColumn } from "./KanbanColumn";
 import { toast } from "@/lib/hooks/useToast";
@@ -45,6 +45,9 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
   const [moveError, setMoveError] = useState<string | null>(null);
   const [movingAppId, setMovingAppId] = useState<string | null>(null);
   const [movePending, startMoveTransition] = useTransition();
+  const [pendingDeleteAppId, setPendingDeleteAppId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletePending, startDeleteTransition] = useTransition();
 
   const now = Date.now();
 
@@ -107,6 +110,25 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
         });
       } finally {
         setMovingAppId(null);
+      }
+    });
+  }
+
+  function handleDeleteApplication(appId: string) {
+    setPendingDeleteAppId(appId);
+    setDeleteError(null);
+  }
+
+  function confirmDelete() {
+    if (!pendingDeleteAppId) return;
+    startDeleteTransition(async () => {
+      const result = await deleteApplicationAction(pendingDeleteAppId);
+      if (result.ok) {
+        setPendingDeleteAppId(null);
+        router.refresh();
+        toast.show({ message: "Application deleted", type: "info", duration: 3000 });
+      } else {
+        setDeleteError(result.error ?? "Delete failed");
       }
     });
   }
@@ -234,6 +256,7 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
               filterStale={filterStale}
               nextStageConversion={nextStageConversion}
               staleCount={staleCount}
+              onDeleteApplication={handleDeleteApplication}
             />
           );
         })}
@@ -292,6 +315,36 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
                 className="h-9 rounded-lg bg-primary px-4 text-body-sm font-medium text-primary-fg disabled:opacity-50"
               >
                 {movePending ? "Moving..." : "Confirm move"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteAppId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-6">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-4 shadow-xl">
+            <h3 className="text-h3 text-text">Delete application?</h3>
+            <p className="mt-2 text-body-sm text-muted">
+              Permanently remove this application. The candidate&apos;s other applications and Anketa stay intact.
+            </p>
+            {deleteError && <p className="mt-2 text-body-sm text-danger">{deleteError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setPendingDeleteAppId(null); setDeleteError(null); }}
+                disabled={deletePending}
+                className="h-8 px-3 rounded-lg border border-border text-body-sm text-muted hover:bg-surface-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deletePending}
+                className="h-8 px-3 rounded-lg bg-danger text-white text-body-sm font-medium hover:bg-danger/90 disabled:opacity-50"
+              >
+                {deletePending ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>

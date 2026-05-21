@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { sendMessageToCandidate } from "@/app/actions/messages";
-import { moveApplicationToStage as moveApplicationToStageAction } from "@/app/actions/applications";
+import { moveApplicationToStage as moveApplicationToStageAction, deleteApplication } from "@/app/actions/applications";
 import { updateCandidateAnketa, type CandidateAnketaInput } from "@/app/actions/candidate-actions";
 import { listSourcesForVacancy, setApplicationSource } from "@/app/actions/sources";
 import { addVacancySource } from "@/app/actions/vacancies";
+import { toast } from "@/lib/hooks/useToast";
 import { Avatar } from "@/components/Avatar";
 import { StagePill } from "@/components/StagePill";
 import { ScreeningAnswerRow } from "@/components/ScreeningAnswerRow";
@@ -20,6 +21,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { KbdHint } from "@/components/ui/KbdHint";
 import { CandidateActionControls } from "@/components/candidates/CandidateActionControls";
 import { AnketaTab } from "@/components/candidates/AnketaTab";
+import { StageProgressionHeader } from "@/components/candidates/StageProgressionHeader";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { formatRelativeTime, daysAgo } from "@/lib/utils";
 import type { Application, Candidate, TestTaskAssignment, TelegramMessage, InternalNote, User, TimelineEvent, Source } from "@/lib/types";
@@ -126,6 +128,7 @@ function ProfileContent({
   const [stageComment, setStageComment] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [isAnketaOpen, setIsAnketaOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [anketaForm, setAnketaForm] = useState<AnketaFormState>(() => createEmptyAnketaForm());
   const [anketaError, setAnketaError] = useState<string | null>(null);
   const [candidateOverrides, setCandidateOverrides] = useState<Partial<Candidate> | null>(null);
@@ -598,7 +601,48 @@ function ProfileContent({
               initialIsWatched={false}
               initialIsBlacklisted={Boolean((candidate as { isBlacklisted?: boolean }).isBlacklisted)}
               showRelationships
+              onDelete={() => setShowDeleteConfirm(true)}
             />
+            {showDeleteConfirm && (
+              <Dialog
+                open={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                title="Delete this application?"
+                size="sm"
+              >
+                <div className="space-y-4">
+                  <p className="text-body-sm text-muted">
+                    This will permanently remove <strong>{candidate.fullName}</strong>&apos;s application to <strong>{vacancy?.title}</strong>.
+                    Their other applications and Anketa data stay intact. This cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="h-8 px-3 rounded-lg border border-border text-body-sm text-muted hover:bg-surface-2"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const result = await deleteApplication(application.id);
+                        if (result.ok) {
+                          toast.show({ message: "Application deleted", type: "info", duration: 3000 });
+                          router.push(vacancy ? `/vacancies/${vacancy.id}` : "/vacancies");
+                        } else {
+                          toast.show({ message: result.error, type: "error", duration: 4000 });
+                          setShowDeleteConfirm(false);
+                        }
+                      }}
+                      className="h-8 px-3 rounded-lg bg-danger text-white text-body-sm font-medium hover:bg-danger/90"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </Dialog>
+            )}
           </div>
         </aside>
 
@@ -631,6 +675,15 @@ function ProfileContent({
               </button>
             ))}
           </div>
+
+          {vacancyStages.length > 1 && (
+            <StageProgressionHeader
+              stages={vacancyStages}
+              currentStageId={application.currentStageId}
+              onMoveToStage={requestStageMove}
+              canMove={true}
+            />
+          )}
 
           {/* Tab content */}
           <div

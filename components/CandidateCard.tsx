@@ -41,11 +41,12 @@ type Props = {
   onDragStart: (e: React.DragEvent) => void;
   selected?: boolean;
   onToggleSelect?: () => void;
+  onDelete?: () => void;
   sourceName?: string | null;
   applicationRank?: number;
 };
 
-export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect, sourceName, applicationRank }: Props) {
+export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect, onDelete, sourceName, applicationRank }: Props) {
   const allMessages = useStore(s => s.messages);
   const currentUserId = useStore(s => s.currentUserId);
   const messages = useMemo(
@@ -90,6 +91,21 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
           onChange={onToggleSelect}
           onClick={(e) => e.stopPropagation()}
         />
+      )}
+      {onDelete && onToggleSelect === undefined && (
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="Delete application"
+            className="size-6 rounded flex items-center justify-center text-subtle hover:text-danger hover:bg-danger-soft transition-colors"
+            aria-label="Delete application"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+            </svg>
+          </button>
+        </div>
       )}
       <div className="flex items-start gap-2.5">
         <Avatar name={candidate.fullName} id={candidate.id} size="sm" />

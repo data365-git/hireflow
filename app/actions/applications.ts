@@ -234,6 +234,21 @@ export async function moveApplicationToStage(applicationId: string, toStageId: s
   });
 }
 
+export async function deleteApplication(applicationId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requirePermission("candidates", "delete");
+  const rows = await db
+    .select({ app: applications, vacancyId: vacancies.id, candidateName: candidates.fullName })
+    .from(applications)
+    .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+    .innerJoin(vacancies, eq(applications.vacancyId, vacancies.id))
+    .where(eq(applications.id, applicationId));
+  if (!rows[0]) return { ok: false, error: "Application not found" };
+  await db.delete(applications).where(eq(applications.id, applicationId));
+  revalidatePath(`/vacancies/${rows[0].vacancyId}`);
+  revalidatePath(`/candidates/${applicationId}`);
+  return { ok: true };
+}
+
 export async function listAllSourceNames(): Promise<string[]> {
   await requirePermission("candidates", "read");
   const rows = await db
