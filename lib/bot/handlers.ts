@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments, botContent } from "@/lib/db/schema";
 import { saveBotMessageRecord } from "./messageLog";
 import { eq, and, asc, desc } from "drizzle-orm";
-import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, getOrCreateInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
+import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, createInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
 import { resolveBotLang } from "./lang";
 
@@ -116,27 +116,15 @@ async function getCandidateByTelegramId(telegramUserId: string) {
 
 // ---- /start ----
 export async function handleStart(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   const payload = typeof ctx.match === "string" ? ctx.match.trim() : "";
   const telegramUserId = String(ctx.from!.id);
-  const candidate = await getCandidateByTelegramId(telegramUserId);
   const parts = payload ? payload.split("_") : [];
   const vacancyId = parts[0] || undefined;
   const sourceId = parts[1] || undefined;
 
-  if (candidate && !candidate.profileCompleted) {
-    await startAnketa(ctx, candidate.id, lang, vacancyId);
-    return;
-  }
-
-  // Resume if session is in progress
-  const existingSession = await getBotSession(telegramUserId);
-  if (candidate && existingSession?.state && ANKETA_STATES.has(existingSession.state)) {
-    await ctx.reply(tr(lang, "resuming_application"), { parse_mode: "Markdown" });
-    return startAnketa(ctx, candidate.id, lang, existingSession.vacancyId ?? undefined);
-  }
-
   if (!payload) {
+    await clearBotSession(telegramUserId);
     const kb = new InlineKeyboard()
       .text(tr(lang, "btn_browse_jobs"), "browse_jobs").row()
       .text(tr(lang, "btn_about_us"), "about_us")
@@ -149,6 +137,7 @@ export async function handleStart(ctx: Context) {
     return;
   }
 
+  await clearBotSession(telegramUserId);
   await startVacancyFlow(ctx, vacancyId!, lang, sourceId);
 }
 
@@ -264,26 +253,12 @@ export async function handleCallbackQuery(ctx: Context) {
       return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
     }
 
-    // Check for duplicate application
     const existingCand = await db.select().from(candidates)
       .where(eq(candidates.telegramUserId, telegramUserId));
     if (existingCand[0]) {
       if (!existingCand[0].profileCompleted) {
         await startAnketa(ctx, existingCand[0].id, candidateLang(existingCand[0], lang), vacancyId);
         return;
-      }
-
-      const existingApp = await db.select().from(applications)
-        .where(and(eq(applications.candidateId, existingCand[0].id), eq(applications.vacancyId, vacancyId)));
-      const submittedCount = existingApp.filter(a => a.status === "submitted").length;
-      if (submittedCount > 0) {
-        const kb = new InlineKeyboard()
-          .text(tr(lang, "btn_apply_again"), `reapply_${vacancyId}`).row()
-          .text(tr(lang, "btn_cancel"), "not_interested");
-        return ctx.reply(
-          tr(lang, "already_applied_confirm", { vacancy: vacancy.title, count: submittedCount }),
-          { reply_markup: kb, parse_mode: "Markdown" }
-        );
       }
     }
 
@@ -296,8 +271,15 @@ export async function handleCallbackQuery(ctx: Context) {
     const candidateId = (ctx as any).state?.candidateId as string | undefined;
     let applicationId: string | undefined;
     if (candidateId) {
+      const session = await getBotSession(telegramUserId);
+      const browsingSourceId = session?.applicationId
+        ? (await db
+            .select({ sourceId: applications.sourceId })
+            .from(applications)
+            .where(eq(applications.id, session.applicationId)))[0]?.sourceId
+        : null;
       // Telegram has no data-mode cookie: bot-created applications are Live-only.
-      applicationId = await getOrCreateInProgressApplication({ candidateId, vacancyId });
+      applicationId = await createInProgressApplication({ candidateId, vacancyId, sourceId: browsingSourceId });
     }
 
     // B1+B3: Skip steps already done. If candidate has a name, skip awaiting_name.
@@ -770,7 +752,7 @@ async function ensureInProgressApplication(
 
   const candidateId = (ctx as any).state?.candidateId as string | undefined;
   if (!candidateId) return null;
-  return getOrCreateInProgressApplication({ candidateId, vacancyId });
+  return createInProgressApplication({ candidateId, vacancyId });
 }
 
 async function startAnketa(ctx: Context, candidateId: string, fallbackLang: Lang, pendingVacancyId?: string) {
@@ -1337,7 +1319,7 @@ async function handleSubmitConfirm(ctx: Context, lang: Lang) {
       // Telegram has no data-mode cookie: bot-created candidates/applications are Live-only.
       const candidateId = (ctx as any).state?.candidateId as string | undefined;
       if (candidateId) {
-        const liveAppId = await getOrCreateInProgressApplication({ candidateId, vacancyId: session.vacancyId! });
+        const liveAppId = await createInProgressApplication({ candidateId, vacancyId: session.vacancyId! });
         const answers = (data.answers as Record<string, string>) ?? {};
         for (const [questionId, answerText] of Object.entries(answers)) {
           if (!answerText) continue;

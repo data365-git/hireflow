@@ -314,48 +314,28 @@ export async function getOrCreateBrowsingApplication(args: {
   return appId;
 }
 
-export async function getOrCreateInProgressApplication(args: {
+export async function createInProgressApplication(args: {
   candidateId: string;
   vacancyId: string;
+  sourceId?: string | null;
 }): Promise<string> {
-  const existing = await db
-    .select()
-    .from(applications)
-    .where(
-      and(
-        eq(applications.candidateId, args.candidateId),
-        eq(applications.vacancyId, args.vacancyId)
-      )
-    );
-  if (existing[0]) {
-    if (existing[0].status === "submitted") return existing[0].id;
-
-    if (existing[0].status !== "in_progress") {
-      await db
-        .update(applications)
-        .set({ status: "in_progress", lastActivityAt: new Date() })
-        .where(eq(applications.id, existing[0].id));
-
-      await db.insert(timelineEvents).values({
-        id: crypto.randomUUID(),
-        applicationId: existing[0].id,
-        type: "application_started",
-        description: "Application started via Telegram bot",
-        createdAt: new Date(),
-      });
-    }
-    revalidatePath(`/vacancies/${args.vacancyId}`);
-    return existing[0].id;
-  }
+  const validSourceId = args.sourceId
+    ? ((await db
+        .select({ id: sources.id })
+        .from(sources)
+        .where(and(eq(sources.id, args.sourceId), eq(sources.vacancyId, args.vacancyId))))[0]?.id ?? null)
+    : null;
 
   const appId = crypto.randomUUID();
+  const now = new Date();
   await db.insert(applications).values({
     id: appId,
     candidateId: args.candidateId,
     vacancyId: args.vacancyId,
     currentStageId: await getFirstVacancyStageId(args.vacancyId),
-    appliedAt: new Date(),
-    lastActivityAt: new Date(),
+    sourceId: validSourceId,
+    appliedAt: now,
+    lastActivityAt: now,
     status: "in_progress",
   });
 
@@ -363,12 +343,20 @@ export async function getOrCreateInProgressApplication(args: {
     id: crypto.randomUUID(),
     applicationId: appId,
     type: "application_started",
-    description: "Application started via Telegram bot",
-    createdAt: new Date(),
+    description: "Application started",
+    createdAt: now,
   });
 
   revalidatePath(`/vacancies/${args.vacancyId}`);
   return appId;
+}
+
+export async function getOrCreateInProgressApplication(args: {
+  candidateId: string;
+  vacancyId: string;
+  sourceId?: string | null;
+}): Promise<string> {
+  return createInProgressApplication(args);
 }
 
 export async function ensureApplicationInProgress(applicationId: string): Promise<void> {
