@@ -197,6 +197,48 @@ export async function getLatestApplicationIdForTelegramUser(telegramUserId: stri
   return rows.at(-1)?.app.id ?? null;
 }
 
+export async function createFreshApplication(opts: {
+  candidateId: string;
+  vacancyId: string;
+  sourceId?: string | null;
+}): Promise<string> {
+  const stages = await db
+    .select()
+    .from(vacancyStages)
+    .where(eq(vacancyStages.vacancyId, opts.vacancyId))
+    .orderBy(asc(vacancyStages.orderIndex));
+  if (stages.length === 0) throw new Error("Vacancy has no stages");
+
+  const validSourceId = opts.sourceId
+    ? ((await db
+        .select({ id: sources.id })
+        .from(sources)
+        .where(and(eq(sources.id, opts.sourceId), eq(sources.vacancyId, opts.vacancyId))))[0]?.id ?? null)
+    : null;
+
+  const newId = `app-${crypto.randomUUID()}`;
+  await db.insert(applications).values({
+    id: newId,
+    candidateId: opts.candidateId,
+    vacancyId: opts.vacancyId,
+    currentStageId: stages[0].id,
+    sourceId: validSourceId,
+    status: "in_progress",
+    appliedAt: new Date(),
+    lastActivityAt: new Date(),
+  });
+
+  await db.insert(timelineEvents).values({
+    id: crypto.randomUUID(),
+    applicationId: newId,
+    type: "application_started",
+    description: "Re-application started",
+    createdAt: new Date(),
+  });
+
+  return newId;
+}
+
 async function getFirstVacancyStageId(vacancyId: string): Promise<string> {
   const stages = await db
     .select()

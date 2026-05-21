@@ -3,8 +3,9 @@ import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments } from "@/lib/db/schema";
 import { eq, and, asc, desc } from "drizzle-orm";
-import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, getOrCreateInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent } from "@/app/actions/bot";
+import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, getOrCreateInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
+import { resolveBotLang } from "./lang";
 
 async function getLiveActiveVacancy(vacancyId: string) {
   const rows = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
@@ -227,7 +228,7 @@ async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang, sou
 
 // ---- Callback queries ----
 export async function handleCallbackQuery(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   const data = ctx.callbackQuery?.data ?? "";
   await ctx.answerCallbackQuery();
 
@@ -265,8 +266,15 @@ export async function handleCallbackQuery(ctx: Context) {
 
       const existingApp = await db.select().from(applications)
         .where(and(eq(applications.candidateId, existingCand[0].id), eq(applications.vacancyId, vacancyId)));
-      if (existingApp[0]?.status === "submitted") {
-        return ctx.reply(tr(lang, "already_applied", { vacancy: vacancy.title }), { parse_mode: "Markdown" });
+      const submittedCount = existingApp.filter(a => a.status === "submitted").length;
+      if (submittedCount > 0) {
+        const kb = new InlineKeyboard()
+          .text(tr(lang, "btn_apply_again"), `reapply_${vacancyId}`).row()
+          .text(tr(lang, "btn_cancel"), "not_interested");
+        return ctx.reply(
+          tr(lang, "already_applied_confirm", { vacancy: vacancy.title, count: submittedCount }),
+          { reply_markup: kb, parse_mode: "Markdown" }
+        );
       }
     }
 
@@ -338,6 +346,38 @@ export async function handleCallbackQuery(ctx: Context) {
     return;
   }
 
+  if (data.startsWith("reapply_")) {
+    const reapplyVacancyId = data.replace("reapply_", "");
+    const telegramUserId = String(ctx.from!.id);
+    const vacancy = await getLiveActiveVacancy(reapplyVacancyId);
+    if (!vacancy) {
+      return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
+    }
+    const candRows = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));
+    if (!candRows[0] || !candRows[0].profileCompleted) {
+      return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
+    }
+    const candidateId = candRows[0].id;
+    const applicationId = await createFreshApplication({ candidateId, vacancyId: reapplyVacancyId });
+    const questions = await db.select().from(screeningQuestions)
+      .where(eq(screeningQuestions.vacancyId, reapplyVacancyId))
+      .orderBy(asc(screeningQuestions.orderIndex));
+    const totalSteps = 2 + questions.length + 3;
+    const collectedData: Record<string, unknown> = {
+      totalSteps,
+      fullName: candRows[0].fullName,
+    };
+    await saveBotSession(telegramUserId, {
+      vacancyId: reapplyVacancyId,
+      applicationId,
+      state: "awaiting_email",
+      currentQuestionIndex: 0,
+      collectedData,
+    });
+    await ctx.reply(tr(lang, "ask_email", { step: 2, total: totalSteps }), { parse_mode: "Markdown" });
+    return;
+  }
+
   if (data === "consent_yes") {
     const telegramUserId = String(ctx.from!.id);
     const consentSession = await getBotSession(telegramUserId);
@@ -395,7 +435,7 @@ export async function handleJobs(ctx: Context) {
 }
 
 export async function showJobs(ctx: Context, departmentId: string | null) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   let activeVacancies = await db.select().from(vacancies).where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
 
   if (departmentId) {
@@ -424,7 +464,7 @@ export async function showJobs(ctx: Context, departmentId: string | null) {
 
 // ---- /status ----
 export async function handleStatus(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
 
   const candRows = await db.select().from(candidates)
@@ -460,13 +500,13 @@ export async function handleStatus(ctx: Context) {
 
 // ---- /help ----
 export async function handleHelp(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   await ctx.reply(tr(lang, "help_text"), { parse_mode: "Markdown" });
 }
 
 // ---- /cancel ----
 export async function handleCancel(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   const session = await getBotSession(String(ctx.from!.id));
   await clearSessionAndAbandon(String(ctx.from!.id), session?.applicationId);
   await ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
@@ -502,7 +542,7 @@ export async function handlePhoto(ctx: Context) {
   const telegramUserId = String(ctx.from!.id);
   const session = await getBotSession(telegramUserId);
   const candidate = await getCandidateByTelegramId(telegramUserId);
-  const lang = candidate ? candidateLang(candidate, detectLang(ctx)) : detectLang(ctx);
+  const lang = candidate ? candidateLang(candidate, await resolveBotLang(ctx)) : await resolveBotLang(ctx);
 
   if (session?.state === "awaiting_photo") {
     const photo = ctx.message?.photo;
@@ -525,7 +565,7 @@ export async function handlePhoto(ctx: Context) {
 
 // ---- text/document messages during application flow ----
 export async function handleText(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
   const session = await getBotSession(telegramUserId);
 
@@ -804,7 +844,7 @@ export async function handleContact(ctx: Context) {
   const candidate = await getCandidateByTelegramId(telegramUserId);
   if (!candidate) return;
 
-  const lang = candidateLang(candidate, detectLang(ctx));
+  const lang = candidateLang(candidate, await resolveBotLang(ctx));
   const phone = ctx.message?.contact?.phone_number;
   if (!phone) return askPhone(ctx, lang);
 
@@ -1332,9 +1372,27 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// ---- /reset (admin only — for HR testing) ----
+export async function handleReset(ctx: Context) {
+  const lang = await resolveBotLang(ctx);
+  const telegramUserId = String(ctx.from!.id);
+  const adminIds = (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!adminIds.includes(telegramUserId)) {
+    return ctx.reply("Unauthorized", { parse_mode: "Markdown" });
+  }
+  const [cand] = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));
+  if (!cand) return ctx.reply("No data to reset.", { parse_mode: "Markdown" });
+  await db.delete(applications).where(eq(applications.candidateId, cand.id));
+  await db.update(candidates)
+    .set({ profileCompleted: false })
+    .where(eq(candidates.id, cand.id));
+  await clearBotSession(telegramUserId);
+  return ctx.reply("✅ Reset complete. /start to test again.", { parse_mode: "Markdown" });
+}
+
 // ---- /back ----
 export async function handleBack(ctx: Context) {
-  const lang = detectLang(ctx);
+  const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
   const session = await getBotSession(telegramUserId);
 

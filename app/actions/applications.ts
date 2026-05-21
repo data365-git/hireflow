@@ -71,11 +71,28 @@ export async function getApplicationsForVacancy(vacancyId: string) {
     .leftJoin(sources, eq(applications.sourceId, sources.id))
     .where(eq(applications.vacancyId, vacancyId));
 
-  return rows.map((r) => ({
-    application: r.application,
-    candidate: r.candidate,
-    sourceName: r.sourceName ?? null,
-  }));
+  const perCandidateVacancy = new Map<string, string[]>();
+  const sortedById = [...rows].sort((a, b) =>
+    (a.application.appliedAt?.getTime() ?? 0) - (b.application.appliedAt?.getTime() ?? 0)
+  );
+  for (const r of sortedById) {
+    const key = `${r.application.candidateId}:${r.application.vacancyId}`;
+    const arr = perCandidateVacancy.get(key) ?? [];
+    arr.push(r.application.id);
+    perCandidateVacancy.set(key, arr);
+  }
+
+  return rows.map((r) => {
+    const key = `${r.application.candidateId}:${r.application.vacancyId}`;
+    const arr = perCandidateVacancy.get(key) ?? [r.application.id];
+    const rank = arr.indexOf(r.application.id) + 1;
+    return {
+      application: r.application,
+      candidate: r.candidate,
+      sourceName: r.sourceName ?? null,
+      applicationRank: rank,
+    };
+  });
 }
 
 export async function getApplicationFull(applicationId: string) {

@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleBack, handleText, handleCallbackQuery, handlePhoto, handleContact } from "./handlers";
+import { handleStart, handleJobs, handleStatus, handleHelp, handleCancel, handleBack, handleReset, handleText, handleCallbackQuery, handlePhoto, handleContact } from "./handlers";
 import { persistenceMiddleware } from "./middleware";
 import { validateEnv } from "@/lib/env";
 
@@ -21,6 +21,7 @@ bot.command("status", handleStatus);
 bot.command("help", handleHelp);
 bot.command("cancel", handleCancel);
 bot.command("back", handleBack);
+bot.command("reset", handleReset);
 
 bot.on("callback_query:data", handleCallbackQuery);
 bot.on("message:photo", handlePhoto);

@@ -131,6 +131,8 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     consent_yes: "✅ I consent",
     consent_no: "❌ No",
     consent_required: "Your application was not accepted because you did not consent. You can try again if you change your mind.",
+    already_applied_confirm: "You already applied to *{vacancy}* {count} time(s). Apply again? Your previous application(s) stay as-is.",
+    btn_apply_again: "✅ Apply Again",
     marital_widowed: "Widowed",
   },
   ru: {
@@ -256,6 +258,8 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     consent_yes: "✅ Согласен(на)",
     consent_no: "❌ Нет",
     consent_required: "Ваша заявка не принята, так как вы не дали согласие на обработку данных. Вы можете попробовать снова.",
+    already_applied_confirm: "Вы уже подавали заявку на *{vacancy}* {count} раз(а). Подать снова? Предыдущие заявки останутся без изменений.",
+    btn_apply_again: "✅ Подать снова",
     marital_widowed: "Вдовец/вдова",
   },
   uz: {
@@ -381,12 +385,18 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     consent_yes: "✅ Roziman",
     consent_no: "❌ Yo'q",
     consent_required: "Rozilik bermaganingiz uchun arizangiz qabul qilinmadi. Hohlasangiz, qaytadan urinib ko'rishingiz mumkin.",
+    already_applied_confirm: "*{vacancy}* lavozimiga allaqachon {count} marta ariza yuborgansiz. Qayta yubormoqchimisiz? Oldingi arizalaringiz saqlanib qoladi.",
+    btn_apply_again: "✅ Qayta yuborish",
     marital_widowed: "Bevasi",
   },
 };
 
 export function tr(lang: Lang, key: string, vars: Record<string, string | number> = {}): string {
-  let text = t[lang][key] ?? t["en"][key] ?? key;
+  let text = t[lang][key];
+  if (!text) {
+    console.warn(`[i18n] MISSING key=${key} lang=${lang}`);
+    text = t["en"][key] ?? `[!${key}!]`;
+  }
   for (const [k, v] of Object.entries(vars)) {
     text = text.replaceAll(`{${k}}`, String(v));
   }

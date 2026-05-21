@@ -42,9 +42,10 @@ type Props = {
   selected?: boolean;
   onToggleSelect?: () => void;
   sourceName?: string | null;
+  applicationRank?: number;
 };
 
-export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect, sourceName }: Props) {
+export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect, sourceName, applicationRank }: Props) {
   const allMessages = useStore(s => s.messages);
   const currentUserId = useStore(s => s.currentUserId);
   const messages = useMemo(
@@ -100,6 +101,11 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
             {isNew && (
               <span className="shrink-0 text-micro bg-primary text-primary-fg px-1.5 h-4 rounded-full inline-flex items-center">
                 New
+              </span>
+            )}
+            {applicationRank && applicationRank > 1 && (
+              <span className="shrink-0 text-micro bg-surface-2 text-muted border border-border px-1.5 h-4 rounded-full inline-flex items-center">
+                {applicationRank === 2 ? "2nd" : applicationRank === 3 ? "3rd" : `${applicationRank}th`} attempt
               </span>
             )}
           </div>

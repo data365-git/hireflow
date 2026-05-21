@@ -22,7 +22,8 @@
     "db:seed-stage-templates": "tsx scripts/seed-stage-templates.ts",
     "db:seed-question-templates": "tsx scripts/seed-question-templates.ts",
     "db:backup-pg": "tsx scripts/backup-pg.ts",
-    "backup:run": "tsx scripts/backup-cron.ts"
+    "backup:run": "tsx scripts/backup-cron.ts",
+    "check:i18n": "tsx scripts/check-i18n.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

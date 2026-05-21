@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Application, Candidate, VacancyStage } from "@/lib/types";
 import { CandidateCard } from "./CandidateCard";
 import { EmptyState } from "./EmptyState";
@@ -42,7 +42,27 @@ export function KanbanColumn({
 }: Props) {
   const router = useRouter();
   const getCandidateForApplicationStore = useStore(s => s.getCandidateForApplication);
+  const allApplications = useStore(s => s.applications);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Compute application rank per candidate×vacancy (chronological order of appliedAt)
+  const applicationRankMap = useMemo(() => {
+    const perCandidateVacancy = new Map<string, string[]>();
+    const sorted = [...allApplications].sort(
+      (a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime()
+    );
+    for (const app of sorted) {
+      const key = `${app.candidateId}:${app.vacancyId}`;
+      const arr = perCandidateVacancy.get(key) ?? [];
+      arr.push(app.id);
+      perCandidateVacancy.set(key, arr);
+    }
+    const rankMap = new Map<string, number>();
+    for (const [, ids] of perCandidateVacancy) {
+      ids.forEach((id, idx) => rankMap.set(id, idx + 1));
+    }
+    return rankMap;
+  }, [allApplications]);
 
   const visibleApplications = search
     ? applications.filter(app => {
@@ -143,6 +163,7 @@ export function KanbanColumn({
                 }}
                 selected={selectedAppIds.has(app.id)}
                 onToggleSelect={() => onToggleSelect(app.id)}
+                applicationRank={applicationRankMap.get(app.id)}
               />
             );
           })
