@@ -481,3 +481,16 @@ export const backupRuns = pgTable("backup_runs", {
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
+
+// ─── Bot Content ──────────────────────────────────────────────────────────────
+
+export const botContent = pgTable("bot_content", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull(),         // e.g. "about_us" | "contact_us"
+  language: text("language").notNull(), // "uz" | "ru" | "en"
+  content: text("content").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+}, (t) => ({
+  keyLangIdx: uniqueIndex("bot_content_key_lang_idx").on(t.key, t.language),
+}));

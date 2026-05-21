@@ -464,8 +464,8 @@ export async function submitApplication(applicationId: string): Promise<void> {
     .where(eq(vacancyStages.vacancyId, app.vacancyId))
     .orderBy(asc(vacancyStages.orderIndex));
 
-  const nextStage = stages.find((s) => s.orderIndex === 1) ?? stages[1];
-  const targetStageId = nextStage ? nextStage.id : app.currentStageId;
+  const targetStage = stages[0];
+  const targetStageId = targetStage ? targetStage.id : app.currentStageId;
 
   try {
     await db

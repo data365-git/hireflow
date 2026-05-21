@@ -7,6 +7,7 @@ import { notifyCandidateOfStageChange } from "@/app/actions/bot";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
 import { fireStageEnteredAutomations } from "@/lib/automations/runner";
+import { sendStageNotification } from "@/lib/bot/notifications";
 
 export type PipelineApplication = {
   id: string;
@@ -224,8 +225,8 @@ export async function moveApplicationToStage(applicationId: string, toStageId: s
   revalidatePath(`/vacancies/${app.vacancyId}`);
   revalidatePath(`/candidates/${applicationId}`);
 
-  // Notify candidate via Telegram if they have a linked account
-  await notifyCandidateOfStageChange(applicationId).catch((err) => {
+  // Notify candidate via Telegram with stage-kind-aware message
+  await sendStageNotification({ applicationId, toStageId, comment }).catch((err) => {
     console.error("Stage notification failed:", err);
   });
 

@@ -1,7 +1,8 @@
 import { InlineKeyboard, Keyboard } from "grammy";
 import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
-import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments } from "@/lib/db/schema";
+import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments, botContent } from "@/lib/db/schema";
+import { saveBotMessageRecord } from "./messageLog";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, getOrCreateInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
@@ -128,11 +129,19 @@ export async function handleStart(ctx: Context) {
     return;
   }
 
+  // Resume if session is in progress
+  const existingSession = await getBotSession(telegramUserId);
+  if (candidate && existingSession?.state && ANKETA_STATES.has(existingSession.state)) {
+    await ctx.reply(tr(lang, "resuming_application"), { parse_mode: "Markdown" });
+    return startAnketa(ctx, candidate.id, lang, existingSession.vacancyId ?? undefined);
+  }
+
   if (!payload) {
     const kb = new InlineKeyboard()
       .text(tr(lang, "btn_browse_jobs"), "browse_jobs").row()
-      .text(tr(lang, "btn_my_applications"), "my_applications").row()
-      .text(tr(lang, "btn_help"), "help");
+      .text(tr(lang, "btn_about_us"), "about_us")
+      .text(tr(lang, "btn_contact_us"), "contact_us").row()
+      .text(tr(lang, "btn_my_applications"), "my_applications");
     await ctx.reply(
       `${tr(lang, "welcome_no_payload")}\n\n${tr(lang, "welcome_browse")}`,
       { reply_markup: kb, parse_mode: "Markdown" }
@@ -399,6 +408,24 @@ export async function handleCallbackQuery(ctx: Context) {
     return ctx.reply(tr(consentLang, "consent_required"), { parse_mode: "Markdown" });
   }
 
+  if (data === "about_us") {
+    const [row] = await db.select({ content: botContent.content })
+      .from(botContent)
+      .where(and(eq(botContent.key, "about_us"), eq(botContent.language, lang)));
+    const text = row?.content ?? tr(lang, "about_us_fallback");
+    return ctx.reply(text, { parse_mode: "Markdown" });
+  }
+
+  if (data === "contact_us") {
+    const telegramUserId = String(ctx.from!.id);
+    await saveBotSession(telegramUserId, { state: "awaiting_contact_message", currentQuestionIndex: 0, collectedData: {} });
+    return ctx.reply(tr(lang, "contact_us_prompt"), { parse_mode: "Markdown" });
+  }
+
+  if (data.startsWith("dept_")) {
+    return showJobs(ctx, data);
+  }
+
   if (data === "browse_jobs") return handleJobs(ctx);
   if (data === "my_applications") return handleStatus(ctx);
   if (data === "help") return handleHelp(ctx);
@@ -436,30 +463,60 @@ export async function handleJobs(ctx: Context) {
 
 export async function showJobs(ctx: Context, departmentId: string | null) {
   const lang = await resolveBotLang(ctx);
-  let activeVacancies = await db.select().from(vacancies).where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
-
-  if (departmentId) {
-    const deptRows = await db.select().from(departments).where(eq(departments.id, departmentId));
-    const deptName = deptRows[0]?.name;
-    if (deptName) {
-      const filtered = activeVacancies.filter((v) => normalizeDepartmentName(v.department) === deptName);
-      if (filtered.length > 0) activeVacancies = filtered;
-    }
-  }
+  const activeVacancies = await db.select().from(vacancies)
+    .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
 
   if (!activeVacancies.length) {
     return ctx.reply(tr(lang, "no_jobs"), { parse_mode: "Markdown" });
   }
 
+  if (departmentId === null) {
+    // Show departments
+    const deptRows = await db.select().from(departments).where(eq(departments.isActive, true));
+    // Only show departments that have at least one active vacancy
+    const activeDeptNames = new Set(activeVacancies.map((v) => normalizeDepartmentName(v.department)));
+    const visibleDepts = deptRows.filter((d) => activeDeptNames.has(normalizeDepartmentName(d.name)));
+
+    if (visibleDepts.length === 0) {
+      // Fallback: show flat list if no departments
+      const kb = new InlineKeyboard();
+      for (const v of activeVacancies) {
+        const salary = v.salaryMin > 0 && v.salaryMax > 0
+          ? ` · $${Math.round(v.salaryMin / 1000)}k–$${Math.round(v.salaryMax / 1000)}k`
+          : "";
+        kb.text(`${v.title}${salary}`, `view_${v.id}`).row();
+      }
+      return ctx.reply(tr(lang, "jobs_header"), { reply_markup: kb, parse_mode: "Markdown" });
+    }
+
+    const kb = new InlineKeyboard();
+    for (const d of visibleDepts) {
+      kb.text(d.displayName, `dept_${d.id}`).row();
+    }
+    return ctx.reply(tr(lang, "departments_header"), { reply_markup: kb, parse_mode: "Markdown" });
+  }
+
+  // Show vacancies in selected department
+  const deptRows = await db.select().from(departments).where(eq(departments.id, departmentId));
+  const deptName = deptRows[0]?.name;
+  const filtered = deptName
+    ? activeVacancies.filter((v) => normalizeDepartmentName(v.department) === normalizeDepartmentName(deptName))
+    : [];
+
+  if (!filtered.length) {
+    const kb = new InlineKeyboard().text(tr(lang, "btn_back_to_departments"), "browse_jobs");
+    return ctx.reply(tr(lang, "dept_no_vacancies"), { reply_markup: kb, parse_mode: "Markdown" });
+  }
+
   const kb = new InlineKeyboard();
-  for (const v of activeVacancies) {
+  for (const v of filtered) {
     const salary = v.salaryMin > 0 && v.salaryMax > 0
       ? ` · $${Math.round(v.salaryMin / 1000)}k–$${Math.round(v.salaryMax / 1000)}k`
       : "";
     kb.text(`${v.title}${salary}`, `view_${v.id}`).row();
   }
-
-  await ctx.reply(tr(lang, "jobs_header"), { reply_markup: kb, parse_mode: "Markdown" });
+  kb.row().text(tr(lang, "btn_back_to_departments"), "browse_jobs");
+  return ctx.reply(tr(lang, "jobs_header"), { reply_markup: kb, parse_mode: "Markdown" });
 }
 
 // ---- /status ----
@@ -574,6 +631,21 @@ export async function handleText(ctx: Context) {
   }
 
   const text = ctx.message?.text?.trim() ?? "";
+
+  if (session.state === "awaiting_contact_message") {
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+    if (candidate && text) {
+      await saveBotMessageRecord({
+        candidateId: candidate.id,
+        applicationId: null,
+        direction: "inbound",
+        text,
+      });
+    }
+    await clearBotSession(telegramUserId);
+    return ctx.reply(tr(lang, "contact_us_thanks"), { parse_mode: "Markdown" });
+  }
+
   const data = (session.collectedData as Record<string, unknown>) ?? {};
   const totalSteps = (data.totalSteps as number) ?? 6;
 
@@ -1388,6 +1460,21 @@ export async function handleReset(ctx: Context) {
     .where(eq(candidates.id, cand.id));
   await clearBotSession(telegramUserId);
   return ctx.reply("✅ Reset complete. /start to test again.", { parse_mode: "Markdown" });
+}
+
+// ---- /testreset (admin only — wipes applications but keeps profile) ----
+export async function handleTestReset(ctx: Context) {
+  const lang = await resolveBotLang(ctx);
+  const telegramUserId = String(ctx.from!.id);
+  const adminIds = (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!adminIds.includes(telegramUserId)) {
+    return ctx.reply("Unauthorized", { parse_mode: "Markdown" });
+  }
+  const [cand] = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));
+  if (!cand) return ctx.reply("No data to reset.", { parse_mode: "Markdown" });
+  await db.delete(applications).where(eq(applications.candidateId, cand.id));
+  await clearBotSession(telegramUserId);
+  return ctx.reply("✅ Applications cleared. Profile kept. /start to test again.", { parse_mode: "Markdown" });
 }
 
 // ---- /back ----
