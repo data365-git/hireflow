@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:all": "tsx scripts/run-migrations.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:add-pre-screening": "tsx scripts/add-pre-screening-stages.ts",
     "db:studio": "drizzle-kit studio",
