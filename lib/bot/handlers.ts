@@ -548,7 +548,10 @@ export async function showJobs(ctx: Context, departmentId: string | null) {
 
     const kb = new InlineKeyboard();
     for (const d of visibleDepts) {
-      kb.text(d.displayName, `dept_${d.id}`).row();
+      kb.text(d.displayName, d.id).row();
+    }
+    if (ctx.callbackQuery?.message) {
+      return ctx.editMessageText(tr(lang, "departments_header"), { reply_markup: kb, parse_mode: "Markdown" });
     }
     return ctx.reply(tr(lang, "departments_header"), { reply_markup: kb, parse_mode: "Markdown" });
   }
@@ -562,6 +565,9 @@ export async function showJobs(ctx: Context, departmentId: string | null) {
 
   if (!filtered.length) {
     const kb = new InlineKeyboard().text(tr(lang, "btn_back_to_departments"), "browse_jobs");
+    if (ctx.callbackQuery?.message) {
+      return ctx.editMessageText(tr(lang, "dept_no_vacancies"), { reply_markup: kb, parse_mode: "Markdown" });
+    }
     return ctx.reply(tr(lang, "dept_no_vacancies"), { reply_markup: kb, parse_mode: "Markdown" });
   }
 
@@ -573,6 +579,9 @@ export async function showJobs(ctx: Context, departmentId: string | null) {
     kb.text(`${v.title}${salary}`, `view_${v.id}`).row();
   }
   kb.row().text(tr(lang, "btn_back_to_departments"), "browse_jobs");
+  if (ctx.callbackQuery?.message) {
+    return ctx.editMessageText(tr(lang, "jobs_header"), { reply_markup: kb, parse_mode: "Markdown" });
+  }
   return ctx.reply(tr(lang, "jobs_header"), { reply_markup: kb, parse_mode: "Markdown" });
 }
 
