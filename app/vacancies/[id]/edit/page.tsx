@@ -4,7 +4,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/lib/hooks/useToast";
-import type { ScreeningQuestion, VacancyStage, Vacancy, User, Source, TestTask, Application } from "@/lib/types";
+import type { ScreeningQuestion, VacancyStage, Vacancy, User, Source, TestTask, Application, QuestionTemplate } from "@/lib/types";
 import {
   getVacancyEditData,
   getScreeningQuestions,
@@ -24,6 +24,7 @@ import {
   removeVacancyTestTask,
   type VacancyEditData,
 } from "@/app/actions/vacancies";
+import { listQuestionTemplates } from "@/app/actions/question-templates";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
   const [modeInfo, setModeInfo] = useState<Awaited<ReturnType<typeof getVacancyModeInfo>> | null>(null);
   const [editData, setEditData] = useState<VacancyEditData | null>(null);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
+  const [questionTemplates, setQuestionTemplates] = useState<QuestionTemplate[]>([]);
   const vacancy = editData?.vacancy ?? null;
   const users = editData?.users ?? [];
   const stages = editData?.stages ?? [];
@@ -118,6 +120,22 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listQuestionTemplates()
+      .then((templates) => {
+        if (!cancelled) setQuestionTemplates(templates);
+      })
+      .catch(() => {
+        if (!cancelled) setQuestionTemplates([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function refreshEditData() {
     const data = await getVacancyEditData(id);
@@ -321,6 +339,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
         {activeTab === "questions" && (
           <QuestionsTab
             questions={questions}
+            questionTemplates={questionTemplates}
             vacancyId={id}
             onAdd={async (q) => {
               const { id: newId } = await createScreeningQuestion({
@@ -357,6 +376,27 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
               setQuestions((qs) =>
                 orderedIds.map((oid) => qs.find((q) => q.id === oid)!)
               );
+            }}
+            onApplyTemplate={async (template, mode) => {
+              if (mode === "replace") {
+                await Promise.all(questions.map((q) => deleteScreeningQuestion(q.id)));
+              }
+
+              const startIndex = mode === "append" ? questions.length : 0;
+              await Promise.all(
+                template.questions.map((q, index) =>
+                  createScreeningQuestion({
+                    vacancyId: id,
+                    text: q.text,
+                    type: q.type,
+                    options: q.options,
+                    orderIndex: startIndex + index,
+                  })
+                )
+              );
+
+              const updatedQuestions = await getScreeningQuestions(id);
+              setQuestions(updatedQuestions as ScreeningQuestion[]);
             }}
           />
         )}
@@ -875,18 +915,22 @@ function DetailsTab({
 
 function QuestionsTab({
   questions,
+  questionTemplates,
   vacancyId,
   onAdd,
   onRemove,
   onUpdate,
   onReorder,
+  onApplyTemplate,
 }: {
   questions: ScreeningQuestion[];
+  questionTemplates: QuestionTemplate[];
   vacancyId: string;
   onAdd: (q: { text: string; type: ScreeningQuestion["type"]; options?: string[] }) => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Pick<ScreeningQuestion, "text" | "type" | "options">>) => void;
   onReorder: (orderedIds: string[]) => void;
+  onApplyTemplate: (template: QuestionTemplate, mode: "replace" | "append") => Promise<void>;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{
@@ -896,6 +940,8 @@ function QuestionsTab({
   } | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<QuestionTemplate | null>(null);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [addDraft, setAddDraft] = useState<{
     text: string;
     type: ScreeningQuestion["type"];
@@ -956,8 +1002,104 @@ function QuestionsTab({
     setShowAdd(false);
   }
 
+  async function applyTemplate(template: QuestionTemplate, mode: "replace" | "append") {
+    if (isApplyingTemplate) return;
+    setIsApplyingTemplate(true);
+    try {
+      await onApplyTemplate(template, mode);
+      setPendingTemplate(null);
+      setExpandedId(null);
+      setEditDraft(null);
+      toast.success(mode === "replace" ? "Template loaded" : "Template appended");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load template");
+    } finally {
+      setIsApplyingTemplate(false);
+    }
+  }
+
+  function handleTemplateSelect(templateId: string) {
+    const template = questionTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    if (questions.length === 0) {
+      void applyTemplate(template, "replace");
+    } else {
+      setPendingTemplate(template);
+    }
+  }
+
   return (
     <div className="max-w-2xl space-y-3">
+      {questionTemplates.length > 0 && (
+        <div className="flex items-center gap-2 pb-3 border-b border-border">
+          <span className="text-body-sm text-muted shrink-0">Load template:</span>
+          <select
+            className="flex-1 h-8 px-2 rounded-lg border border-border bg-surface text-body-sm text-text outline-none focus:border-primary"
+            value=""
+            disabled={isApplyingTemplate}
+            onChange={(e) => {
+              handleTemplateSelect(e.target.value);
+              e.target.value = "";
+            }}
+          >
+            <option value="" disabled>
+              Select...
+            </option>
+            {questionTemplates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {pendingTemplate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="question-template-dialog-title"
+        >
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPendingTemplate(null)} />
+          <div className="relative bg-surface border border-border rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 space-y-4">
+            <h2 id="question-template-dialog-title" className="text-h3 text-text">
+              Load template?
+            </h2>
+            <p className="text-body-sm text-muted leading-relaxed">
+              "{pendingTemplate.name}" has {pendingTemplate.questions.length} question
+              {pendingTemplate.questions.length === 1 ? "" : "s"}. Replace existing questions or append them to the end?
+            </p>
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setPendingTemplate(null)}
+                disabled={isApplyingTemplate}
+                className="h-9 px-4 rounded-lg border border-border text-body-sm font-medium text-muted hover:bg-surface-2 transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => applyTemplate(pendingTemplate, "append")}
+                disabled={isApplyingTemplate}
+                className="h-9 px-4 rounded-lg border border-border text-body-sm font-semibold text-text hover:bg-surface-2 transition-colors disabled:opacity-40"
+              >
+                Append
+              </button>
+              <button
+                type="button"
+                onClick={() => applyTemplate(pendingTemplate, "replace")}
+                disabled={isApplyingTemplate}
+                className="h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-40"
+              >
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {questions.length === 0 && !showAdd && (
         <EmptyState title="No questions yet" description="Add screening questions to qualify candidates." />
       )}

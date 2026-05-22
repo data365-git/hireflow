@@ -242,8 +242,7 @@ async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang, sou
 
   const kb = new InlineKeyboard()
     .text(tr(lang, "btn_apply"), `apply_${vacancyId}`).row()
-    .text(tr(lang, "btn_other_jobs"), "browse_jobs")
-    .text(tr(lang, "btn_not_interested"), "not_interested");
+    .text(tr(lang, "btn_other_jobs"), "browse_jobs");
 
   if (browsingApplicationId) {
     await saveBotSession(String(ctx.from!.id), {
@@ -866,6 +865,19 @@ async function ensureInProgressApplication(
 
 async function startAnketa(ctx: Context, candidateId: string, fallbackLang: Lang, pendingVacancyId?: string) {
   const telegramUserId = String(ctx.from!.id);
+  const [candidate] = await db.select().from(candidates).where(eq(candidates.id, candidateId));
+  const lang = candidateLang(candidate, fallbackLang);
+
+  if (candidate?.languagePref) {
+    await saveBotSession(telegramUserId, {
+      vacancyId: pendingVacancyId ?? null,
+      applicationId: null,
+      state: "awaiting_full_name",
+      collectedData: { candidateId, pendingVacancyId: pendingVacancyId ?? null },
+    });
+    return ctx.reply(tr(lang, "ask_full_name"), { parse_mode: "Markdown" });
+  }
+
   await saveBotSession(telegramUserId, {
     vacancyId: pendingVacancyId ?? null,
     applicationId: null,
@@ -878,8 +890,8 @@ async function startAnketa(ctx: Context, candidateId: string, fallbackLang: Lang
     .text("🇺🇿 O'zbekcha", "anketa_lang_uz")
     .text("🇬🇧 English", "anketa_lang_en");
 
-  await ctx.reply(tr(fallbackLang, "welcome_dual"), { parse_mode: "Markdown" });
-  await ctx.reply(tr(fallbackLang, "ask_language"), { reply_markup: kb, parse_mode: "Markdown" });
+  await ctx.reply(tr(lang, "welcome_dual"), { parse_mode: "Markdown" });
+  await ctx.reply(tr(lang, "ask_language"), { reply_markup: kb, parse_mode: "Markdown" });
 }
 
 async function handleAnketaCallback(ctx: Context, data: string, fallbackLang: Lang) {
