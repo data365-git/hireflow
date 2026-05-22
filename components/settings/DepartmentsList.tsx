@@ -1,20 +1,109 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Archive, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
-import {
-  createDepartment,
-  deleteDepartment,
-  renameDepartment,
-  setDepartmentActive,
-  type DepartmentRow,
-} from "@/app/actions/departments";
+import * as departmentActions from "@/app/actions/departments";
+import type { DepartmentRow } from "@/app/actions/departments";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { ForceDeleteDepartmentDialog } from "@/components/settings/ForceDeleteDepartmentDialog";
 import { toast } from "@/lib/hooks/useToast";
 
 type Props = {
-  initial: DepartmentRow[];
+  initial: DepartmentListRow[];
 };
+
+export type DepartmentListRow = DepartmentRow & {
+  activeCount?: number;
+  closedCount?: number;
+  deletedCount?: number;
+};
+
+type DepartmentBlockerCode = "ACTIVE_VACANCIES_EXIST" | "CLOSED_VACANCIES_EXIST";
+
+type VacancyBlocker = {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+};
+
+type DepartmentBlockers = {
+  active?: VacancyBlocker[];
+  closed?: VacancyBlocker[];
+  deleted?: VacancyBlocker[];
+  vacancies?: VacancyBlocker[];
+};
+
+type DepartmentActionResult<T = unknown> =
+  | { ok: true; data: T }
+  | { ok: false; error?: unknown; code?: unknown; blockers?: DepartmentBlockers };
+
+type DepartmentActions = typeof departmentActions & {
+  createDepartment: typeof departmentActions.createDepartment;
+  deleteDepartment: (id: string) => Promise<DepartmentActionResult>;
+  renameDepartment: typeof departmentActions.renameDepartment;
+  setDepartmentActive: typeof departmentActions.setDepartmentActive;
+  getDepartmentBlockers?: (deptId: string) => Promise<DepartmentBlockers>;
+};
+
+const actions = departmentActions as DepartmentActions;
+
+function getCounts(row: DepartmentListRow) {
+  return {
+    active: row.activeCount ?? row.vacancyCount ?? 0,
+    closed: row.closedCount ?? 0,
+    deleted: row.deletedCount ?? 0,
+  };
+}
+
+function getActionError(result: DepartmentActionResult) {
+  if (result.ok) return null;
+  if (typeof result.error === "string") return result.error;
+  if (result.error && typeof result.error === "object" && "message" in result.error) {
+    const message = (result.error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return "Could not delete department.";
+}
+
+function getBlockerCode(result: DepartmentActionResult): DepartmentBlockerCode | null {
+  if (result.ok) return null;
+
+  const candidates = [
+    result.code,
+    result.error && typeof result.error === "object" ? (result.error as { code?: unknown }).code : null,
+  ];
+  return candidates.find(
+    (code): code is DepartmentBlockerCode =>
+      code === "ACTIVE_VACANCIES_EXIST" || code === "CLOSED_VACANCIES_EXIST"
+  ) ?? null;
+}
+
+function getResultBlockers(result: DepartmentActionResult): DepartmentBlockers | undefined {
+  if (result.ok) return undefined;
+  if ("blockers" in result) return result.blockers;
+  if (result.error && typeof result.error === "object" && "blockers" in result.error) {
+    return (result.error as { blockers?: DepartmentBlockers }).blockers;
+  }
+  return undefined;
+}
+
+function CountBadge({ label, count, tone }: { label: string; count: number; tone: "danger" | "muted" | "soft" }) {
+  const toneClass = {
+    danger: "border-danger/20 bg-danger-soft text-danger",
+    muted: "border-border bg-surface-2 text-muted",
+    soft: "border-border bg-bg text-subtle",
+  }[tone];
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${toneClass}`}>
+      <span>{label}</span>
+      <span className="tabular-nums">{count}</span>
+    </span>
+  );
+}
 
 export function DepartmentsList({ initial }: Props) {
   const [rows, setRows] = useState(initial);
@@ -23,7 +112,13 @@ export function DepartmentsList({ initial }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<DepartmentRow | null>(null);
+  const [deleting, setDeleting] = useState<DepartmentListRow | null>(null);
+  const [forceDeleting, setForceDeleting] = useState<DepartmentListRow | null>(null);
+  const [activeBlockers, setActiveBlockers] = useState<{
+    department: DepartmentListRow;
+    blockers: DepartmentBlockers | null;
+    loading: boolean;
+  } | null>(null);
   const [adding, setAdding] = useState(false);
 
   const sortedRows = useMemo(
@@ -36,7 +131,7 @@ export function DepartmentsList({ initial }: Props) {
     if (!displayName) return;
     setAdding(true);
     try {
-      const result = await createDepartment({ displayName });
+      const result = await actions.createDepartment({ displayName });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -66,7 +161,7 @@ export function DepartmentsList({ initial }: Props) {
 
     setSavingId(id);
     try {
-      const result = await renameDepartment(id, displayName);
+      const result = await actions.renameDepartment(id, displayName);
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -87,7 +182,7 @@ export function DepartmentsList({ initial }: Props) {
   async function toggleActive(row: DepartmentRow) {
     setSavingId(row.id);
     try {
-      const result = await setDepartmentActive(row.id, !row.isActive);
+      const result = await actions.setDepartmentActive(row.id, !row.isActive);
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -109,9 +204,21 @@ export function DepartmentsList({ initial }: Props) {
     if (!deleting) return;
     setSavingId(deleting.id);
     try {
-      const result = await deleteDepartment(deleting.id);
+      const result = await actions.deleteDepartment(deleting.id);
       if (!result.ok) {
-        toast.error(result.error);
+        const code = getBlockerCode(result);
+        if (code === "ACTIVE_VACANCIES_EXIST") {
+          const message = getActionError(result) ?? "This department has active vacancies. Close or move them before deleting it.";
+          toast.error(message);
+          void openActiveBlockers(deleting, getResultBlockers(result));
+          return;
+        }
+        if (code === "CLOSED_VACANCIES_EXIST") {
+          setForceDeleting(deleting);
+          setDeleting(null);
+          return;
+        }
+        toast.error(getActionError(result) ?? "Could not delete department.");
         return;
       }
       setRows((current) => current.filter((row) => row.id !== deleting.id));
@@ -121,6 +228,23 @@ export function DepartmentsList({ initial }: Props) {
       toast.error(error instanceof Error ? error.message : "Could not delete department");
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function openActiveBlockers(department: DepartmentListRow, initialBlockers?: DepartmentBlockers) {
+    setDeleting(null);
+    setActiveBlockers({ department, blockers: initialBlockers ?? null, loading: !initialBlockers });
+    if (initialBlockers || !actions.getDepartmentBlockers) return;
+
+    try {
+      const blockers = await actions.getDepartmentBlockers(department.id);
+      setActiveBlockers((current) =>
+        current?.department.id === department.id ? { department, blockers, loading: false } : current
+      );
+    } catch {
+      setActiveBlockers((current) =>
+        current?.department.id === department.id ? { department, blockers: null, loading: false } : current
+      );
     }
   }
 
@@ -182,7 +306,7 @@ export function DepartmentsList({ initial }: Props) {
           <thead className="border-b border-border bg-surface-2">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-subtle">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-subtle">Active vacancies</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-subtle">Vacancies</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-subtle">Status</th>
               <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-subtle">Actions</th>
             </tr>
@@ -224,7 +348,13 @@ export function DepartmentsList({ initial }: Props) {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted">{row.vacancyCount}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        <CountBadge label="Active" count={getCounts(row).active} tone={getCounts(row).active > 0 ? "danger" : "muted"} />
+                        <CountBadge label="Closed" count={getCounts(row).closed} tone={getCounts(row).closed > 0 ? "muted" : "soft"} />
+                        <CountBadge label="Deleted" count={getCounts(row).deleted} tone="soft" />
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         row.isActive
@@ -254,17 +384,15 @@ export function DepartmentsList({ initial }: Props) {
                         >
                           {row.isActive ? <Archive className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                         </button>
-                        {row.vacancyCount === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setDeleting(row)}
-                            disabled={isSaving}
-                            className="rounded-md p-2 text-muted transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDeleting(row)}
+                          disabled={isSaving}
+                          className="rounded-md p-2 text-muted transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -283,6 +411,81 @@ export function DepartmentsList({ initial }: Props) {
         onConfirm={() => void handleDelete()}
         onCancel={() => setDeleting(null)}
       />
+
+      <ActiveVacancyBlockersDialog
+        state={activeBlockers}
+        onClose={() => setActiveBlockers(null)}
+      />
+
+      <ForceDeleteDepartmentDialog
+        open={Boolean(forceDeleting)}
+        department={forceDeleting}
+        departments={rows}
+        onClose={() => setForceDeleting(null)}
+        onDeleted={(departmentId) => {
+          setRows((current) => current.filter((row) => row.id !== departmentId));
+          setForceDeleting(null);
+        }}
+      />
     </div>
+  );
+}
+
+function ActiveVacancyBlockersDialog({
+  state,
+  onClose,
+}: {
+  state: {
+    department: DepartmentListRow;
+    blockers: DepartmentBlockers | null;
+    loading: boolean;
+  } | null;
+  onClose: () => void;
+}) {
+  const activeVacancies = state?.blockers?.active ?? state?.blockers?.vacancies ?? [];
+
+  return (
+    <Dialog
+      open={Boolean(state)}
+      onClose={onClose}
+      title="Active vacancies block deletion"
+      size="md"
+    >
+      <div className="space-y-4">
+        <div className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-3 text-body-sm text-danger">
+          {state?.department.displayName ?? "This department"} cannot be deleted while it has active vacancies.
+        </div>
+
+        <div className="space-y-2 text-body-sm text-muted">
+          {state?.loading ? (
+            <p>Checking active vacancies...</p>
+          ) : activeVacancies.length > 0 ? (
+            <div className="space-y-2">
+              <p>Close or reassign these vacancies first:</p>
+              <ul className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border bg-bg p-2">
+                {activeVacancies.map((vacancy) => (
+                  <li key={vacancy.id}>
+                    <Link
+                      href={`/vacancies/${vacancy.id}`}
+                      className="block rounded-md px-2 py-1.5 text-text transition-colors hover:bg-surface-2"
+                    >
+                      {vacancy.title || vacancy.id}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p>Close or reassign the active vacancies in this department first, then try deleting it again.</p>
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
