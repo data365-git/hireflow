@@ -2,14 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import type { ComponentType } from "react";
 import { Suspense, useEffect, useState } from "react";
 import { getInboxUnreadCount } from "@/app/actions/messages";
+import { useSidebarCollapsed } from "@/lib/hooks/useSidebarCollapsed";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   Archive,
   Ban,
   BarChart2,
   Briefcase,
   CheckCircle2,
+  ChevronsLeft,
+  ChevronsRight,
   ClipboardList,
   Eye,
   Inbox,
@@ -21,7 +26,7 @@ import {
   Users,
 } from "lucide-react";
 
-type IconComponent = React.ComponentType<{
+type IconComponent = ComponentType<{
   className?: string;
   strokeWidth?: number;
 }>;
@@ -51,15 +56,26 @@ function isActive(
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-function NavLink({ href, label, Icon, badge, exact, activeWhen }: NavItem) {
+function NavLink({
+  href,
+  label,
+  Icon,
+  badge,
+  exact,
+  activeWhen,
+  collapsed,
+}: NavItem & { collapsed: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active = isActive({ href, exact, activeWhen }, pathname, searchParams.get("status"));
 
-  return (
+  const link = (
     <Link
       href={href}
-      className={`relative flex items-center gap-2.5 h-8 px-3 rounded-lg text-body-sm font-medium transition-all ${
+      aria-current={active ? "page" : undefined}
+      className={`relative flex h-8 items-center rounded-lg text-body-sm font-medium transition-all ${
+        collapsed ? "w-9 justify-center px-0" : "gap-2.5 px-3"
+      } ${
         active
           ? "bg-primary/10 text-primary"
           : "text-muted hover:text-text hover:bg-surface-2"
@@ -69,8 +85,8 @@ function NavLink({ href, label, Icon, badge, exact, activeWhen }: NavItem) {
         <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary rounded-r" />
       )}
       <Icon className="size-4 shrink-0" strokeWidth={active ? 2.5 : 2} />
-      <span className="flex-1 truncate">{label}</span>
-      {badge != null && (
+      {!collapsed && <span className="flex-1 truncate">{label}</span>}
+      {badge != null && !collapsed && (
         <span
           className={`text-micro rounded-full px-1.5 min-w-[18px] h-[18px] inline-flex items-center justify-center font-semibold ${
             active ? "bg-primary text-primary-fg" : "bg-surface-3 text-muted"
@@ -79,16 +95,29 @@ function NavLink({ href, label, Icon, badge, exact, activeWhen }: NavItem) {
           {badge}
         </span>
       )}
+      {badge != null && collapsed && (
+        <span className="absolute right-1 top-1 size-2 rounded-full bg-danger" />
+      )}
     </Link>
   );
+
+  return collapsed ? <Tooltip content={label}>{link}</Tooltip> : link;
 }
 
-function GroupHeader({ group }: { group: NavGroup }) {
+function GroupHeader({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const status = searchParams.get("status");
   const active = group.items.some((item) => isActive(item, pathname, status));
   const GroupIcon = group.Icon;
+
+  if (collapsed) {
+    return (
+      <div className="py-2">
+        <div className="mx-auto h-px w-7 bg-border" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex items-center gap-2 px-3 pt-3 pb-1">
@@ -161,46 +190,85 @@ const groups: NavGroup[] = [
 
 function SidebarContent() {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
 
   useEffect(() => {
     getInboxUnreadCount().then(setUnreadCount).catch(() => setUnreadCount(0));
   }, []);
 
   return (
-    <aside className="w-60 shrink-0 bg-bg border-r border-border flex flex-col h-screen sticky top-0 z-40">
-      <div className="h-14 px-5 flex items-center gap-3 border-b border-border shrink-0">
-        <div className="size-8 bg-primary text-primary-fg rounded-lg flex items-center justify-center font-extrabold text-body">
+    <aside
+      className={`hidden shrink-0 bg-bg border-r border-border lg:flex flex-col h-screen sticky top-0 z-40 transition-[width] duration-200 ${
+        collapsed ? "w-16" : "w-60"
+      }`}
+      suppressHydrationWarning
+    >
+      <div
+        className={`h-14 flex items-center border-b border-border shrink-0 ${
+          collapsed ? "justify-center px-2" : "gap-3 px-5"
+        }`}
+      >
+        <div className="size-8 bg-primary text-primary-fg rounded-lg flex shrink-0 items-center justify-center font-extrabold text-body">
           H
         </div>
-        <div>
-          <span className="font-bold text-body text-text">HireFlow</span>
-          <p className="text-micro text-subtle leading-none mt-0.5">HR Pipeline</p>
-        </div>
+        {!collapsed && (
+          <>
+            <div className="min-w-0 flex-1">
+              <span className="font-bold text-body text-text">HireFlow</span>
+              <p className="text-micro text-subtle leading-none mt-0.5">HR Pipeline</p>
+            </div>
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              aria-label="Collapse sidebar"
+              className="size-7 shrink-0 rounded-md flex items-center justify-center text-muted transition-colors hover:bg-surface-2 hover:text-text"
+              onClick={() => setCollapsed(true)}
+            >
+              <ChevronsLeft className="size-4" />
+            </button>
+          </>
+        )}
       </div>
 
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
+      <nav
+        className={`flex-1 py-3 space-y-0.5 overflow-y-auto ${
+          collapsed ? "px-1.5" : "px-3"
+        }`}
+      >
         <NavLink
           href="/inbox"
           label="Inbox"
           Icon={Inbox}
           badge={unreadCount > 0 ? unreadCount : undefined}
           exact
+          collapsed={collapsed}
         />
 
         {groups.map((group) => (
           <div key={group.label}>
-            <GroupHeader group={group} />
+            <GroupHeader group={group} collapsed={collapsed} />
             <div className="space-y-0.5">
               {group.items.map((item) => (
-                <NavLink key={item.href} {...item} />
+                <NavLink key={item.href} {...item} collapsed={collapsed} />
               ))}
             </div>
           </div>
         ))}
       </nav>
 
-      <div className="px-3 pb-3 shrink-0">
-        <NavLink href="/settings" label="Settings" Icon={Settings} />
+      <div className={`shrink-0 space-y-1 pb-3 ${collapsed ? "px-1.5" : "px-3"}`}>
+        <NavLink href="/settings" label="Settings" Icon={Settings} collapsed={collapsed} />
+        {collapsed && (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-label="Expand sidebar"
+            className="mx-auto flex size-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            onClick={() => setCollapsed(false)}
+          >
+            <ChevronsRight className="size-4" />
+          </button>
+        )}
       </div>
     </aside>
   );
@@ -208,7 +276,7 @@ function SidebarContent() {
 
 export function Sidebar() {
   return (
-    <Suspense fallback={<div className="w-60 shrink-0 border-r border-border bg-bg" />}>
+    <Suspense fallback={<div className="hidden w-60 shrink-0 border-r border-border bg-bg lg:block" />}>
       <SidebarContent />
     </Suspense>
   );

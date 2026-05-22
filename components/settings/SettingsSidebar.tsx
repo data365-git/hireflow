@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Users, Shield, Zap, Layers, FlaskConical, Database, MessageSquare } from "lucide-react";
+import { User, Users, Shield, Zap, Layers, FlaskConical, Database, MessageSquare, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const tabs = [
@@ -11,6 +11,7 @@ const tabs = [
   { label: "Roles", icon: Shield, href: "/settings/roles", gated: true },
   { label: "Automations", icon: Zap, href: "/settings/automations", gated: true },
   { label: "Stage Templates", icon: Layers, href: "/settings/stage-templates", gated: true },
+  { label: "Departments", icon: Building2, href: "/settings/departments", gated: true },
   { label: "Question Templates", icon: Layers, href: "/settings/question-templates", gated: true },
   { label: "Message Templates", icon: MessageSquare, href: "/settings/message-templates", gated: true },
   { label: "Bot Content", icon: MessageSquare, href: "/settings/bot-content", gated: true },

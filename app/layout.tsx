@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { DataModeProvider } from "@/context/DataModeContext";
@@ -29,6 +30,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${manrope.variable} ${mono.variable}`}>
       <body className="flex h-screen overflow-hidden bg-bg">
+        <Script id="sidebar-init" strategy="beforeInteractive">
+          {`(function(){try{window.__SIDEBAR_COLLAPSED__=localStorage.getItem("sidebar-collapsed")==="1";}catch(e){window.__SIDEBAR_COLLAPSED__=false;}})();`}
+        </Script>
         <AuthProvider>
           <DataModeProvider>
             <AppShell>{children}</AppShell>

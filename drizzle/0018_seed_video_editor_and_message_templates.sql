@@ -6,10 +6,7 @@ VALUES (
   'Comprehensive screening for Video Editor roles',
   true
 )
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  description = EXCLUDED.description,
-  is_system = EXCLUDED.is_system;
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO question_template_items (id, template_id, text, type, options, order_index)
 VALUES
@@ -29,11 +26,7 @@ VALUES
 📝 Ishdan ketish sababi', 'long-text', NULL, 9),
   ('qt-video-editor-full-q10', 'qt-video-editor-full', 'Eng yaxshi 3 ta editingiz va portfoliongiz linkini yuboring', 'long-text', NULL, 10),
   ('qt-video-editor-full-q11', 'qt-video-editor-full', 'Nega aynan sizni ushbu lavozimga munosib nomzod sifatida tanlashimiz kerak? 100 so''zdan iborat motivatsion xat yozing. E''tibor bering: ushbu xat saralash jarayonida muhim rol o''ynaydi.', 'long-text', NULL, 11)
-ON CONFLICT (id) DO UPDATE SET
-  text = EXCLUDED.text,
-  type = EXCLUDED.type,
-  options = EXCLUDED.options,
-  order_index = EXCLUDED.order_index;
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO message_templates (id, kind, name, content, is_system, owner_id, is_global)
 VALUES
@@ -43,11 +36,4 @@ VALUES
   ('mt-success-ru-standard', 'success', 'Standard Success — RU', 'Ваша заявка принята! Мы свяжемся с вами в течение 5 рабочих дней. Спасибо!', true, NULL, true),
   ('mt-intro-en-standard', 'intro', 'Standard Intro — EN', 'Hi! Thanks for your interest in Data365. Please answer the questions below so we can review your application.', true, NULL, true),
   ('mt-success-en-standard', 'success', 'Standard Success — EN', 'Your application has been received. We will get back to you within 5 business days. Thank you!', true, NULL, true)
-ON CONFLICT (id) DO UPDATE SET
-  kind = EXCLUDED.kind,
-  name = EXCLUDED.name,
-  content = EXCLUDED.content,
-  is_system = EXCLUDED.is_system,
-  owner_id = EXCLUDED.owner_id,
-  is_global = EXCLUDED.is_global,
-  updated_at = now();
+ON CONFLICT (id) DO NOTHING;
