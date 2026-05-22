@@ -178,10 +178,26 @@ async function askFirstLanguage(ctx: Context, payload: string) {
 
   const kb = new InlineKeyboard()
     .text("🇺🇿 O'zbekcha", "first_lang_uz").row()
-    .text("🇷🇺 Русский", "first_lang_ru").row()
-    .text("🇬🇧 English", "first_lang_en");
+    .text("🇬🇧 English", "first_lang_en").row()
+    .text("🇷🇺 Русский", "first_lang_ru");
 
-  await ctx.reply("Tilni tanlang / Выберите язык / Choose your language", { reply_markup: kb });
+  const welcome = [
+    "👋 *Xush kelibsiz!*",
+    "👋 *Welcome!*",
+    "👋 *Добро пожаловать!*",
+    "",
+    "Iltimos, tilni tanlang / Please choose your language / Выберите язык:",
+  ].join("\n");
+
+  await ctx.reply(welcome, { reply_markup: kb, parse_mode: "Markdown" });
+}
+
+async function clearInlineKeyboard(ctx: Context) {
+  try {
+    await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+  } catch {
+    // Telegram may reject edits for old or already-edited messages. The action should still continue.
+  }
 }
 
 // ---- /start ----
@@ -316,6 +332,20 @@ export async function handleCallbackQuery(ctx: Context) {
       await db.update(candidates)
         .set({ languagePref: nextLang, language: nextLang })
         .where(eq(candidates.id, candidate.id));
+    } else {
+      await db.insert(candidates).values({
+        id: crypto.randomUUID(),
+        fullName: ctx.from?.first_name ?? "",
+        phone: "",
+        telegramUsername: ctx.from?.username ?? "",
+        telegramFirstName: ctx.from?.first_name ?? "",
+        telegramUserId,
+        language: nextLang,
+        languagePref: nextLang,
+        city: "",
+        isDemo: false,
+        createdAt: new Date(),
+      });
     }
 
     const session = await getBotSession(telegramUserId);
@@ -508,19 +538,25 @@ export async function handleCallbackQuery(ctx: Context) {
     await clearSessionAndAbandon(String(ctx.from!.id), session?.applicationId);
     return ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
   }
-  if (data === "submit_confirm") return handleSubmitConfirm(ctx, lang);
+  if (data === "submit_confirm") {
+    await clearInlineKeyboard(ctx);
+    return handleSubmitConfirm(ctx, lang);
+  }
   if (data === "submit_cancel") {
+    await clearInlineKeyboard(ctx);
     const kb = new InlineKeyboard()
       .text(tr(lang, "btn_yes"), "submit_cancel_confirm").row()
       .text(tr(lang, "btn_no"), "submit_cancel_abort");
     return ctx.reply(tr(lang, "confirm_cancel"), { reply_markup: kb, parse_mode: "Markdown" });
   }
   if (data === "submit_cancel_confirm") {
+    await clearInlineKeyboard(ctx);
     const session = await getBotSession(String(ctx.from!.id));
     await clearSessionAndAbandon(String(ctx.from!.id), session?.applicationId);
     return ctx.reply(tr(lang, "cancelled"), { parse_mode: "Markdown" });
   }
   if (data === "submit_cancel_abort") {
+    await clearInlineKeyboard(ctx);
     const session = await getBotSession(String(ctx.from!.id));
     if (session?.vacancyId) {
       const data2 = (session.collectedData as Record<string, unknown>) ?? {};
@@ -602,6 +638,50 @@ export async function showJobs(ctx: Context, departmentId: string | null) {
   return ctx.reply(tr(lang, "jobs_header"), { reply_markup: kb, parse_mode: "Markdown" });
 }
 
+function formatStatusDate(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function statusDisplay(
+  lang: Lang,
+  status: string,
+  stage: { isFinal: boolean; isRejected: boolean } | null
+): string {
+  if (stage?.isRejected) {
+    if (lang === "ru") return "🔴 Отклонено";
+    if (lang === "en") return "🔴 Rejected";
+    return "🔴 Rad etilgan";
+  }
+  if (stage?.isFinal) {
+    if (lang === "ru") return "🟢 Принят";
+    if (lang === "en") return "🟢 Hired";
+    return "🟢 Qabul qilingan";
+  }
+  if (status === "submitted") {
+    if (lang === "ru") return "🔵 На рассмотрении";
+    if (lang === "en") return "🔵 In review";
+    return "🔵 Ko'rib chiqilmoqda";
+  }
+  if (status === "in_progress") {
+    if (lang === "ru") return "🟡 Заполняется";
+    if (lang === "en") return "🟡 In progress";
+    return "🟡 To'ldirilmoqda";
+  }
+  if (status === "abandoned") {
+    if (lang === "ru") return "⚫ Остановлено";
+    if (lang === "en") return "⚫ Abandoned";
+    return "⚫ To'xtatilgan";
+  }
+  if (lang === "ru") return "⏳ Новая";
+  if (lang === "en") return "⏳ New";
+  return "⏳ Yangi";
+}
+
 // ---- /status ----
 export async function handleStatus(ctx: Context) {
   const lang = await resolveBotLang(ctx);
@@ -626,13 +706,10 @@ export async function handleStatus(ctx: Context) {
   const lines = [tr(lang, "status_header"), ""];
   for (let i = 0; i < appRows.length; i++) {
     const { app, vacancy: v, stage } = appRows[i];
-    const date = app.appliedAt ? new Date(app.appliedAt).toLocaleDateString() : "—";
-    lines.push(tr(lang, "status_item", {
-      i: i + 1,
-      vacancy: v.title,
-      stage: stage?.name ?? "—",
-      date,
-    }));
+    lines.push(`*${i + 1}. ${v.title}*`);
+    lines.push(`📅 ${formatStatusDate(app.appliedAt)}`);
+    lines.push(`${statusDisplay(lang, app.status, stage)} · ${stage?.name ?? "—"}`);
+    lines.push("");
   }
 
   await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
