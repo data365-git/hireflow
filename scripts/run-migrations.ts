@@ -32,14 +32,18 @@ async function main() {
   const pool = new Pool({ connectionString: DATABASE_URL, max: 1 });
   const client = await pool.connect();
 
+  let lockAcquired = false;
+
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS _migrations_applied (
         filename text PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now(),
-        checksum text
+        checksum text NOT NULL
       )
     `);
+    await client.query("SELECT pg_advisory_lock(hashtext($1))", ["hr-app-migrations"]);
+    lockAcquired = true;
 
     const dir = resolve(process.cwd(), "drizzle");
     const files = readdirSync(dir)
@@ -106,6 +110,9 @@ async function main() {
 
     console.log("[migrate] All migrations complete");
   } finally {
+    if (lockAcquired) {
+      await client.query("SELECT pg_advisory_unlock(hashtext($1))", ["hr-app-migrations"]).catch(() => {});
+    }
     client.release();
     await pool.end();
   }

@@ -423,7 +423,10 @@ async function notifyHrOfSubmitFailure(
   } catch {}
 }
 
-export async function submitApplication(applicationId: string): Promise<void> {
+export async function submitApplication(
+  applicationId: string,
+  options: { notifyCandidate?: boolean } = {}
+): Promise<void> {
   const appRows = await db
     .select()
     .from(applications)
@@ -477,10 +480,12 @@ export async function submitApplication(applicationId: string): Promise<void> {
     throw err;
   }
 
-  await notifyCandidateOfStageChange(applicationId).catch((err) => {
-    console.error("Submit notification failed:", err);
-    notifyHrOfSubmitFailure(err, { telegramUserId, vacancyTitle }).catch(() => {});
-  });
+  if (options.notifyCandidate ?? true) {
+    await notifyCandidateOfStageChange(applicationId).catch((err) => {
+      console.error("Submit notification failed:", err);
+      notifyHrOfSubmitFailure(err, { telegramUserId, vacancyTitle }).catch(() => {});
+    });
+  }
 
   await fireApplicationSubmittedAutomations(applicationId).catch((err) => {
     console.error("Application submission automation failed:", err);

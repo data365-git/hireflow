@@ -21,6 +21,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { KbdHint } from "@/components/ui/KbdHint";
 import { CandidateActionControls } from "@/components/candidates/CandidateActionControls";
 import { AnketaTab } from "@/components/candidates/AnketaTab";
+import { StageHistory } from "@/components/candidates/StageHistory";
 import { StageProgressionHeader } from "@/components/candidates/StageProgressionHeader";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { formatRelativeTime, daysAgo } from "@/lib/utils";
@@ -45,7 +46,6 @@ export type ConversationMessage = {
 
 type ActivityItem =
   | { kind: "message"; ts: string; msg: TelegramMessage }
-  | { kind: "timeline"; ts: string; event: TimelineEvent }
   | { kind: "note"; ts: string; note: InternalNote; author?: User };
 
 type WorkExperienceFormRow = {
@@ -421,7 +421,7 @@ function ProfileContent({
 
   const TABS: { id: Tab; label: string; badge?: number }[] = [
     { id: "anketa", label: "Anketa", badge: candidate?.profileCompleted ? 1 : undefined },
-    { id: "activity", label: "Activity" },
+    { id: "activity", label: "Activity", badge: messages.length + notes.length || undefined },
     { id: "chat", label: "Chat", badge: unreadCount > 0 ? unreadCount : undefined },
     { id: "conversation", label: "Conversation", badge: initialConversation.length > 0 ? initialConversation.length : undefined },
     { id: "notes", label: "Notes", badge: notes.length > 0 ? notes.length : undefined },
@@ -432,7 +432,6 @@ function ProfileContent({
 
   const activityFeed: ActivityItem[] = [
     ...messages.map((m) => ({ kind: "message" as const, ts: m.sentAt, msg: m })),
-    ...timeline.map((e) => ({ kind: "timeline" as const, ts: e.createdAt, event: e })),
     ...notes.map((n) => ({
       kind: "note" as const,
       ts: n.createdAt,
@@ -695,15 +694,12 @@ function ProfileContent({
                 {activityFeed.length === 0 ? (
                   <EmptyState
                     title="No activity yet"
-                    description="Messages, stage moves, and notes will appear here."
+                    description="Messages and notes will appear here."
                   />
                 ) : (
                   activityFeed.map((item) => {
                     if (item.kind === "message") {
                       return <ChatBubble key={item.msg.id} message={item.msg} />;
-                    }
-                    if (item.kind === "timeline") {
-                      return <TimelineEntry key={item.event.id} event={item.event} />;
                     }
                     if (item.kind === "note") {
                       return (
@@ -1002,7 +998,13 @@ function ProfileContent({
 
             {/* ── Timeline ── */}
             {activeTab === "timeline" && (
-              <div>
+              <div className="space-y-5">
+                <StageHistory
+                  timeline={timeline}
+                  stages={vacancyStages}
+                  currentStageId={application.currentStageId}
+                  appliedAt={application.appliedAt}
+                />
                 {timeline.length === 0 ? (
                   <EmptyState
                     title="No events yet"

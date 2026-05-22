@@ -238,9 +238,21 @@ export default function NewVacancyPage() {
         setMessageTemplateError(null);
         const rows = await listMessageTemplates(undefined, form.language);
         if (cancelled) return;
-        setMessageTemplates(rows.filter((template) => template.kind === "intro" || template.kind === "success"));
-        setSelectedIntroTemplateId("");
-        setSelectedSuccessTemplateId("");
+        const filteredRows = rows.filter((template) => template.kind === "intro" || template.kind === "success");
+        setMessageTemplates(filteredRows);
+
+        const defaultIntro = filteredRows.find((template) => template.kind === "intro" && template.isSystem)
+          ?? filteredRows.find((template) => template.kind === "intro");
+        const defaultSuccess = filteredRows.find((template) => template.kind === "success" && template.isSystem)
+          ?? filteredRows.find((template) => template.kind === "success");
+
+        setSelectedIntroTemplateId(defaultIntro?.id ?? "");
+        setSelectedSuccessTemplateId(defaultSuccess?.id ?? "");
+        setForm((current) => ({
+          ...current,
+          introMessage: current.introMessage || defaultIntro?.content || "",
+          successMessage: current.successMessage || defaultSuccess?.content || "",
+        }));
       } catch (err) {
         if (!cancelled) {
           console.error("Failed to load message templates", err);

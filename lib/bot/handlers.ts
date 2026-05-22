@@ -151,18 +151,31 @@ function buildStablePrefillSummary(candidate: typeof candidates.$inferSelect): s
   ].filter(Boolean).join("\n");
 }
 
+function candidateEmail(candidate: typeof candidates.$inferSelect | null | undefined): string | null {
+  const phone = candidate?.phone?.trim();
+  return phone && isValidEmail(phone) ? phone : null;
+}
+
 async function showMainMenu(ctx: Context, lang: Lang) {
   const kb = new InlineKeyboard()
     .text(tr(lang, "btn_browse_jobs"), "browse_jobs").row()
-    .text(tr(lang, "btn_about_us"), "about_us")
-    .text(tr(lang, "btn_contact_us"), "contact_us").row()
-    .text(tr(lang, "btn_feedback"), "feedback").row()
-    .text(tr(lang, "btn_my_applications"), "my_applications");
+    .text(tr(lang, "btn_inquiries"), "inquiries").row()
+    .text(tr(lang, "btn_suggestion"), "feedback_suggestion");
 
   await ctx.reply(
     `${tr(lang, "welcome_no_payload")}\n\n${tr(lang, "welcome_browse")}`,
     { reply_markup: kb, parse_mode: "Markdown" }
   );
+}
+
+async function showInquiriesMenu(ctx: Context, lang: Lang) {
+  const kb = new InlineKeyboard()
+    .text(tr(lang, "btn_about_us"), "about_us").row()
+    .text(tr(lang, "btn_contact_us"), "contact_us").row()
+    .text(tr(lang, "btn_complaint"), "feedback_complaint").row()
+    .text(tr(lang, "btn_back"), "main_menu");
+
+  await ctx.reply(tr(lang, "inquiries_prompt"), { reply_markup: kb, parse_mode: "Markdown" });
 }
 
 async function askFirstLanguage(ctx: Context, payload: string) {
@@ -465,10 +478,18 @@ export async function handleCallbackQuery(ctx: Context) {
     await saveBotSession(telegramUserId, {
       vacancyId: reapplyVacancyId,
       applicationId,
-      state: "awaiting_email",
+      state: candidateEmail(candRows[0]) ? "awaiting_email_confirm" : "awaiting_email",
       currentQuestionIndex: 0,
       collectedData,
     });
+    const existingEmail = candidateEmail(candRows[0]);
+    if (existingEmail) {
+      const kb = new InlineKeyboard()
+        .text(tr(lang, "btn_email_use_existing"), "email_use_existing").row()
+        .text(tr(lang, "btn_email_enter_new"), "email_enter_new");
+      await ctx.reply(tr(lang, "email_confirm", { email: existingEmail }), { reply_markup: kb, parse_mode: "Markdown" });
+      return;
+    }
     await ctx.reply(tr(lang, "ask_email", { step: 2, total: totalSteps }), { parse_mode: "Markdown" });
     return;
   }
@@ -502,6 +523,14 @@ export async function handleCallbackQuery(ctx: Context) {
     return ctx.reply(text, { parse_mode: "Markdown" });
   }
 
+  if (data === "inquiries") {
+    return showInquiriesMenu(ctx, lang);
+  }
+
+  if (data === "main_menu") {
+    return showMainMenu(ctx, lang);
+  }
+
   if (data === "contact_us") {
     const telegramUserId = String(ctx.from!.id);
     await saveBotSession(telegramUserId, { state: "awaiting_contact_message", currentQuestionIndex: 0, collectedData: {} });
@@ -524,6 +553,28 @@ export async function handleCallbackQuery(ctx: Context) {
       collectedData: { feedbackKind: kind },
     });
     return ctx.reply(tr(lang, kind === "complaint" ? "ask_complaint" : "ask_suggestion"), { parse_mode: "Markdown" });
+  }
+
+  if (data === "email_use_existing" || data === "email_enter_new") {
+    const telegramUserId = String(ctx.from!.id);
+    const session = await getBotSession(telegramUserId);
+    if (!session || session.state !== "awaiting_email_confirm") return;
+
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+    const email = candidateEmail(candidate);
+    const emailData = ((session.collectedData as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+
+    if (data === "email_use_existing" && email) {
+      emailData.email = email;
+      await saveBotSession(telegramUserId, { state: "awaiting_email", collectedData: emailData });
+      return continueAfterEmail(ctx, session, emailData, candidate ? candidateLang(candidate, lang) : lang);
+    }
+
+    await saveBotSession(telegramUserId, { state: "awaiting_email", collectedData: emailData });
+    return ctx.reply(tr(candidate ? candidateLang(candidate, lang) : lang, "ask_email", {
+      step: 2,
+      total: (emailData.totalSteps as number) ?? 6,
+    }), { parse_mode: "Markdown" });
   }
 
   if (data.startsWith("dept_")) {
@@ -855,6 +906,10 @@ export async function handleText(ctx: Context) {
     return handleAnketaText(ctx, text, lang);
   }
 
+  if (session.state === "awaiting_email_confirm") {
+    return ctx.reply(tr(lang, "err_click_button"), { parse_mode: "Markdown" });
+  }
+
   const vacancy = session.vacancyId ? await getLiveActiveVacancy(session.vacancyId) : null;
 
   if (!vacancy) {
@@ -886,16 +941,7 @@ export async function handleText(ctx: Context) {
     } else {
       data.email = text;
     }
-
-    if (questions.length === 0) {
-      const portfolioStep = 3;
-      await saveBotSession(telegramUserId, { state: "awaiting_portfolio", collectedData: data });
-      await ctx.reply(tr(lang, "ask_portfolio", { step: portfolioStep, total: totalSteps }), { parse_mode: "Markdown" });
-    } else {
-      await saveBotSession(telegramUserId, { state: "awaiting_question", currentQuestionIndex: 0, collectedData: data });
-      await askQuestion(ctx, questions[0], 3, totalSteps, lang);
-    }
-    return;
+    return continueAfterEmail(ctx, session, data, lang);
   }
 
   if (session.state === "awaiting_question") {
@@ -953,6 +999,28 @@ export async function handleText(ctx: Context) {
       .text(tr(lang, "consent_yes"), "consent_yes").row()
       .text(tr(lang, "consent_no"), "consent_no");
     return ctx.reply(tr(lang, "ask_consent"), { reply_markup: kb, parse_mode: "Markdown" });
+  }
+}
+
+async function continueAfterEmail(
+  ctx: Context,
+  session: NonNullable<Awaited<ReturnType<typeof getBotSession>>>,
+  data: Record<string, unknown>,
+  lang: Lang
+) {
+  const telegramUserId = String(ctx.from!.id);
+  const totalSteps = (data.totalSteps as number) ?? 6;
+  const questions = await db.select().from(screeningQuestions)
+    .where(eq(screeningQuestions.vacancyId, session.vacancyId!))
+    .orderBy(asc(screeningQuestions.orderIndex));
+
+  if (questions.length === 0) {
+    const portfolioStep = 3;
+    await saveBotSession(telegramUserId, { state: "awaiting_portfolio", collectedData: data });
+    await ctx.reply(tr(lang, "ask_portfolio", { step: portfolioStep, total: totalSteps }), { parse_mode: "Markdown" });
+  } else {
+    await saveBotSession(telegramUserId, { state: "awaiting_question", currentQuestionIndex: 0, collectedData: data });
+    await askQuestion(ctx, questions[0], 3, totalSteps, lang);
   }
 }
 
@@ -1028,7 +1096,7 @@ async function startApplicationScreening(
     if (resumeQuestionIdx >= questions.length) {
       startState = "awaiting_portfolio";
     } else {
-      startState = resumeQuestionIdx > 0 ? "awaiting_question" : "awaiting_email";
+      startState = resumeQuestionIdx > 0 ? "awaiting_question" : (candidateEmail(candidate) ? "awaiting_email_confirm" : "awaiting_email");
     }
   }
 
@@ -1048,6 +1116,12 @@ async function startApplicationScreening(
     await ctx.reply(tr(lang, "ask_name", { step: 1, total: totalSteps }), { parse_mode: "Markdown" });
   } else if (startState === "awaiting_email") {
     await ctx.reply(tr(lang, "ask_email", { step: 2, total: totalSteps }), { parse_mode: "Markdown" });
+  } else if (startState === "awaiting_email_confirm") {
+    const email = candidateEmail(candidate);
+    const kb = new InlineKeyboard()
+      .text(tr(lang, "btn_email_use_existing"), "email_use_existing").row()
+      .text(tr(lang, "btn_email_enter_new"), "email_enter_new");
+    await ctx.reply(tr(lang, "email_confirm", { email: email ?? "" }), { reply_markup: kb, parse_mode: "Markdown" });
   } else if (startState === "awaiting_question") {
     await askQuestion(ctx, questions[resumeQuestionIdx], 3 + resumeQuestionIdx, totalSteps, lang);
   } else if (startState === "awaiting_portfolio") {
@@ -1626,7 +1700,7 @@ async function handleSubmitConfirm(ctx: Context, lang: Lang) {
         motivationLetter: data.motivationLetter ? String(data.motivationLetter) : undefined,
         portfolioLinks: Array.isArray(data.portfolioLinks) ? (data.portfolioLinks as string[]) : undefined,
       });
-      await submitApplication(existingApplicationId);
+      await submitApplication(existingApplicationId, { notifyCandidate: false });
       appId = existingApplicationId;
     } else {
       // Backward-compat path: no in_progress application (e.g. old session without applicationId)
@@ -1646,7 +1720,7 @@ async function handleSubmitConfirm(ctx: Context, lang: Lang) {
           motivationLetter: data.motivationLetter ? String(data.motivationLetter) : undefined,
           portfolioLinks: Array.isArray(data.portfolioLinks) ? (data.portfolioLinks as string[]) : undefined,
         });
-        await submitApplication(liveAppId);
+        await submitApplication(liveAppId, { notifyCandidate: false });
         appId = liveAppId;
       } else {
         appId = await createApplicationFromBot({
