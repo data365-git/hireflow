@@ -9,7 +9,12 @@ import { Combobox } from "@/components/ui/Combobox";
 import { createVacancy } from "@/app/actions/vacancies";
 import { listDepartments, type DepartmentOption } from "@/app/actions/departments";
 import { getAssignableHrUsers, type AssignableHrUser } from "@/app/actions/users";
-import { UZ_CITIES } from "@/lib/locations";
+import {
+  createMessageTemplate,
+  listMessageTemplates,
+  type MessageTemplateView,
+} from "@/app/actions/message-templates";
+import { UZ_LOCATIONS } from "@/lib/locations";
 
 type TemplateStage = {
   id: string;
@@ -105,6 +110,12 @@ export default function NewVacancyPage() {
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
   const [departmentLoadError, setDepartmentLoadError] = useState<string | null>(null);
+  const [messageTemplates, setMessageTemplates] = useState<MessageTemplateView[]>([]);
+  const [isLoadingMessageTemplates, setIsLoadingMessageTemplates] = useState(true);
+  const [messageTemplateError, setMessageTemplateError] = useState<string | null>(null);
+  const [selectedIntroTemplateId, setSelectedIntroTemplateId] = useState("");
+  const [selectedSuccessTemplateId, setSelectedSuccessTemplateId] = useState("");
+  const [savingMessageTemplateKind, setSavingMessageTemplateKind] = useState<"intro" | "success" | null>(null);
 
   const [form, setForm] = useState<VacancyFormState>({
     title: "",
@@ -217,6 +228,36 @@ export default function NewVacancyPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMessageTemplates() {
+      try {
+        setIsLoadingMessageTemplates(true);
+        setMessageTemplateError(null);
+        const rows = await listMessageTemplates(undefined, form.language);
+        if (cancelled) return;
+        setMessageTemplates(rows.filter((template) => template.kind === "intro" || template.kind === "success"));
+        setSelectedIntroTemplateId("");
+        setSelectedSuccessTemplateId("");
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load message templates", err);
+          setMessageTemplates([]);
+          setMessageTemplateError("Could not load message templates.");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingMessageTemplates(false);
+      }
+    }
+
+    loadMessageTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.language]);
+
   function applyTemplate() {
     const tpl = templates.find((t) => t.id === selectedTemplateId);
     if (!tpl) return;
@@ -236,6 +277,54 @@ export default function NewVacancyPage() {
 
   function patchForm(patch: Partial<VacancyFormState>) {
     setForm((f) => ({ ...f, ...patch }));
+  }
+
+  function applyMessageTemplate(kind: "intro" | "success", templateId: string) {
+    const template = messageTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    if (kind === "intro") {
+      patchForm({ introMessage: template.content });
+      setSelectedIntroTemplateId(templateId);
+    } else {
+      patchForm({ successMessage: template.content });
+      setSelectedSuccessTemplateId(templateId);
+    }
+  }
+
+  async function refreshMessageTemplates() {
+    const rows = await listMessageTemplates(undefined, form.language);
+    setMessageTemplates(rows.filter((template) => template.kind === "intro" || template.kind === "success"));
+  }
+
+  async function saveCurrentMessageAsTemplate(kind: "intro" | "success") {
+    const content = kind === "intro" ? form.introMessage : form.successMessage;
+    if (!content.trim()) return;
+
+    const fallbackName = `${kind === "intro" ? "Intro" : "Success"} - ${form.language.toUpperCase()}`;
+    const name = window.prompt("Template name", fallbackName);
+    if (!name?.trim()) return;
+
+    try {
+      setSavingMessageTemplateKind(kind);
+      setMessageTemplateError(null);
+      const template = await createMessageTemplate({
+        kind,
+        language: form.language,
+        name,
+        content,
+      });
+      await refreshMessageTemplates();
+      if (kind === "intro") {
+        setSelectedIntroTemplateId(template.id);
+      } else {
+        setSelectedSuccessTemplateId(template.id);
+      }
+    } catch (err) {
+      console.error("Failed to save message template", err);
+      setMessageTemplateError(err instanceof Error ? err.message : "Could not save message template.");
+    } finally {
+      setSavingMessageTemplateKind(null);
+    }
   }
 
   // Questions
@@ -429,8 +518,8 @@ export default function NewVacancyPage() {
               className={INPUT_CLS}
               value={form.location}
               onChange={(location) => patchForm({ location })}
-              options={UZ_CITIES}
-              placeholder="Start typing a city..."
+              options={UZ_LOCATIONS}
+              placeholder="Start typing a city, region, or work mode..."
               allowCustom
             />
           </div>
@@ -519,11 +608,46 @@ export default function NewVacancyPage() {
   }
 
   function renderStep2() {
+    const introTemplates = messageTemplates.filter((template) => template.kind === "intro");
+    const successTemplates = messageTemplates.filter((template) => template.kind === "success");
+
     return (
       <div className="space-y-5">
         <p className={SECTION_HEADER_CLS}>Candidate-facing Messages</p>
+        {messageTemplateError && (
+          <p className="text-caption text-danger" role="alert">
+            {messageTemplateError}
+          </p>
+        )}
         <div>
-          <label className={LABEL_CLS}>Intro Message</label>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="text-body-sm text-muted">Intro Message</label>
+            <div className="flex items-center gap-2">
+              <select
+                className="max-w-48 bg-surface border border-border rounded-lg px-2 h-8 text-body-sm text-text outline-none focus:border-primary"
+                value={selectedIntroTemplateId}
+                onChange={(e) => applyMessageTemplate("intro", e.target.value)}
+                disabled={isLoadingMessageTemplates || introTemplates.length === 0}
+              >
+                <option value="">
+                  {isLoadingMessageTemplates ? "Loading..." : "Load template..."}
+                </option>
+                {introTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => saveCurrentMessageAsTemplate("intro")}
+                disabled={!form.introMessage.trim() || savingMessageTemplateKind !== null}
+                className="h-8 px-3 rounded-lg border border-border text-body-sm text-text hover:bg-surface-2 transition-colors disabled:opacity-40"
+              >
+                {savingMessageTemplateKind === "intro" ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
           <textarea
             className={TEXTAREA_CLS}
             rows={4}
@@ -533,7 +657,34 @@ export default function NewVacancyPage() {
           />
         </div>
         <div>
-          <label className={LABEL_CLS}>Success Message</label>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="text-body-sm text-muted">Success Message</label>
+            <div className="flex items-center gap-2">
+              <select
+                className="max-w-48 bg-surface border border-border rounded-lg px-2 h-8 text-body-sm text-text outline-none focus:border-primary"
+                value={selectedSuccessTemplateId}
+                onChange={(e) => applyMessageTemplate("success", e.target.value)}
+                disabled={isLoadingMessageTemplates || successTemplates.length === 0}
+              >
+                <option value="">
+                  {isLoadingMessageTemplates ? "Loading..." : "Load template..."}
+                </option>
+                {successTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => saveCurrentMessageAsTemplate("success")}
+                disabled={!form.successMessage.trim() || savingMessageTemplateKind !== null}
+                className="h-8 px-3 rounded-lg border border-border text-body-sm text-text hover:bg-surface-2 transition-colors disabled:opacity-40"
+              >
+                {savingMessageTemplateKind === "success" ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
           <textarea
             className={TEXTAREA_CLS}
             rows={4}

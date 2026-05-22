@@ -17,8 +17,16 @@ const KINDS = [
   { value: "success", label: "Success" },
 ] as const;
 
+const LANGUAGES = [
+  { value: "all", label: "All languages" },
+  { value: "uz", label: "Uzbek" },
+  { value: "en", label: "English" },
+  { value: "ru", label: "Russian" },
+] as const;
+
 type FormState = {
   kind: string;
+  language: string;
   name: string;
   content: string;
   isGlobal: boolean;
@@ -26,6 +34,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   kind: "intro",
+  language: "uz",
   name: "",
   content: "",
   isGlobal: false,
@@ -35,6 +44,7 @@ export default function MessageTemplatesPage() {
   const [templates, setTemplates] = useState<MessageTemplateView[]>([]);
   const [loading, setLoading] = useState(true);
   const [kindFilter, setKindFilter] = useState<(typeof KINDS)[number]["value"]>("all");
+  const [languageFilter, setLanguageFilter] = useState<(typeof LANGUAGES)[number]["value"]>("all");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,9 +63,12 @@ export default function MessageTemplatesPage() {
   useEffect(() => { load(); }, []);
 
   const visibleTemplates = useMemo(() => {
-    if (kindFilter === "all") return templates;
-    return templates.filter((template) => template.kind === kindFilter);
-  }, [kindFilter, templates]);
+    return templates.filter((template) => {
+      if (kindFilter !== "all" && template.kind !== kindFilter) return false;
+      if (languageFilter !== "all" && template.language !== languageFilter) return false;
+      return true;
+    });
+  }, [kindFilter, languageFilter, templates]);
 
   function resetForm() {
     setForm(EMPTY_FORM);
@@ -69,6 +82,7 @@ export default function MessageTemplatesPage() {
     setEditingId(template.id);
     setForm({
       kind: template.kind,
+      language: template.language,
       name: template.name,
       content: template.content,
       isGlobal: template.isGlobal,
@@ -80,6 +94,7 @@ export default function MessageTemplatesPage() {
   async function handleSave() {
     setError(null);
     if (!form.kind.trim()) { setError("Kind is required"); return; }
+    if (!form.language.trim()) { setError("Language is required"); return; }
     if (!form.name.trim()) { setError("Name is required"); return; }
     if (!form.content.trim()) { setError("Content is required"); return; }
 
@@ -113,20 +128,33 @@ export default function MessageTemplatesPage() {
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="inline-flex rounded-lg border border-border overflow-hidden">
-          {KINDS.map((kind) => (
-            <button
-              key={kind.value}
-              onClick={() => setKindFilter(kind.value)}
-              className={`px-3 py-1.5 text-sm border-r border-border last:border-r-0 ${
-                kindFilter === kind.value
-                  ? "bg-primary-soft text-primary font-medium"
-                  : "text-muted hover:bg-surface-2"
-              }`}
-            >
-              {kind.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-border overflow-hidden">
+            {KINDS.map((kind) => (
+              <button
+                key={kind.value}
+                onClick={() => setKindFilter(kind.value)}
+                className={`px-3 py-1.5 text-sm border-r border-border last:border-r-0 ${
+                  kindFilter === kind.value
+                    ? "bg-primary-soft text-primary font-medium"
+                    : "text-muted hover:bg-surface-2"
+                }`}
+              >
+                {kind.label}
+              </button>
+            ))}
+          </div>
+          <select
+            value={languageFilter}
+            onChange={(e) => setLanguageFilter(e.target.value as typeof languageFilter)}
+            className="px-3 py-1.5 bg-surface border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {LANGUAGES.map((language) => (
+              <option key={language.value} value={language.value}>
+                {language.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <button
@@ -149,7 +177,7 @@ export default function MessageTemplatesPage() {
             </button>
           </div>
 
-          <div className="grid md:grid-cols-[160px_1fr] gap-2">
+          <div className="grid md:grid-cols-[150px_150px_1fr] gap-2">
             <select
               value={form.kind}
               onChange={(e) => setForm((prev) => ({ ...prev, kind: e.target.value }))}
@@ -157,7 +185,15 @@ export default function MessageTemplatesPage() {
             >
               <option value="intro">Intro</option>
               <option value="success">Success</option>
-              <option value="followup">Follow-up</option>
+            </select>
+            <select
+              value={form.language}
+              onChange={(e) => setForm((prev) => ({ ...prev, language: e.target.value }))}
+              className="px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="uz">Uzbek</option>
+              <option value="en">English</option>
+              <option value="ru">Russian</option>
             </select>
             <input
               type="text"
@@ -221,6 +257,9 @@ export default function MessageTemplatesPage() {
                     <h3 className="text-sm font-medium text-text">{template.name}</h3>
                     <span className="px-1.5 py-0.5 bg-surface-2 border border-border rounded text-micro text-muted uppercase">
                       {template.kind}
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-surface-2 border border-border rounded text-micro text-muted uppercase">
+                      {template.language}
                     </span>
                     {template.isSystem && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-2 border border-border rounded text-micro text-muted">

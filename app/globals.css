@@ -6,6 +6,7 @@
   --color-surface:      #FFFFFF;
   --color-surface-2:    #F4F5F7;
   --color-surface-3:    #E8EAEE;
+  --color-surface-elevated:#FFFFFF;
   --color-overlay:      rgba(15, 23, 42, 0.45);
 
   /* ─── Text ─────────────────────────────────────────────── */
@@ -17,12 +18,14 @@
   /* ─── Borders ───────────────────────────────────────────── */
   --color-border:       #E2E8F0;
   --color-border-strong:#94A3B8;
+  --color-border-focus: #3525CD;
 
   /* ─── Brand ─────────────────────────────────────────────── */
   --color-primary:      #3525CD;
-  --color-primary-hover:#4F46E5;
+  --color-primary-hover:#2D1FB8;
   --color-primary-soft: #EEF2FF;
   --color-primary-fg:   #FFFFFF;
+  --color-primary-ring: rgba(53, 37, 205, 0.12);
 
   /* ─── Backward-compat aliases (keep so existing code works) */
   --color-accent:       #3525CD;
@@ -76,12 +79,12 @@
   --text-micro:    11px;  --text-micro--line-height: 1.3;   --text-micro--letter-spacing: 0.04em; --text-micro--font-weight: 600;
   --text-body-xs:  12px;  --text-body-xs--line-height: 1.45;
   --text-body-sm:  13px;  --text-body-sm--line-height: 1.5;
-  --text-body:     14px;  --text-body--line-height: 1.5;
+  --text-body:     14px;  --text-body--line-height: 1.57;
   --text-body-lg:  15px;  --text-body-lg--line-height: 1.55;
-  --text-h3:       16px;  --text-h3--line-height: 1.4;   --text-h3--font-weight: 600;
-  --text-h2:       18px;  --text-h2--line-height: 1.3;   --text-h2--font-weight: 600;
-  --text-h1:       22px;  --text-h1--line-height: 1.25;  --text-h1--letter-spacing: -0.01em; --text-h1--font-weight: 700;
-  --text-display:  32px;  --text-display--line-height: 1.15; --text-display--letter-spacing: -0.02em; --text-display--font-weight: 800;
+  --text-h3:       16px;  --text-h3--line-height: 1.5;   --text-h3--font-weight: 650;
+  --text-h2:       18px;  --text-h2--line-height: 1.55;  --text-h2--font-weight: 650;
+  --text-h1:       24px;  --text-h1--line-height: 1.33;  --text-h1--font-weight: 750;
+  --text-display:  32px;  --text-display--line-height: 1.25; --text-display--font-weight: 800;
 
   /* ─── Radius ─────────────────────────────────────────────── */
   --radius-sm:    4px;
@@ -93,9 +96,10 @@
 
   /* ─── Shadow ─────────────────────────────────────────────── */
   --shadow-xs:      0 1px 2px rgba(15,23,42,0.04);
-  --shadow-sm:      0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.06);
-  --shadow-md:      0 2px 4px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.08);
-  --shadow-lg:      0 8px 24px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04);
+  --shadow-sm:      0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md:      0 4px 6px -1px rgba(15,23,42,0.08), 0 2px 4px -1px rgba(15,23,42,0.04);
+  --shadow-lg:      0 10px 15px -3px rgba(15,23,42,0.08), 0 4px 6px -2px rgba(15,23,42,0.04);
+  --shadow-xl:      0 20px 25px -5px rgba(15,23,42,0.10), 0 10px 10px -5px rgba(15,23,42,0.04);
   --shadow-overlay: 0 24px 64px rgba(15,23,42,0.18);
 
   --spacing: 4px;

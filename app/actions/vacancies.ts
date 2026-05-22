@@ -20,6 +20,7 @@ import {
   users,
   vacancies,
   vacancyDeletionBackups,
+  vacancyStatusChanges,
   vacancyStages,
 } from "@/lib/db/schema";
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
@@ -309,8 +310,9 @@ export async function getVacancyModeInfo(id: string) {
 }
 
 export async function createVacancy(input: CreateVacancyInput): Promise<CreateVacancyResult> {
+  let session: Awaited<ReturnType<typeof requirePermission>>;
   try {
-    await requirePermission("vacancies", "create");
+    session = await requirePermission("vacancies", "create");
   } catch {
     return createVacancyError("FORBIDDEN", undefined, "You do not have permission to create vacancies.");
   }
@@ -386,9 +388,18 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
         responsibleHrId,
         stageIds: stageRows.map((stage) => stage.id),
         createdAt: new Date(),
+        lastActivatedAt: new Date(),
         introMessage: input.introMessage || null,
         successMessage: input.successMessage || null,
         isDemo,
+      });
+
+      await tx.insert(vacancyStatusChanges).values({
+        id: `vsc-${crypto.randomUUID()}`,
+        vacancyId,
+        fromStatus: null,
+        toStatus: "active",
+        changedBy: session.sub,
       });
 
       await tx.insert(vacancyStages).values(stageRows);
@@ -438,6 +449,7 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
 }
 
 export async function updateVacancyDetails(vacancyId: string, patch: VacancyPatch): Promise<Vacancy> {
+  const session = await requirePermission("vacancies", "edit");
   const current = await requireVacancyInCurrentMode(vacancyId);
 
   const update: Partial<typeof vacancies.$inferInsert> = {};
@@ -449,7 +461,12 @@ export async function updateVacancyDetails(vacancyId: string, patch: VacancyPatc
   if (patch.salaryMin !== undefined) update.salaryMin = patch.salaryMin;
   if (patch.salaryMax !== undefined) update.salaryMax = patch.salaryMax;
   if (patch.description !== undefined) update.description = patch.description;
-  if (patch.status !== undefined) update.status = patch.status;
+  if (patch.status !== undefined) {
+    update.status = patch.status;
+    if (patch.status === "active" && current.status !== "active") {
+      update.lastActivatedAt = new Date();
+    }
+  }
   if (patch.language !== undefined) update.language = patch.language;
   if (patch.responsibleHrId !== undefined) update.responsibleHrId = patch.responsibleHrId || null;
   if (patch.introMessage !== undefined) update.introMessage = patch.introMessage || null;
@@ -474,6 +491,16 @@ export async function updateVacancyDetails(vacancyId: string, patch: VacancyPatc
     .set(update)
     .where(eq(vacancies.id, vacancyId))
     .returning();
+
+  if (patch.status !== undefined && patch.status !== current.status) {
+    await db.insert(vacancyStatusChanges).values({
+      id: `vsc-${crypto.randomUUID()}`,
+      vacancyId,
+      fromStatus: current.status,
+      toStatus: patch.status,
+      changedBy: session.sub,
+    });
+  }
 
   if (update.department !== undefined) {
     await upsertDepartmentFromVacancyName(update.department);
@@ -850,6 +877,16 @@ export async function softDeleteVacancy(
     });
 
     await tx.delete(botSessions).where(eq(botSessions.vacancyId, vacancyId));
+
+    if (vacancy.status !== "closed") {
+      await tx.insert(vacancyStatusChanges).values({
+        id: `vsc-${crypto.randomUUID()}`,
+        vacancyId,
+        fromStatus: vacancy.status,
+        toStatus: "closed",
+        changedBy: session.sub,
+      });
+    }
   });
 
   if (options.notifyCandidates) {
@@ -894,6 +931,16 @@ export async function restoreVacancy(vacancyId: string): Promise<VacancyDeleteRe
     .update(vacancies)
     .set({ deletedAt: null, deletedBy: null, status: "paused" })
     .where(eq(vacancies.id, vacancyId));
+
+  if (vacancy.status !== "paused") {
+    await db.insert(vacancyStatusChanges).values({
+      id: `vsc-${crypto.randomUUID()}`,
+      vacancyId,
+      fromStatus: vacancy.status,
+      toStatus: "paused",
+      changedBy: session.sub,
+    });
+  }
 
   audit({
     action: "VACANCY_RESTORE",

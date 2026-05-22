@@ -20,9 +20,9 @@ export const Input = forwardRef<HTMLInputElement, Props>(
           id={inputId}
           ref={ref}
           className={cn(
-            "w-full rounded-lg border border-border px-3 py-2 text-body-sm bg-surface text-text placeholder:text-subtle outline-none transition-all",
-            "focus:ring-2 focus:ring-primary/30 focus:border-primary",
-            "disabled:bg-surface-2 disabled:text-disabled",
+            "w-full min-h-10 rounded-lg border border-border bg-surface px-3 py-2 text-body-sm text-text shadow-sm outline-none transition-all placeholder:text-subtle",
+            "hover:border-border-strong focus:border-primary focus:ring-2 focus:ring-primary/12",
+            "disabled:bg-surface-2 disabled:text-disabled disabled:shadow-none",
             className,
           )}
           {...props}

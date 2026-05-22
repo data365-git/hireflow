@@ -6,6 +6,7 @@ import type { ComponentType } from "react";
 import { Suspense, useEffect, useState } from "react";
 import { getInboxUnreadCount } from "@/app/actions/messages";
 import { useSidebarCollapsed } from "@/lib/hooks/useSidebarCollapsed";
+import { useSidebarGroups } from "@/lib/hooks/useSidebarGroups";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   Archive,
@@ -13,6 +14,7 @@ import {
   BarChart2,
   Briefcase,
   CheckCircle2,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   ClipboardList,
@@ -42,6 +44,7 @@ type NavItem = {
 };
 
 type NavGroup = {
+  key: string;
   label: string;
   Icon: IconComponent;
   items: NavItem[];
@@ -105,38 +108,53 @@ function NavLink({
   return collapsed ? <Tooltip content={label}>{link}</Tooltip> : link;
 }
 
-function GroupHeader({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const status = searchParams.get("status");
-  const active = group.items.some((item) => isActive(item, pathname, status));
+function GroupHeader({
+  group,
+  active,
+  expanded,
+  controlsId,
+  onToggle,
+}: {
+  group: NavGroup;
+  active: boolean;
+  expanded: boolean;
+  controlsId: string;
+  onToggle: () => void;
+}) {
   const GroupIcon = group.Icon;
 
-  if (collapsed) {
-    return (
-      <div className="py-2">
-        <div className="mx-auto h-px w-7 bg-border" />
-      </div>
-    );
-  }
-
   return (
-    <div className="relative flex items-center gap-2 px-3 pt-3 pb-1">
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controlsId}
+      onClick={onToggle}
+      className={`relative mt-3 flex h-7 w-full items-center gap-2 rounded-md px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${
+        active ? "text-primary" : "text-subtle hover:bg-surface-2 hover:text-text"
+      }`}
+    >
       {active && <span className="absolute left-0 top-3 bottom-1 w-0.5 bg-primary rounded-r" />}
-      <GroupIcon className="size-3.5 text-subtle" strokeWidth={2} />
-      <p
-        className={`text-micro uppercase tracking-widest ${
+      <GroupIcon className="size-3.5 shrink-0" strokeWidth={2} />
+      <span
+        className={`min-w-0 flex-1 truncate text-micro uppercase tracking-widest ${
           active ? "text-primary font-semibold" : "text-subtle"
         }`}
       >
         {group.label}
-      </p>
-    </div>
+      </span>
+      <ChevronDown
+        className={`size-3.5 shrink-0 transition-transform duration-200 ${
+          expanded ? "rotate-0" : "-rotate-90"
+        }`}
+        strokeWidth={2}
+      />
+    </button>
   );
 }
 
 const groups: NavGroup[] = [
   {
+    key: "vacancies",
     label: "Vacancies",
     Icon: Briefcase,
     items: [
@@ -173,6 +191,7 @@ const groups: NavGroup[] = [
     ],
   },
   {
+    key: "targeted-recruitment",
     label: "Targeted Recruitment",
     Icon: Users,
     items: [
@@ -185,6 +204,7 @@ const groups: NavGroup[] = [
     ],
   },
   {
+    key: "mass-recruitment",
     label: "Mass Recruitment",
     Icon: MessageSquareText,
     items: [
@@ -195,9 +215,18 @@ const groups: NavGroup[] = [
   },
 ];
 
+const groupKeys = groups.map((group) => group.key);
+
 function SidebarContent() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const status = searchParams.get("status");
+  const activeGroupKey = groups.find((group) =>
+    group.items.some((item) => isActive(item, pathname, status))
+  )?.key ?? null;
+  const { groupStates, toggleGroup } = useSidebarGroups(groupKeys, activeGroupKey);
 
   useEffect(() => {
     getInboxUnreadCount().then(setUnreadCount).catch(() => setUnreadCount(0));
@@ -251,16 +280,39 @@ function SidebarContent() {
           collapsed={collapsed}
         />
 
-        {groups.map((group) => (
-          <div key={group.label}>
-            <GroupHeader group={group} collapsed={collapsed} />
-            <div className="space-y-0.5">
-              {group.items.map((item) => (
-                <NavLink key={item.href} {...item} collapsed={collapsed} />
-              ))}
+        {groups.map((group) => {
+          const active = activeGroupKey === group.key;
+          const expanded = collapsed || (groupStates[group.key] ?? false);
+          const controlsId = `sidebar-group-${group.key}`;
+
+          return (
+            <div key={group.key}>
+              {!collapsed && (
+                <GroupHeader
+                  group={group}
+                  active={active}
+                  expanded={expanded}
+                  controlsId={controlsId}
+                  onToggle={() => toggleGroup(group.key)}
+                />
+              )}
+              <div
+                id={controlsId}
+                className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                  expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className="space-y-0.5">
+                    {group.items.map((item) => (
+                      <NavLink key={item.href} {...item} collapsed={collapsed} />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className={`shrink-0 space-y-1 pb-3 ${collapsed ? "px-1.5" : "px-3"}`}>

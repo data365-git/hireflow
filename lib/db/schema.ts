@@ -48,6 +48,7 @@ export const vacancies = pgTable("vacancies", {
   responsibleHrId: text("responsible_hr_id").references(() => users.id, { onDelete: "set null" }),
   stageIds: jsonb("stage_ids").$type<string[]>().default([]),
   createdAt: timestamp("created_at").notNull(),
+  lastActivatedAt: timestamp("last_activated_at", { withTimezone: true }).notNull().defaultNow(),
   introMessage: text("intro_message"),
   successMessage: text("success_message"),
   isDemo: boolean("is_demo").notNull().default(false),
@@ -55,6 +56,17 @@ export const vacancies = pgTable("vacancies", {
   deletedBy: text("deleted_by").references(() => users.id, { onDelete: "set null" }),
 }, (t) => ({
   deletedAtIdx: index("vacancies_deleted_at_idx").on(t.deletedAt),
+}));
+
+export const vacancyStatusChanges = pgTable("vacancy_status_changes", {
+  id: text("id").primaryKey(),
+  vacancyId: text("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  changedBy: text("changed_by").references(() => users.id, { onDelete: "set null" }),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  vacancyChangedAtIdx: index("vacancy_status_changes_vacancy_changed_at_idx").on(t.vacancyId, t.changedAt),
 }));
 
 // ─── Vacancy Stages ───────────────────────────────────────────────────────────
@@ -303,6 +315,7 @@ export const questionTemplateItems = pgTable("question_template_items", {
 export const messageTemplates = pgTable("message_templates", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(), // "intro" | "success" | future message surfaces
+  language: text("language").notNull().default("uz"), // "uz" | "en" | "ru"
   name: text("name").notNull(),
   content: text("content").notNull(),
   isSystem: boolean("is_system").notNull().default(false),
@@ -312,6 +325,7 @@ export const messageTemplates = pgTable("message_templates", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   kindIdx: index("message_templates_kind_idx").on(t.kind),
+  languageIdx: index("message_templates_language_idx").on(t.language),
   ownerIdx: index("message_templates_owner_idx").on(t.ownerId),
 }));
 

@@ -3,7 +3,7 @@ import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments, botContent, feedback } from "@/lib/db/schema";
 import { saveBotMessageRecord } from "./messageLog";
-import { eq, and, asc, desc, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, gte, isNull } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, createInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
 import { resolveBotLang } from "./lang";
@@ -315,6 +315,25 @@ export async function handleCallbackQuery(ctx: Context) {
       if (!existingCand[0].profileCompleted) {
         await startAnketa(ctx, existingCand[0].id, candidateLang(existingCand[0], lang), vacancyId);
         return;
+      }
+
+      const adminIds = (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      const isBotAdmin = adminIds.includes(telegramUserId);
+      if (!isBotAdmin) {
+        const existingSubmitted = await db
+          .select({ id: applications.id })
+          .from(applications)
+          .where(and(
+            eq(applications.candidateId, existingCand[0].id),
+            eq(applications.vacancyId, vacancyId),
+            eq(applications.status, "submitted"),
+            gte(applications.appliedAt, vacancy.lastActivatedAt)
+          ))
+          .limit(1);
+
+        if (existingSubmitted[0]) {
+          return ctx.reply(tr(lang, "already_applied", { vacancy: vacancy.title }), { parse_mode: "Markdown" });
+        }
       }
     }
 
