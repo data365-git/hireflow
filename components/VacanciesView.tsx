@@ -166,17 +166,17 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
     : "Vacancies";
 
   return (
-    <div className="px-8 py-8 max-w-[1000px]">
+    <div className="px-8 py-8 max-w-[1120px]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-h1 text-text">{title}</h1>
           <p className="text-body-sm text-muted mt-1">
             {vacancies.filter((v) => v.status === "active").length} active positions
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border border-border rounded-lg overflow-hidden">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center border border-border rounded-lg overflow-hidden bg-surface shadow-xs">
             <button
               onClick={() => setView("cards")}
               className={`h-8 px-3 text-body-sm transition-colors ${view === "cards" ? "bg-surface-2 text-text font-medium" : "text-muted hover:bg-surface-2"}`}
@@ -192,7 +192,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
           </div>
           <Link
             href="/vacancies/new"
-            className="inline-flex items-center gap-1.5 h-8 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-semibold"
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-primary text-primary-fg text-body-sm font-semibold shadow-md shadow-primary/20 hover:bg-primary-hover transition-colors"
           >
             + New
           </Link>
@@ -218,7 +218,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
         <>
           {/* Cards view */}
           {view === "cards" && (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {visibleVacancies.map((vacancy) => {
                 const hr = users.find((u) => u.id === vacancy.responsibleHrId);
                 const total = getTotalCandidates(vacancy.id);
@@ -233,7 +233,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                     onKeyDown={(e) => {
                       if (e.key === "Enter") router.push(`/vacancies/${vacancy.id}`);
                     }}
-                    className="block bg-surface border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group cursor-pointer"
+                    className="block bg-surface-elevated border border-border rounded-2xl p-5 shadow-sm hover:border-primary/40 hover:shadow-lg transition-all group cursor-pointer"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -247,23 +247,22 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                             {vacancy.status.charAt(0).toUpperCase() + vacancy.status.slice(1)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span className="text-body-sm text-muted">{vacancy.department}</span>
-                          <span className="text-subtle">·</span>
+                          <span className="text-subtle">/</span>
                           <span className="text-body-sm text-muted">
                             {WORK_TYPE_LABELS[vacancy.workType] ?? vacancy.workType}
                           </span>
-                          <span className="text-subtle">·</span>
+                          <span className="text-subtle">/</span>
                           <span className="text-body-sm text-muted">{vacancy.location}</span>
-                          <span className="text-subtle">·</span>
-                          <span className="text-body-sm text-muted">
-                            {formatSalary(vacancy.salaryMin, vacancy.salaryMax)}
-                          </span>
+                        </div>
+                        <div className="mt-3 inline-flex max-w-full items-center rounded-full bg-surface-2 px-3 py-1 text-body-sm font-medium text-text">
+                          <span className="truncate">{formatSalary(vacancy.salaryMin, vacancy.salaryMax)}</span>
                         </div>
                         <p className="text-body-sm text-subtle mt-2 line-clamp-1">{vacancy.description}</p>
                       </div>
 
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 rounded-xl bg-surface-2 px-3 py-2 min-w-20">
                         <div className="text-h2 text-text font-bold">{total}</div>
                         <div className="text-micro text-muted">candidates</div>
                         {newCount > 0 && (
@@ -272,7 +271,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                    <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-border flex-wrap">
                       <div className="flex items-center gap-2">
                         <div
                           className="size-6 rounded-full flex items-center justify-center text-xs font-semibold text-white"
@@ -282,7 +281,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                         </div>
                         <span className="text-body-sm text-muted">{hr?.name ?? "Unassigned"}</span>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap justify-end">
                         <Link
                           href={`/vacancies/${vacancy.id}/edit`}
                           onClick={(e) => e.stopPropagation()}
@@ -297,8 +296,8 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                             onDeleted={handleDeleted}
                           />
                         )}
-                        <span className="text-body-sm text-primary font-medium group-hover:underline">
-                          Open pipeline →
+                        <span className="text-body-sm text-primary font-semibold group-hover:underline">
+                          Open pipeline
                         </span>
                       </div>
                     </div>
@@ -310,7 +309,7 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
 
           {/* Table view */}
           {view === "table" && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <div className="bg-surface-elevated border border-border rounded-2xl overflow-hidden shadow-sm">
               <table className="w-full text-body-sm">
                 <thead>
                   <tr className="border-b border-border bg-surface-2">

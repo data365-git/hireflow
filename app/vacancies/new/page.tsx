@@ -54,11 +54,12 @@ const STAGE_COLORS: Record<string, string> = {
 const STAGE_COLOR_KEYS = Object.keys(STAGE_COLORS);
 
 const INPUT_CLS =
-  "w-full bg-surface border border-border rounded-lg px-3 h-9 text-body-sm text-text outline-none focus:border-primary";
+  "w-full bg-surface-elevated border border-border rounded-lg px-3 h-10 text-body-sm text-text shadow-xs outline-none transition-colors focus:border-primary";
 const TEXTAREA_CLS =
-  "w-full bg-surface border border-border rounded-lg px-3 py-2 text-body-sm text-text outline-none focus:border-primary resize-none";
+  "w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-body-sm text-text shadow-xs outline-none transition-colors focus:border-primary resize-none";
 const LABEL_CLS = "block text-body-sm text-muted mb-1";
 const SECTION_HEADER_CLS = "text-micro uppercase tracking-wider text-subtle mb-3";
+const PANEL_CLS = "bg-surface-elevated border border-border rounded-xl p-5 shadow-sm";
 
 type QuestionDraft = {
   id: string;
@@ -469,8 +470,8 @@ export default function NewVacancyPage() {
       <div className="space-y-5">
         <p className={SECTION_HEADER_CLS}>Position Details</p>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
             <label className={LABEL_CLS}>Job Title</label>
             <input
               className={INPUT_CLS}
@@ -619,10 +620,10 @@ export default function NewVacancyPage() {
             {messageTemplateError}
           </p>
         )}
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
+        <div className={PANEL_CLS}>
+          <div className="flex items-start justify-between gap-2 mb-2 flex-wrap">
             <label className="text-body-sm text-muted">Intro Message</label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               <select
                 className="max-w-48 bg-surface border border-border rounded-lg px-2 h-8 text-body-sm text-text outline-none focus:border-primary"
                 value={selectedIntroTemplateId}
@@ -656,10 +657,10 @@ export default function NewVacancyPage() {
             placeholder="Welcome to our application process…"
           />
         </div>
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
+        <div className={PANEL_CLS}>
+          <div className="flex items-start justify-between gap-2 mb-2 flex-wrap">
             <label className="text-body-sm text-muted">Success Message</label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               <select
                 className="max-w-48 bg-surface border border-border rounded-lg px-2 h-8 text-body-sm text-text outline-none focus:border-primary"
                 value={selectedSuccessTemplateId}
@@ -726,8 +727,8 @@ export default function NewVacancyPage() {
           )}
         </div>
 
-        <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3 mb-4 text-body-sm">
-          <p className="font-semibold text-text mb-1">📌 Bot already collects from every applicant:</p>
+        <div className="rounded-xl bg-primary-soft border border-primary/20 px-4 py-3 mb-4 text-body-sm shadow-xs">
+          <p className="font-semibold text-text mb-1">Bot already collects from every applicant:</p>
           <p className="text-muted">Full name · Date of birth · Address · Phone · Marital status · Education · Languages · Work history · Email · CV · Notes</p>
           <p className="text-subtle mt-1">Add <strong>vacancy-specific</strong> questions below (e.g. "Years of experience?", "Portfolio URL?").</p>
         </div>
@@ -768,7 +769,7 @@ export default function NewVacancyPage() {
 
         <div className="space-y-3">
           {questions.map((q, i) => (
-            <div key={q.id} className="bg-surface-2 border border-border rounded-lg p-3 space-y-2">
+            <div key={q.id} className="bg-surface-elevated border border-border rounded-xl p-3 space-y-2 shadow-xs">
               <div className="flex items-start gap-2">
                 <div className="flex flex-col gap-1 pt-1 shrink-0">
                   <button
@@ -831,9 +832,9 @@ export default function NewVacancyPage() {
         </div>
 
         {/* Add question row */}
-        <div className="flex gap-2 items-center pt-1">
+        <div className="flex gap-2 items-center pt-1 flex-wrap">
           <input
-            className={INPUT_CLS + " flex-1"}
+            className={INPUT_CLS + " min-w-56 flex-1"}
             value={newQText}
             onChange={(e) => setNewQText(e.target.value)}
             placeholder="New question…"
@@ -868,7 +869,7 @@ export default function NewVacancyPage() {
         <p className={SECTION_HEADER_CLS}>Pipeline Stages</p>
 
         {/* Template picker */}
-        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
+        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border flex-wrap">
           <span className="text-body-sm text-muted shrink-0">Start from template:</span>
           <select
             value={selectedTemplateId}
@@ -892,8 +893,8 @@ export default function NewVacancyPage() {
 
         <div className="space-y-2">
           {stages.map((s, i) => (
-            <div key={s.id} className="bg-surface-2 border border-border rounded-lg p-3">
-              <div className="flex items-center gap-2">
+            <div key={s.id} className="bg-surface-elevated border border-border rounded-xl p-3 shadow-xs">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex flex-col gap-1 shrink-0">
                   <button
                     onClick={() => moveStage(i, -1)}
@@ -966,7 +967,7 @@ export default function NewVacancyPage() {
         </div>
 
         {/* Add stage row */}
-        <div className="flex gap-2 items-center pt-1">
+        <div className="flex gap-2 items-center pt-1 flex-wrap">
           <div className="flex gap-1 shrink-0">
             {STAGE_COLOR_KEYS.map((ck) => (
               <button
@@ -980,7 +981,7 @@ export default function NewVacancyPage() {
             ))}
           </div>
           <input
-            className={INPUT_CLS + " flex-1"}
+            className={INPUT_CLS + " min-w-48 flex-1"}
             value={newStageName}
             onChange={(e) => setNewStageName(e.target.value)}
             placeholder="Stage name…"
@@ -1001,7 +1002,7 @@ export default function NewVacancyPage() {
             onClick={() => setSaveTemplateOpen(true)}
             className="text-body-sm text-primary hover:opacity-80 transition-opacity"
           >
-            💾 Save as template
+            Save as template
           </button>
         </div>
 
@@ -1030,9 +1031,9 @@ export default function NewVacancyPage() {
         <p className={SECTION_HEADER_CLS}>Review & Confirm</p>
 
         {/* Basic Info */}
-        <div className="bg-surface-2 border border-border rounded-lg p-4 space-y-2">
+        <div className={PANEL_CLS + " space-y-2"}>
           <p className="text-body-sm font-semibold text-text">{form.title || "—"}</p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
             <ReviewRow label="Department" value={form.department || "—"} />
             <ReviewRow label="Location" value={form.location || "—"} />
             <ReviewRow label="Work Type" value={workTypeLabels[form.workType]} />
@@ -1051,7 +1052,7 @@ export default function NewVacancyPage() {
         </div>
 
         {/* Messages */}
-        <div className="bg-surface-2 border border-border rounded-lg p-4 space-y-2">
+        <div className={PANEL_CLS + " space-y-2"}>
           <p className={SECTION_HEADER_CLS + " mb-2"}>App Flow</p>
           <ReviewRow label="Intro message" value={form.introMessage || "—"} />
           <ReviewRow label="Success message" value={form.successMessage || "—"} />
@@ -1065,7 +1066,7 @@ export default function NewVacancyPage() {
 
         {/* Stages preview */}
         {stages.length > 0 && (
-          <div className="bg-surface-2 border border-border rounded-lg p-4">
+          <div className={PANEL_CLS}>
             <p className={SECTION_HEADER_CLS + " mb-3"}>Pipeline</p>
             <div className="flex flex-wrap gap-2">
               {stages.map((s) => (
@@ -1139,7 +1140,7 @@ export default function NewVacancyPage() {
   return (
     <div className="flex h-full bg-bg">
       {/* ── Left rail: vertical stepper ──────────────────────────────── */}
-      <aside className="w-52 shrink-0 border-r border-border flex flex-col py-8 px-5 gap-0">
+      <aside className="w-56 shrink-0 border-r border-border bg-surface/70 flex flex-col py-8 px-5 gap-0">
         <div className="flex-1">
           {STEPS.map((s, i) => {
             const num = i + 1;
@@ -1150,15 +1151,18 @@ export default function NewVacancyPage() {
                 {/* Step row */}
                 <button
                   onClick={() => isDone && setStep(num)}
-                  className={`flex items-center gap-3 w-full group ${isDone ? "cursor-pointer" : "cursor-default"}`}
+                  aria-current={isActive ? "step" : undefined}
+                  className={`flex items-center gap-3 w-full group rounded-lg px-2 py-1.5 text-left transition-colors ${
+                    isActive ? "bg-primary-soft" : isDone ? "hover:bg-surface-2 cursor-pointer" : "cursor-default"
+                  }`}
                 >
                   {/* Circle */}
                   <span
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-micro font-bold shrink-0 transition-colors ${
                       isActive
-                        ? "bg-primary text-primary-fg"
+                        ? "bg-primary text-primary-fg shadow-md shadow-primary/20"
                         : isDone
-                        ? "bg-primary text-primary-fg"
+                        ? "bg-success text-white"
                         : "bg-surface-2 border border-border text-muted"
                     }`}
                   >
@@ -1170,7 +1174,7 @@ export default function NewVacancyPage() {
                       isActive
                         ? "text-text font-medium"
                         : isDone
-                        ? "text-primary"
+                        ? "text-success"
                         : "text-muted"
                     }`}
                   >
@@ -1182,7 +1186,7 @@ export default function NewVacancyPage() {
                 </button>
                 {/* Connector line */}
                 {i < STEPS.length - 1 && (
-                  <div className="ml-3.5 w-px h-6 bg-border shrink-0" />
+                  <div className={`ml-[21px] w-px h-5 shrink-0 ${isDone ? "bg-success/40" : "bg-border"}`} />
                 )}
               </div>
             );
@@ -1202,12 +1206,15 @@ export default function NewVacancyPage() {
       <div className="flex flex-col flex-1 min-w-0">
         {/* Scrollable form area */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[520px] mx-auto px-6 py-8 space-y-6">
+          <div className="max-w-[620px] mx-auto px-6 py-8 space-y-6">
             {/* Step heading */}
-            <h1 className="text-h1 text-text">{STEPS[step - 1].label}</h1>
+            <div>
+              <p className="text-micro uppercase tracking-wider text-subtle">Step {step} of {STEPS.length}</p>
+              <h1 className="text-h1 text-text mt-1">{STEPS[step - 1].label}</h1>
+            </div>
 
             {/* Step content */}
-            <div className="bg-surface border border-border rounded-xl p-6">
+            <div className="bg-surface-elevated border border-border rounded-2xl p-6 shadow-lg shadow-slate-200/60">
               {step === 1 && renderStep1()}
               {step === 2 && renderStep2()}
               {step === 3 && renderStep3()}
@@ -1218,7 +1225,7 @@ export default function NewVacancyPage() {
         </div>
 
         {/* Sticky bottom nav bar */}
-        <div className="shrink-0 border-t border-border bg-bg px-6 py-4 flex items-center justify-between">
+        <div className="shrink-0 sticky bottom-0 z-10 border-t border-border bg-surface/95 backdrop-blur px-6 py-4 flex items-center justify-between gap-4">
           {createError && (
             <p className="text-body-sm text-danger mr-4 truncate" role="alert">
               {createError}
@@ -1235,7 +1242,7 @@ export default function NewVacancyPage() {
           {step < STEPS.length ? (
             <button
               onClick={handleNext}
-              className="h-9 px-5 bg-primary text-primary-fg text-body-sm rounded-lg hover:opacity-90 transition-opacity"
+              className="h-10 px-5 bg-primary text-primary-fg text-body-sm font-semibold rounded-lg shadow-md shadow-primary/20 hover:bg-primary-hover transition-colors"
             >
               Next
             </button>
@@ -1243,7 +1250,7 @@ export default function NewVacancyPage() {
             <button
               onClick={handleCreate}
               disabled={isCreating}
-              className="h-9 px-5 bg-primary text-primary-fg text-body-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-10 px-5 bg-primary text-primary-fg text-body-sm font-semibold rounded-lg shadow-md shadow-primary/20 hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCreating ? "Creating..." : "Create Vacancy"}
             </button>
@@ -1253,7 +1260,7 @@ export default function NewVacancyPage() {
 
       {/* ── Right preview pane (steps 2 and 3 only) ──────────────────── */}
       {showPreview && (
-        <aside className="w-72 shrink-0 border-l border-border flex flex-col overflow-y-auto">
+        <aside className="w-80 shrink-0 border-l border-border bg-surface/70 flex flex-col overflow-y-auto">
           {/* Header */}
           <div className="px-4 pt-6 pb-3 shrink-0">
             <p className="text-micro uppercase tracking-wider text-subtle">Bot preview</p>
@@ -1261,21 +1268,21 @@ export default function NewVacancyPage() {
 
           {/* Phone frame mockup */}
           <div className="flex-1 px-4 pb-6">
-            <div className="bg-surface border border-border rounded-2xl overflow-hidden flex flex-col">
+            <div className="bg-surface-elevated border border-border rounded-2xl overflow-hidden flex flex-col shadow-lg">
               {/* Phone status bar / chat header */}
-              <div className="bg-surface-2 border-b border-border px-3 py-2 flex items-center gap-2 shrink-0">
+              <div className="bg-primary text-primary-fg px-3 py-2 flex items-center gap-2 shrink-0">
                 {/* Bot avatar */}
-                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-fg text-micro font-bold shrink-0">
+                <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-primary-fg text-micro font-bold shrink-0">
                   H
                 </div>
                 <div>
-                  <p className="text-body-sm font-medium text-text leading-tight">HireFlow Bot</p>
-                  <p className="text-micro text-muted leading-tight">bot</p>
+                  <p className="text-body-sm font-medium leading-tight">HireFlow Bot</p>
+                  <p className="text-micro text-primary-fg/70 leading-tight">bot preview</p>
                 </div>
               </div>
 
               {/* Chat messages */}
-              <div className="flex-1 px-3 py-3 space-y-2 bg-bg min-h-[200px]">
+              <div className="flex-1 px-3 py-3 space-y-2 bg-surface-2 min-h-[260px]">
                 {renderPreview()}
               </div>
             </div>

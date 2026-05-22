@@ -485,16 +485,23 @@ export const feedback = pgTable("feedback", {
   id: text("id").primaryKey(),
   source: text("source").notNull(), // "candidate" | "hr"
   kind: text("kind").notNull().default("general"), // "general" | "complaint" | "suggestion"
+  status: text("status").notNull().default("new"), // "new" | "in_review" | "responded" | "resolved"
   candidateId: text("candidate_id").references(() => candidates.id, { onDelete: "cascade" }),
   applicationId: text("application_id").references(() => applications.id, { onDelete: "cascade" }),
   vacancyId: text("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
   rating: integer("rating"),
   comment: text("comment"),
+  replyText: text("reply_text"),
+  replyLink: text("reply_link"),
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+  respondedAt: timestamp("responded_at", { withTimezone: true }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   candidateIdx: index("feedback_candidate_idx").on(t.candidateId),
   applicationIdx: index("feedback_application_idx").on(t.applicationId),
   vacancyIdx: index("feedback_vacancy_idx").on(t.vacancyId),
+  statusIdx: index("feedback_status_idx").on(t.status),
 }));
 
 // ─── Candidate Filter Views ───────────────────────────────────────────────────

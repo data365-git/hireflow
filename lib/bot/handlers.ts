@@ -116,6 +116,41 @@ async function getCandidateByTelegramId(telegramUserId: string) {
   return rows[0] ?? null;
 }
 
+function botAdminIds(): string[] {
+  return (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function isBotAdminTelegramUser(telegramUserId: string): boolean {
+  return botAdminIds().includes(telegramUserId);
+}
+
+function hasStablePrefillData(candidate: typeof candidates.$inferSelect): boolean {
+  return Boolean(
+    candidate.fullName &&
+    candidate.dateOfBirth &&
+    (candidate.educationField || candidate.educationInstitution || candidate.englishLevel || candidate.russianLevel)
+  );
+}
+
+function formatDateForBot(value: Date | string | null): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-GB");
+}
+
+function buildStablePrefillSummary(candidate: typeof candidates.$inferSelect): string {
+  return [
+    `👤 ${candidate.fullName}`,
+    candidate.dateOfBirth ? `📅 ${formatDateForBot(candidate.dateOfBirth)}` : null,
+    candidate.maritalStatus ? `💍 ${candidate.maritalStatus}` : null,
+    candidate.educationInstitution ? `🎓 ${candidate.educationInstitution}` : null,
+    candidate.educationField ? `📚 ${candidate.educationField}` : null,
+    candidate.englishLevel ? `🇬🇧 EN: ${candidate.englishLevel}` : null,
+    candidate.russianLevel ? `🇷🇺 RU: ${candidate.russianLevel}` : null,
+  ].filter(Boolean).join("\n");
+}
+
 async function showMainMenu(ctx: Context, lang: Lang) {
   const kb = new InlineKeyboard()
     .text(tr(lang, "btn_browse_jobs"), "browse_jobs").row()
@@ -299,6 +334,25 @@ export async function handleCallbackQuery(ctx: Context) {
     return startVacancyFlow(ctx, vacancyId, lang);
   }
 
+  if (data.startsWith("prefill_use_stable_")) {
+    const vacancyId = data.replace("prefill_use_stable_", "");
+    const telegramUserId = String(ctx.from!.id);
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+    if (!candidate?.profileCompleted) {
+      return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
+    }
+    return startApplicationScreening(ctx, vacancyId, candidateLang(candidate, lang), candidate, { forceReaskStable: false });
+  }
+
+  if (data.startsWith("prefill_review_")) {
+    const vacancyId = data.replace("prefill_review_", "");
+    const telegramUserId = String(ctx.from!.id);
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+    if (!candidate) return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
+    await clearBotSession(telegramUserId);
+    return startAnketa(ctx, candidate.id, candidateLang(candidate, lang), vacancyId);
+  }
+
   if (data.startsWith("apply_")) {
     const vacancyId = data.replace("apply_", "");
     const telegramUserId = String(ctx.from!.id);
@@ -311,14 +365,13 @@ export async function handleCallbackQuery(ctx: Context) {
 
     const existingCand = await db.select().from(candidates)
       .where(eq(candidates.telegramUserId, telegramUserId));
+    const isBotAdmin = isBotAdminTelegramUser(telegramUserId);
     if (existingCand[0]) {
       if (!existingCand[0].profileCompleted) {
         await startAnketa(ctx, existingCand[0].id, candidateLang(existingCand[0], lang), vacancyId);
         return;
       }
 
-      const adminIds = (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-      const isBotAdmin = adminIds.includes(telegramUserId);
       if (!isBotAdmin) {
         const existingSubmitted = await db
           .select({ id: applications.id })
@@ -335,81 +388,27 @@ export async function handleCallbackQuery(ctx: Context) {
           return ctx.reply(tr(lang, "already_applied", { vacancy: vacancy.title }), { parse_mode: "Markdown" });
         }
       }
-    }
 
-    const questions = await db.select().from(screeningQuestions)
-      .where(eq(screeningQuestions.vacancyId, vacancyId))
-      .orderBy(asc(screeningQuestions.orderIndex));
-    const totalSteps = 2 + questions.length + 3;
-
-    // Create in_progress application immediately so the lead is visible
-    const candidateId = (ctx as any).state?.candidateId as string | undefined;
-    let applicationId: string | undefined;
-    if (candidateId) {
-      const session = await getBotSession(telegramUserId);
-      const browsingSourceId = session?.applicationId
-        ? (await db
-            .select({ sourceId: applications.sourceId })
-            .from(applications)
-            .where(eq(applications.id, session.applicationId)))[0]?.sourceId
-        : null;
-      // Telegram has no data-mode cookie: bot-created applications are Live-only.
-      applicationId = await createInProgressApplication({ candidateId, vacancyId, sourceId: browsingSourceId });
-    }
-
-    // B1+B3: Skip steps already done. If candidate has a name, skip awaiting_name.
-    // If they have partial screening answers, resume from where they left off.
-    const existingName = existingCand[0]?.fullName;
-    const collectedData: Record<string, unknown> = { totalSteps };
-
-    let startState: string = "awaiting_name";
-    let resumeQuestionIdx = 0;
-
-    if (existingName) {
-      collectedData.fullName = existingName;
-      // Check existing answers for this application
-      const existingAnswers = applicationId
-        ? await db.select().from(screeningAnswers).where(eq(screeningAnswers.applicationId, applicationId))
-        : [];
-      const answeredIds = new Set(existingAnswers.map((a) => a.questionId));
-      const preloadedAnswers: Record<string, string> = {};
-      for (const a of existingAnswers) preloadedAnswers[a.questionId] = a.answerText ?? "";
-      collectedData.answers = preloadedAnswers;
-
-      // Find first unanswered question
-      resumeQuestionIdx = questions.findIndex((q) => !answeredIds.has(q.id));
-      if (resumeQuestionIdx === -1) resumeQuestionIdx = questions.length;
-
-      if (resumeQuestionIdx >= questions.length) {
-        startState = "awaiting_portfolio";
-      } else {
-        startState = resumeQuestionIdx > 0 ? "awaiting_question" : "awaiting_email";
+      if (!isBotAdmin && hasStablePrefillData(existingCand[0])) {
+        await saveBotSession(telegramUserId, {
+          vacancyId,
+          applicationId: null,
+          state: "awaiting_prefill_stable",
+          collectedData: { candidateId: existingCand[0].id },
+        });
+        const kb = new InlineKeyboard()
+          .text(tr(lang, "btn_use_existing"), `prefill_use_stable_${vacancyId}`).row()
+          .text(tr(lang, "btn_update_some"), `prefill_review_${vacancyId}`);
+        return ctx.reply(
+          tr(candidateLang(existingCand[0], lang), "prefill_stable_confirm", {
+            summary: buildStablePrefillSummary(existingCand[0]),
+          }),
+          { reply_markup: kb, parse_mode: "Markdown" }
+        );
       }
     }
 
-    await saveBotSession(telegramUserId, {
-      vacancyId,
-      applicationId: applicationId ?? null,
-      state: startState,
-      currentQuestionIndex: resumeQuestionIdx,
-      collectedData,
-    });
-
-    if (existingName && startState !== "awaiting_email") {
-      await ctx.reply(tr(lang, "resuming_application"), { parse_mode: "Markdown" });
-    }
-
-    if (startState === "awaiting_name") {
-      await ctx.reply(tr(lang, "ask_name", { step: 1, total: totalSteps }), { parse_mode: "Markdown" });
-    } else if (startState === "awaiting_email") {
-      await ctx.reply(tr(lang, "ask_email", { step: 2, total: totalSteps }), { parse_mode: "Markdown" });
-    } else if (startState === "awaiting_question") {
-      await askQuestion(ctx, questions[resumeQuestionIdx], 3 + resumeQuestionIdx, totalSteps, lang);
-    } else if (startState === "awaiting_portfolio") {
-      const portfolioStep = 3 + questions.length;
-      await ctx.reply(tr(lang, "ask_portfolio", { step: portfolioStep, total: totalSteps }), { parse_mode: "Markdown" });
-    }
-    return;
+    return startApplicationScreening(ctx, vacancyId, lang, existingCand[0] ?? null, { forceReaskStable: isBotAdmin });
   }
 
   if (data.startsWith("reapply_")) {
@@ -740,16 +739,33 @@ export async function handleText(ctx: Context) {
     if (!text || text.length < 5) {
       return ctx.reply(tr(lang, "err_feedback_too_short"), { parse_mode: "Markdown" });
     }
+    if (!candidate) {
+      await clearBotSession(telegramUserId);
+      return ctx.reply(tr(lang, "session_timeout"), { parse_mode: "Markdown" });
+    }
+
+    const [latestApplication] = await db
+      .select({
+        applicationId: applications.id,
+        vacancyId: applications.vacancyId,
+      })
+      .from(applications)
+      .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false), vacancyNotDeleted))
+      .where(eq(applications.candidateId, candidate.id))
+      .orderBy(desc(applications.lastActivityAt));
+
     await db.insert(feedback).values({
       id: `fb-${crypto.randomUUID()}`,
       source: "candidate",
       kind: kind === "complaint" || kind === "suggestion" ? kind : "general",
-      candidateId: candidate?.id ?? null,
-      applicationId: session.applicationId ?? null,
-      vacancyId: session.vacancyId ?? null,
+      status: "new",
+      candidateId: candidate.id,
+      applicationId: session.applicationId ?? latestApplication?.applicationId ?? null,
+      vacancyId: session.vacancyId ?? latestApplication?.vacancyId ?? null,
       rating: null,
       comment: text,
       submittedAt: new Date(),
+      updatedAt: new Date(),
     });
     await clearBotSession(telegramUserId);
     return ctx.reply(tr(lang, "feedback_thanks"), { parse_mode: "Markdown" });
@@ -880,6 +896,87 @@ async function ensureInProgressApplication(
   const candidateId = (ctx as any).state?.candidateId as string | undefined;
   if (!candidateId) return null;
   return createInProgressApplication({ candidateId, vacancyId });
+}
+
+async function startApplicationScreening(
+  ctx: Context,
+  vacancyId: string,
+  lang: Lang,
+  candidate: typeof candidates.$inferSelect | null,
+  options: { forceReaskStable?: boolean } = {}
+) {
+  const telegramUserId = String(ctx.from!.id);
+  const vacancy = await getLiveActiveVacancy(vacancyId);
+  if (!vacancy) {
+    await clearBotSession(telegramUserId);
+    return ctx.reply(tr(lang, "vacancy_not_found"), { parse_mode: "Markdown" });
+  }
+
+  const questions = await db.select().from(screeningQuestions)
+    .where(eq(screeningQuestions.vacancyId, vacancyId))
+    .orderBy(asc(screeningQuestions.orderIndex));
+  const totalSteps = 2 + questions.length + 3;
+
+  const candidateId = ((ctx as any).state?.candidateId as string | undefined) ?? candidate?.id;
+  let applicationId: string | undefined;
+  if (candidateId) {
+    const session = await getBotSession(telegramUserId);
+    const browsingSourceId = session?.applicationId
+      ? (await db
+          .select({ sourceId: applications.sourceId })
+          .from(applications)
+          .where(eq(applications.id, session.applicationId)))[0]?.sourceId
+      : null;
+    applicationId = await createInProgressApplication({ candidateId, vacancyId, sourceId: browsingSourceId });
+  }
+
+  const existingName = options.forceReaskStable ? undefined : candidate?.fullName;
+  const collectedData: Record<string, unknown> = { totalSteps };
+  let startState: string = "awaiting_name";
+  let resumeQuestionIdx = 0;
+
+  if (existingName) {
+    collectedData.fullName = existingName;
+    const existingAnswers = applicationId
+      ? await db.select().from(screeningAnswers).where(eq(screeningAnswers.applicationId, applicationId))
+      : [];
+    const answeredIds = new Set(existingAnswers.map((a) => a.questionId));
+    const preloadedAnswers: Record<string, string> = {};
+    for (const a of existingAnswers) preloadedAnswers[a.questionId] = a.answerText ?? "";
+    collectedData.answers = preloadedAnswers;
+
+    resumeQuestionIdx = questions.findIndex((q) => !answeredIds.has(q.id));
+    if (resumeQuestionIdx === -1) resumeQuestionIdx = questions.length;
+
+    if (resumeQuestionIdx >= questions.length) {
+      startState = "awaiting_portfolio";
+    } else {
+      startState = resumeQuestionIdx > 0 ? "awaiting_question" : "awaiting_email";
+    }
+  }
+
+  await saveBotSession(telegramUserId, {
+    vacancyId,
+    applicationId: applicationId ?? null,
+    state: startState,
+    currentQuestionIndex: resumeQuestionIdx,
+    collectedData,
+  });
+
+  if (existingName && startState !== "awaiting_email") {
+    await ctx.reply(tr(lang, "resuming_application"), { parse_mode: "Markdown" });
+  }
+
+  if (startState === "awaiting_name") {
+    await ctx.reply(tr(lang, "ask_name", { step: 1, total: totalSteps }), { parse_mode: "Markdown" });
+  } else if (startState === "awaiting_email") {
+    await ctx.reply(tr(lang, "ask_email", { step: 2, total: totalSteps }), { parse_mode: "Markdown" });
+  } else if (startState === "awaiting_question") {
+    await askQuestion(ctx, questions[resumeQuestionIdx], 3 + resumeQuestionIdx, totalSteps, lang);
+  } else if (startState === "awaiting_portfolio") {
+    const portfolioStep = 3 + questions.length;
+    await ctx.reply(tr(lang, "ask_portfolio", { step: portfolioStep, total: totalSteps }), { parse_mode: "Markdown" });
+  }
 }
 
 async function startAnketa(ctx: Context, candidateId: string, fallbackLang: Lang, pendingVacancyId?: string) {

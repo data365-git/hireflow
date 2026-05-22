@@ -216,42 +216,40 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-bg">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-border bg-bg sticky top-0 z-10">
+      <div className="px-8 py-5 border-b border-border bg-surface/95 backdrop-blur sticky top-0 z-10 shadow-xs">
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Link href="/vacancies" className="text-body-sm text-muted hover:text-text transition-colors">
                 ← Vacancies
               </Link>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-h2 text-text">{vacancy.title}</h1>
+              <h1 className="text-h1 text-text break-words">{vacancy.title}</h1>
               <span
                 className={`text-micro px-2 h-5 rounded-full inline-flex items-center font-semibold ${STATUS_STYLES[vacancy.status] ?? "bg-surface-3 text-muted"}`}
               >
                 {vacancy.status.charAt(0).toUpperCase() + vacancy.status.slice(1)}
               </span>
             </div>
-            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="text-body-sm text-muted">{vacancy.department}</span>
-              <span className="text-subtle">·</span>
+              <span className="text-subtle">/</span>
               <span className="text-body-sm text-muted">{WORK_TYPE_LABELS[vacancy.workType] ?? vacancy.workType}</span>
-              <span className="text-subtle">·</span>
+              <span className="text-subtle">/</span>
               <span className="text-body-sm text-muted">{EMP_TYPE_LABELS[vacancy.employmentType] ?? vacancy.employmentType}</span>
-              <span className="text-subtle">·</span>
+              <span className="text-subtle">/</span>
               <span className="text-body-sm text-muted">{vacancy.location}</span>
-              <span className="text-subtle">·</span>
-              <span className="text-body-sm text-muted">{formatSalary(vacancy.salaryMin, vacancy.salaryMax)}</span>
-              <span className="text-subtle">·</span>
+              <span className="text-body-sm font-medium text-text bg-surface-2 rounded-full px-2.5 py-0.5">{formatSalary(vacancy.salaryMin, vacancy.salaryMax)}</span>
               <span className="text-body-sm text-muted">HR: {hr?.name ?? "–"}</span>
             </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
             <button
               onClick={() => setExportOpen(true)}
-              className="flex items-center gap-1.5 border border-border bg-surface text-body-sm font-medium text-text px-3 py-1.5 rounded-lg hover:bg-surface-2 transition-colors"
+              className="flex items-center gap-1.5 border border-border bg-surface-elevated text-body-sm font-medium text-text px-3 py-1.5 rounded-lg shadow-xs hover:bg-surface-2 transition-colors"
             >
               <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                 <path
@@ -262,7 +260,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
               </svg>
               Export
             </button>
-            <div className="text-right">
+            <div className="text-right rounded-xl bg-surface-2 px-3 py-2 min-w-20">
               <div className="text-h2 text-text font-bold">{total}</div>
               <div className="text-micro text-muted">candidates</div>
             </div>
@@ -271,7 +269,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-0 border-b border-border px-8 bg-bg">
+      <div className="flex gap-1 border-b border-border px-8 bg-surface/95 overflow-x-auto">
         {(
           [
             { id: "pipeline", label: "Pipeline", badge: total },
@@ -284,7 +282,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
           <button
             key={tabId}
             onClick={() => setActiveTab(tabId)}
-            className={`h-10 px-4 text-body-sm font-medium border-b-2 transition-colors ${
+            className={`h-11 px-4 text-body-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === tabId
                 ? "border-primary text-primary"
                 : "border-transparent text-muted hover:text-text"
@@ -324,7 +322,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
             />
           </div>
           {selectedAppIds.size > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface border border-border rounded-2xl shadow-lg px-4 py-3 flex items-center gap-3 min-w-[480px]">
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface-elevated border border-border rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 min-w-[480px] max-w-[calc(100vw-48px)]">
               <span className="text-body-sm font-semibold text-text whitespace-nowrap">
                 {selectedAppIds.size} selected
               </span>
@@ -372,7 +370,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
             {testTasks.length > 0 && (
               <div className="flex flex-col gap-3 mb-4">
                 {testTasks.map((task: TestTask) => (
-                  <div key={task.id} className="bg-surface border border-border rounded-xl px-4 py-4 flex items-start gap-4">
+                  <div key={task.id} className="bg-surface-elevated border border-border rounded-xl px-4 py-4 flex items-start gap-4 shadow-xs">
                     <div className="flex-1 min-w-0">
                       <div className="text-body-sm font-semibold text-text">{task.title}</div>
                       {task.description && (
@@ -395,7 +393,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
               </div>
             )}
             {showAddTask ? (
-              <div className="bg-surface border border-border rounded-xl px-4 py-4 flex flex-col gap-3">
+              <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 flex flex-col gap-3 shadow-sm">
                 <input
                   type="text"
                   placeholder="Task title"
@@ -464,7 +462,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
             {automations.length > 0 && (
               <div className="flex flex-col gap-3 mb-6">
                 {automations.map((rule) => (
-                  <div key={rule.id} className="bg-surface border border-border rounded-xl px-4 py-4 flex items-center gap-4">
+                  <div key={rule.id} className="bg-surface-elevated border border-border rounded-xl px-4 py-4 flex items-center gap-4 shadow-xs">
                     <button
                       onClick={() => toggleAutomation(rule.id)}
                       className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${
@@ -508,15 +506,15 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
         <div className="overflow-y-auto flex-1">
           <div className="px-8 py-6 max-w-[720px]">
             <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="bg-surface border border-border rounded-xl px-4 py-4">
+              <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 shadow-xs">
                 <div className="text-micro text-muted mb-1">Total Applied</div>
                 <div className="text-h2 text-text font-bold">{vacancyApplications.length}</div>
               </div>
-              <div className="bg-surface border border-border rounded-xl px-4 py-4">
+              <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 shadow-xs">
                 <div className="text-micro text-muted mb-1">Hired</div>
                 <div className="text-h2 text-text font-bold">{hiredCount}</div>
               </div>
-              <div className="bg-surface border border-border rounded-xl px-4 py-4">
+              <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 shadow-xs">
                 <div className="text-micro text-muted mb-1">Conversion</div>
                 <div className="text-h2 text-text font-bold">{conversionPct}%</div>
               </div>

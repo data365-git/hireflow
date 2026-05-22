@@ -70,12 +70,13 @@ const STATUS_STYLES: Record<string, string> = {
 // ── Input component ──────────────────────────────────────────────────────────
 
 const INPUT_CLS =
-  "bg-surface border border-border rounded-lg px-3 h-9 text-body-sm text-text outline-none focus:border-primary w-full";
+  "bg-surface-elevated border border-border rounded-lg px-3 h-10 text-body-sm text-text shadow-xs outline-none transition-colors focus:border-primary w-full";
 const TEXTAREA_CLS =
-  "bg-surface border border-border rounded-lg px-3 py-2 text-body-sm text-text outline-none focus:border-primary w-full resize-none";
+  "bg-surface-elevated border border-border rounded-lg px-3 py-2 text-body-sm text-text shadow-xs outline-none transition-colors focus:border-primary w-full resize-none";
 const SELECT_CLS =
-  "bg-surface border border-border rounded-lg px-3 h-9 text-body-sm text-text outline-none focus:border-primary w-full";
+  "bg-surface-elevated border border-border rounded-lg px-3 h-10 text-body-sm text-text shadow-xs outline-none transition-colors focus:border-primary w-full";
 const LABEL_CLS = "text-body-sm font-semibold text-text block mb-1";
+const EDIT_PANEL_CLS = "bg-surface-elevated border border-border rounded-2xl p-5 shadow-sm";
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
   const statusLabel = vacancy.status.charAt(0).toUpperCase() + vacancy.status.slice(1);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-bg">
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}
@@ -262,7 +263,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
         onCancel={closeConfirm}
       />
       {/* Header */}
-      <div className="px-8 py-5 border-b border-border bg-bg sticky top-0 z-10">
+      <div className="px-8 py-5 border-b border-border bg-surface/95 backdrop-blur sticky top-0 z-10 shadow-xs">
         <div className="mb-1">
           <Link
             href={`/vacancies/${id}`}
@@ -271,8 +272,8 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
             ← {vacancy.title}
           </Link>
         </div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-h2 text-text">Edit Vacancy</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-h1 text-text">Edit Vacancy</h1>
           <span
             className={`text-micro px-2 h-5 rounded-full inline-flex items-center font-semibold ${STATUS_STYLES[vacancy.status]}`}
           >
@@ -282,15 +283,15 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Tabs */}
-      <div className="px-8 border-b border-border bg-bg">
-        <div className="flex gap-1">
+      <div className="px-8 border-b border-border bg-surface/95">
+        <div className="flex gap-1 overflow-x-auto">
           {(["details", "questions", "stages", "sources", "tasks"] as Tab[]).map((tab) => {
             const badge = tab === "tasks" && testTasks.length > 0 ? testTasks.length : undefined;
             return (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-body-sm font-semibold border-b-2 transition-colors capitalize inline-flex items-center gap-1.5 ${
+                className={`px-4 py-3 text-body-sm font-semibold border-b-2 transition-colors capitalize inline-flex items-center gap-1.5 whitespace-nowrap ${
                   activeTab === tab
                     ? "border-primary text-primary"
                     : "border-transparent text-muted hover:text-text"
@@ -481,7 +482,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
               </div>
             ) : (
               testTasks.map((task: TestTask) => (
-                <div key={task.id} className="bg-surface border border-border rounded-xl p-4 flex items-start gap-3">
+                <div key={task.id} className="bg-surface-elevated border border-border rounded-xl p-4 flex items-start gap-3 shadow-xs">
                   <div className="flex-1 min-w-0">
                     <p className="text-body-sm font-semibold text-text">{task.title}</p>
                     <p className="text-body-sm text-muted mt-1 leading-relaxed">{task.description}</p>
@@ -497,7 +498,7 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
 
             {/* Add task form */}
             {showAddTask ? (
-              <div className="bg-surface-2 border border-border rounded-xl p-4 space-y-3">
+              <div className="bg-surface-elevated border border-border rounded-xl p-4 space-y-3 shadow-sm">
                 <p className="text-body-sm font-semibold text-text">New test task</p>
                 <div>
                   <label className="text-body-sm text-muted block mb-1">Title</label>
@@ -712,179 +713,179 @@ function DetailsTab({
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-5 pb-24">
       {showErrors && (
         <div className="bg-warning-soft border border-warning/30 rounded-lg px-3 py-2">
           <p className="text-body-sm font-semibold text-warning">Fix the highlighted fields before saving.</p>
         </div>
       )}
 
-      {/* Title */}
-      <div>
-        <label className={LABEL_CLS}>Job Title</label>
-        <input
-          className={INPUT_CLS}
-          value={form.title}
-          onChange={(e) => updateField("title", e.target.value)}
-        />
-        {submitted && errors.title && <p className="text-micro text-warning mt-1">{errors.title}</p>}
-      </div>
-
-      {/* Department + Location */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className={EDIT_PANEL_CLS + " space-y-4"}>
         <div>
-          <label className={LABEL_CLS}>Department</label>
+          <p className="text-micro uppercase tracking-wider text-subtle mb-3">Position Details</p>
+          <label className={LABEL_CLS}>Job Title</label>
           <input
             className={INPUT_CLS}
-            value={form.department}
-            onChange={(e) => updateField("department", e.target.value)}
+            value={form.title}
+            onChange={(e) => updateField("title", e.target.value)}
           />
-          {submitted && errors.department && <p className="text-micro text-warning mt-1">{errors.department}</p>}
+          {submitted && errors.title && <p className="text-micro text-warning mt-1">{errors.title}</p>}
         </div>
-        <div>
-          <label className={LABEL_CLS}>Location</label>
-          <input
-            className={INPUT_CLS}
-            value={form.location}
-            onChange={(e) => updateField("location", e.target.value)}
-          />
-          {submitted && errors.location && <p className="text-micro text-warning mt-1">{errors.location}</p>}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_CLS}>Department</label>
+            <input
+              className={INPUT_CLS}
+              value={form.department}
+              onChange={(e) => updateField("department", e.target.value)}
+            />
+            {submitted && errors.department && <p className="text-micro text-warning mt-1">{errors.department}</p>}
+          </div>
+          <div>
+            <label className={LABEL_CLS}>Location</label>
+            <input
+              className={INPUT_CLS}
+              value={form.location}
+              onChange={(e) => updateField("location", e.target.value)}
+            />
+            {submitted && errors.location && <p className="text-micro text-warning mt-1">{errors.location}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_CLS}>Work Type</label>
+            <select
+              className={SELECT_CLS}
+              value={form.workType}
+              onChange={(e) => updateField("workType", e.target.value as DetailsForm["workType"])}
+            >
+              <option value="office">Office</option>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_CLS}>Employment Type</label>
+            <select
+              className={SELECT_CLS}
+              value={form.employmentType}
+              onChange={(e) => updateField("employmentType", e.target.value as DetailsForm["employmentType"])}
+            >
+              <option value="full-time">Full-time</option>
+              <option value="part-time">Part-time</option>
+              <option value="trial">Trial</option>
+              <option value="internship">Internship</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_CLS}>Salary Min</label>
+            <input
+              className={INPUT_CLS}
+              type="number"
+              min={0}
+              value={form.salaryMin}
+              onChange={(e) => updateField("salaryMin", e.target.value)}
+            />
+            {submitted && errors.salaryMin && <p className="text-micro text-warning mt-1">{errors.salaryMin}</p>}
+          </div>
+          <div>
+            <label className={LABEL_CLS}>Salary Max</label>
+            <input
+              className={INPUT_CLS}
+              type="number"
+              min={0}
+              value={form.salaryMax}
+              onChange={(e) => updateField("salaryMax", e.target.value)}
+            />
+            {submitted && errors.salaryMax && <p className="text-micro text-warning mt-1">{errors.salaryMax}</p>}
+          </div>
         </div>
       </div>
 
-      {/* Work Type + Employment Type */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className={EDIT_PANEL_CLS + " space-y-4"}>
+        <p className="text-micro uppercase tracking-wider text-subtle">Workflow</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_CLS}>Language</label>
+            <select
+              className={SELECT_CLS}
+              value={form.language}
+              onChange={(e) => updateField("language", e.target.value as DetailsForm["language"])}
+            >
+              <option value="uz">Uzbek</option>
+              <option value="ru">Russian</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_CLS}>Status</label>
+            <select
+              className={SELECT_CLS}
+              value={form.status}
+              onChange={(e) => updateField("status", e.target.value as DetailsForm["status"])}
+            >
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+        </div>
+
         <div>
-          <label className={LABEL_CLS}>Work Type</label>
+          <label className={LABEL_CLS}>Responsible HR</label>
           <select
             className={SELECT_CLS}
-            value={form.workType}
-            onChange={(e) => updateField("workType", e.target.value as DetailsForm["workType"])}
+            value={form.responsibleHrId}
+            onChange={(e) => updateField("responsibleHrId", e.target.value)}
           >
-            <option value="office">Office</option>
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
-          </select>
-        </div>
-        <div>
-          <label className={LABEL_CLS}>Employment Type</label>
-          <select
-            className={SELECT_CLS}
-            value={form.employmentType}
-            onChange={(e) => updateField("employmentType", e.target.value as DetailsForm["employmentType"])}
-          >
-            <option value="full-time">Full-time</option>
-            <option value="part-time">Part-time</option>
-            <option value="trial">Trial</option>
-            <option value="internship">Internship</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
-      {/* Salary */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className={EDIT_PANEL_CLS + " space-y-4"}>
+        <p className="text-micro uppercase tracking-wider text-subtle">Candidate-facing Content</p>
         <div>
-          <label className={LABEL_CLS}>Salary Min</label>
-          <input
-            className={INPUT_CLS}
-            type="number"
-            min={0}
-            value={form.salaryMin}
-            onChange={(e) => updateField("salaryMin", e.target.value)}
+          <label className={LABEL_CLS}>Description</label>
+          <textarea
+            className={TEXTAREA_CLS}
+            rows={5}
+            value={form.description}
+            onChange={(e) => updateField("description", e.target.value)}
           />
-          {submitted && errors.salaryMin && <p className="text-micro text-warning mt-1">{errors.salaryMin}</p>}
         </div>
+
         <div>
-          <label className={LABEL_CLS}>Salary Max</label>
-          <input
-            className={INPUT_CLS}
-            type="number"
-            min={0}
-            value={form.salaryMax}
-            onChange={(e) => updateField("salaryMax", e.target.value)}
+          <label className={LABEL_CLS}>Intro Message</label>
+          <textarea
+            className={TEXTAREA_CLS}
+            rows={3}
+            value={form.introMessage}
+            onChange={(e) => updateField("introMessage", e.target.value)}
           />
-          {submitted && errors.salaryMax && <p className="text-micro text-warning mt-1">{errors.salaryMax}</p>}
         </div>
-      </div>
 
-      {/* Language + Status */}
-      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={LABEL_CLS}>Language</label>
-          <select
-            className={SELECT_CLS}
-            value={form.language}
-            onChange={(e) => updateField("language", e.target.value as DetailsForm["language"])}
-          >
-            <option value="uz">Uzbek</option>
-            <option value="ru">Russian</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-        <div>
-          <label className={LABEL_CLS}>Status</label>
-          <select
-            className={SELECT_CLS}
-            value={form.status}
-            onChange={(e) => updateField("status", e.target.value as DetailsForm["status"])}
-          >
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="closed">Closed</option>
-          </select>
+          <label className={LABEL_CLS}>Success Message</label>
+          <textarea
+            className={TEXTAREA_CLS}
+            rows={3}
+            value={form.successMessage}
+            onChange={(e) => updateField("successMessage", e.target.value)}
+          />
         </div>
       </div>
 
-      {/* Responsible HR */}
-      <div>
-        <label className={LABEL_CLS}>Responsible HR</label>
-        <select
-          className={SELECT_CLS}
-          value={form.responsibleHrId}
-          onChange={(e) => updateField("responsibleHrId", e.target.value)}
-        >
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Description */}
-      <div>
-        <label className={LABEL_CLS}>Description</label>
-        <textarea
-          className={TEXTAREA_CLS}
-          rows={5}
-          value={form.description}
-          onChange={(e) => updateField("description", e.target.value)}
-        />
-      </div>
-
-      {/* Intro Message */}
-      <div>
-        <label className={LABEL_CLS}>Intro Message</label>
-        <textarea
-          className={TEXTAREA_CLS}
-          rows={3}
-          value={form.introMessage}
-          onChange={(e) => updateField("introMessage", e.target.value)}
-        />
-      </div>
-
-      {/* Success Message */}
-      <div>
-        <label className={LABEL_CLS}>Success Message</label>
-        <textarea
-          className={TEXTAREA_CLS}
-          rows={3}
-          value={form.successMessage}
-          onChange={(e) => updateField("successMessage", e.target.value)}
-        />
-      </div>
-
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border border-border bg-surface/95 backdrop-blur rounded-2xl px-4 py-3 shadow-lg">
         <p className="text-body-sm text-muted">
           {isDirty ? "Unsaved changes" : "All details are saved"}
         </p>
@@ -1029,9 +1030,9 @@ function QuestionsTab({
   }
 
   return (
-    <div className="max-w-2xl space-y-3">
+    <div className="max-w-3xl space-y-3">
       {questionTemplates.length > 0 && (
-        <div className="flex items-center gap-2 pb-3 border-b border-border">
+        <div className="flex items-center gap-2 pb-3 border-b border-border flex-wrap">
           <span className="text-body-sm text-muted shrink-0">Load template:</span>
           <select
             className="flex-1 h-8 px-2 rounded-lg border border-border bg-surface text-body-sm text-text outline-none focus:border-primary"
@@ -1105,7 +1106,7 @@ function QuestionsTab({
       )}
 
       {questions.map((q, i) => (
-        <div key={q.id} className="bg-surface border border-border rounded-lg overflow-hidden">
+        <div key={q.id} className="bg-surface-elevated border border-border rounded-xl overflow-hidden shadow-xs">
           {/* Row */}
           <div
             className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-surface-2 transition-colors"
@@ -1119,7 +1120,7 @@ function QuestionsTab({
             }}
           >
             <span className="text-micro text-muted w-5 text-center shrink-0">{i + 1}</span>
-            <p className="flex-1 text-body-sm text-text line-clamp-1">{q.text}</p>
+            <p className="flex-1 min-w-0 text-body-sm text-text line-clamp-1">{q.text}</p>
             <span className="text-micro px-2 h-5 rounded-full bg-accent-soft text-accent-fg inline-flex items-center shrink-0">
               {QUESTION_TYPE_LABELS[q.type]}
             </span>
@@ -1221,7 +1222,7 @@ function QuestionsTab({
 
       {/* Add question form */}
       {showAdd ? (
-        <div className="bg-surface border border-border rounded-lg px-4 py-4 space-y-3">
+        <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 space-y-3 shadow-sm">
           <div>
             <label className={LABEL_CLS}>Question text</label>
             <input
@@ -1331,7 +1332,7 @@ function StagesTab({
   }
 
   return (
-    <div className="max-w-2xl space-y-3">
+    <div className="max-w-3xl space-y-3">
       {stages.length === 0 && !showAdd && (
         <EmptyState title="No stages yet" description="Add pipeline stages to track candidate progress." />
       )}
@@ -1339,12 +1340,12 @@ function StagesTab({
       {stages.map((stage, i) => (
         <div
           key={stage.id}
-          className="flex items-center gap-3 px-4 py-3 bg-surface border border-border rounded-lg"
+          className="flex items-center gap-3 px-4 py-3 bg-surface-elevated border border-border rounded-xl shadow-xs flex-wrap"
         >
           <span
             className={`size-3 rounded-full shrink-0 ${STAGE_COLOR_MAP[stage.color] ?? "bg-gray-400"}`}
           />
-          <p className="flex-1 text-body-sm text-text">{stage.name}</p>
+          <p className="flex-1 min-w-44 text-body-sm text-text">{stage.name}</p>
           {stage.isFinal && (
             <span className="text-micro px-2 h-5 rounded-full bg-success-soft text-success inline-flex items-center shrink-0">
               Final
@@ -1380,7 +1381,7 @@ function StagesTab({
 
       {/* Add stage form */}
       {showAdd ? (
-        <div className="bg-surface border border-border rounded-lg px-4 py-4 space-y-3">
+        <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 space-y-3 shadow-sm">
           <div>
             <label className={LABEL_CLS}>Stage name</label>
             <input
@@ -1469,7 +1470,7 @@ function SourcesTab({
   }
 
   return (
-    <div className="max-w-2xl space-y-3">
+    <div className="max-w-3xl space-y-3">
       {/* QR Code Modal */}
       {qrModalSource && (
         <div
@@ -1506,7 +1507,7 @@ function SourcesTab({
       {sources.map((src) => (
         <div
           key={src.id}
-          className="flex items-center gap-3 px-4 py-3 bg-surface border border-border rounded-lg"
+          className="flex items-center gap-3 px-4 py-3 bg-surface-elevated border border-border rounded-xl shadow-xs flex-wrap"
         >
           <p className="text-body-sm text-text font-medium w-36 shrink-0 truncate">{src.name}</p>
           <p className="flex-1 text-body-sm text-subtle font-mono truncate" title={src.botLink}>
@@ -1534,7 +1535,7 @@ function SourcesTab({
 
       {/* Add source form */}
       {showAdd ? (
-        <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-4 py-3">
+        <div className="flex items-center gap-2 bg-surface-elevated border border-border rounded-xl px-4 py-3 shadow-sm flex-wrap">
           <input
             className={INPUT_CLS}
             placeholder="Source name (e.g. LinkedIn, OLX)"

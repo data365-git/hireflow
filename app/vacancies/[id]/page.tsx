@@ -24,7 +24,7 @@ export default async function VacancyKanbanPage({ params }: { params: Promise<{ 
         vacancy={{ id: vacancy.id, title: vacancy.title }}
         candidateCount={appRows.length}
         redirectToVacancies
-        className="fixed right-8 top-24 z-20 shadow-sm"
+        className="fixed right-8 top-32 z-20 shadow-md"
       />
       <VacancyKanbanClient
         vacancy={vacancy}
