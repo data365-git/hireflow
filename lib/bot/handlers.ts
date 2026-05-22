@@ -3,13 +3,15 @@ import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
 import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments, botContent, feedback } from "@/lib/db/schema";
 import { saveBotMessageRecord } from "./messageLog";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, isNull } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, createInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
 import { detectLang, tr, type Lang } from "./i18n";
 import { resolveBotLang } from "./lang";
 
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
+
 async function getLiveActiveVacancy(vacancyId: string) {
-  const rows = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
+  const rows = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false), vacancyNotDeleted));
   const vacancy = rows[0];
   return vacancy?.status === "active" ? vacancy : null;
 }
@@ -67,7 +69,7 @@ async function getBotVisibleDepartments() {
       department: vacancies.department,
     })
     .from(vacancies)
-    .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)))
+    .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false), vacancyNotDeleted))
     .orderBy(asc(vacancies.department));
 
   const byName = new Map<string, { id: string; name: string; displayName: string }>();
@@ -180,13 +182,13 @@ async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang, sou
     const closedRows = await db
       .select()
       .from(vacancies)
-      .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false)));
+      .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false), vacancyNotDeleted));
     const closedVacancy = closedRows[0];
 
     let similarVacancies = await db
       .select()
       .from(vacancies)
-      .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)))
+      .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false), vacancyNotDeleted))
       .orderBy(desc(vacancies.createdAt))
       .limit(3);
 
@@ -519,7 +521,7 @@ export async function handleJobs(ctx: Context) {
 export async function showJobs(ctx: Context, departmentId: string | null) {
   const lang = await resolveBotLang(ctx);
   const activeVacancies = await db.select().from(vacancies)
-    .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false)));
+    .where(and(eq(vacancies.status, "active"), eq(vacancies.isDemo, false), vacancyNotDeleted));
 
   if (!activeVacancies.length) {
     return ctx.reply(tr(lang, "no_jobs"), { parse_mode: "Markdown" });
@@ -589,7 +591,7 @@ export async function handleStatus(ctx: Context) {
     stage: vacancyStages,
   })
     .from(applications)
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false), vacancyNotDeleted))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .where(eq(applications.candidateId, candRows[0].id));
 
@@ -641,7 +643,7 @@ async function getApplicationAndCandidateForUser(telegramUserId: string): Promis
   const appRows = await db
     .select({ app: applications })
     .from(applications)
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false), vacancyNotDeleted))
     .where(eq(applications.candidateId, candRows[0].id))
     .orderBy(applications.appliedAt);
   const latestApp = appRows[appRows.length - 1]?.app;

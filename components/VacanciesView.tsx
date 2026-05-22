@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 import { formatSalary } from "@/lib/utils";
 import { PipelineMiniBar } from "@/components/PipelineMiniBar";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { useAuth } from "@/context/AuthContext";
 import { useDataMode } from "@/context/DataModeContext";
 import { getVacanciesPageData } from "@/app/actions/vacancies";
+import { BulkActionToolbar } from "@/components/vacancies/BulkActionToolbar";
+import { DeleteVacancyButton } from "@/components/vacancies/DeleteVacancyDialog";
 import type { VacancyStage, Application, User } from "@/lib/types";
 
 type DbVacancy = {
@@ -73,11 +77,14 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
   const [view, setView] = useState<"cards" | "table">("cards");
   const router = useRouter();
   const { mode } = useDataMode();
+  const { hasPermission, permissionsLoaded } = useAuth();
+  const canDeleteVacancies = permissionsLoaded && hasPermission("vacancies", "delete");
 
   const [vacancies, setVacancies] = useState(initialVacancies);
   const [stages, setStages] = useState(initialStages);
   const [applications, setApplications] = useState(initialApplications);
   const [users, setUsers] = useState(initialUsers);
+  const [selectedVacancyIds, setSelectedVacancyIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getVacanciesPageData().then((data) => {
@@ -120,16 +127,46 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
       })) as Application[];
   }
 
-  const visibleVacancies = statusFilter
+  const visibleVacancies = (statusFilter
     ? vacancies.filter((vacancy) => vacancy.status === statusFilter)
-    : vacancies;
+    : vacancies
+  ).filter((vacancy) => vacancy.status !== "deleted");
+
+  const selectedVacancies = visibleVacancies
+    .filter((vacancy) => selectedVacancyIds.has(vacancy.id))
+    .map((vacancy) => ({
+      id: vacancy.id,
+      title: vacancy.title,
+      candidateCount: getTotalCandidates(vacancy.id),
+    }));
+  const allVisibleSelected =
+    visibleVacancies.length > 0 && visibleVacancies.every((vacancy) => selectedVacancyIds.has(vacancy.id));
+
+  function handleDeleted(vacancyIds: string[]) {
+    const deletedIds = new Set(vacancyIds);
+    setVacancies((prev) => prev.filter((vacancy) => !deletedIds.has(vacancy.id)));
+    setSelectedVacancyIds((prev) => {
+      const next = new Set(prev);
+      vacancyIds.forEach((id) => next.delete(id));
+      return next;
+    });
+  }
+
+  function toggleSelectedVacancy(vacancyId: string) {
+    setSelectedVacancyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vacancyId)) next.delete(vacancyId);
+      else next.add(vacancyId);
+      return next;
+    });
+  }
 
   const title = statusFilter
     ? `${statusFilter.charAt(0).toUpperCase()}${statusFilter.slice(1)} Vacancies`
     : "Vacancies";
 
   return (
-    <div className="px-8 py-8 max-w-[900px]">
+    <div className="px-8 py-8 max-w-[1000px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -253,6 +290,13 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                         >
                           Edit
                         </Link>
+                        {canDeleteVacancies && (
+                          <DeleteVacancyButton
+                            vacancy={{ id: vacancy.id, title: vacancy.title }}
+                            candidateCount={total}
+                            onDeleted={handleDeleted}
+                          />
+                        )}
                         <span className="text-body-sm text-primary font-medium group-hover:underline">
                           Open pipeline →
                         </span>
@@ -270,12 +314,32 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
               <table className="w-full text-body-sm">
                 <thead>
                   <tr className="border-b border-border bg-surface-2">
+                    {canDeleteVacancies && (
+                      <th className="px-4 py-2.5 w-10">
+                        <Checkbox
+                          id="select-all-vacancies"
+                          checked={allVisibleSelected}
+                          aria-label="Select all vacancies"
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
+                            setSelectedVacancyIds((prev) => {
+                              const next = new Set(prev);
+                              visibleVacancies.forEach((vacancy) => {
+                                if (checked) next.add(vacancy.id);
+                                else next.delete(vacancy.id);
+                              });
+                              return next;
+                            });
+                          }}
+                        />
+                      </th>
+                    )}
                     <th className="text-left px-4 py-2.5 font-semibold text-muted">Vacancy</th>
                     <th className="text-left px-4 py-2.5 font-semibold text-muted">Pipeline</th>
                     <th className="text-right px-4 py-2.5 font-semibold text-muted w-20">Total</th>
                     <th className="text-right px-4 py-2.5 font-semibold text-muted w-16">New</th>
                     <th className="text-left px-4 py-2.5 font-semibold text-muted w-28">HR</th>
-                    <th className="px-4 py-2.5 w-20"></th>
+                    <th className="px-4 py-2.5 w-28"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -298,6 +362,16 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                         className="border-b border-border last:border-0 hover:bg-surface-2 transition-colors cursor-pointer"
                         onClick={() => router.push(`/vacancies/${vacancy.id}`)}
                       >
+                        {canDeleteVacancies && (
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              id={`select-vacancy-${vacancy.id}`}
+                              checked={selectedVacancyIds.has(vacancy.id)}
+                              aria-label={`Select ${vacancy.title}`}
+                              onChange={() => toggleSelectedVacancy(vacancy.id)}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
@@ -336,13 +410,22 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <Link
-                            href={`/vacancies/${vacancy.id}/edit`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-body-sm text-muted hover:text-text transition-colors"
-                          >
-                            Edit
-                          </Link>
+                          <div className="flex items-center justify-end gap-2">
+                            <Link
+                              href={`/vacancies/${vacancy.id}/edit`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-body-sm text-muted hover:text-text transition-colors"
+                            >
+                              Edit
+                            </Link>
+                            {canDeleteVacancies && (
+                              <DeleteVacancyButton
+                                vacancy={{ id: vacancy.id, title: vacancy.title }}
+                                candidateCount={total}
+                                onDeleted={handleDeleted}
+                              />
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -352,6 +435,13 @@ export function VacanciesView({ vacancies: initialVacancies, stages: initialStag
             </div>
           )}
         </>
+      )}
+      {canDeleteVacancies && (
+        <BulkActionToolbar
+          vacancies={selectedVacancies}
+          onClear={() => setSelectedVacancyIds(new Set())}
+          onDeleted={handleDeleted}
+        />
       )}
     </div>
   );

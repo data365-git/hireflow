@@ -1,10 +1,32 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
-import { vacancies, vacancyStages, screeningQuestions, applications, users, sources, testTasks, testTaskAssignments, departments } from "@/lib/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import {
+  applications,
+  automationRules,
+  automationRuns,
+  auditLogs,
+  botSessions,
+  candidates,
+  departments,
+  internalNotes,
+  screeningAnswers,
+  screeningQuestions,
+  sources,
+  telegramMessages,
+  testTaskAssignments,
+  testTasks,
+  timelineEvents,
+  users,
+  vacancies,
+  vacancyDeletionBackups,
+  vacancyStages,
+} from "@/lib/db/schema";
+import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
+import { audit } from "@/lib/auth/audit";
+import { sendBotMessage } from "@/lib/bot/send";
 import type { Application, CreateVacancyInput, Source, TestTask, User, Vacancy, VacancyStage } from "@/lib/types";
 
 type VacancyPatch = Partial<
@@ -37,6 +59,16 @@ export type VacancyActionError = {
 export type CreateVacancyResult =
   | { ok: true; vacancyId: string }
   | { ok: false; error: VacancyActionError };
+
+export type VacancyDeleteResult =
+  | { ok: true; vacancyTitle: string; activeApplicationsAffected: number }
+  | { ok: false; error: { code: string; message: string } };
+
+export type VacancyDeletionCounts = {
+  total: number;
+  active: number;
+  stageCounts: Array<{ stageId: string; stageName: string; count: number }>;
+};
 
 export type VacancyEditData = {
   vacancy: Vacancy;
@@ -132,7 +164,7 @@ async function requireVacancyInCurrentMode(vacancyId: string) {
   const [row] = await db
     .select()
     .from(vacancies)
-    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo)));
+    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo), isNull(vacancies.deletedAt)));
   if (!row) throw new Error("Vacancy not found in the current data mode.");
   return row;
 }
@@ -194,14 +226,14 @@ export async function getAllVacancies() {
   return db
     .select()
     .from(vacancies)
-    .where(eq(vacancies.isDemo, isDemo))
+    .where(and(eq(vacancies.isDemo, isDemo), isNull(vacancies.deletedAt)))
     .orderBy(vacancies.createdAt);
 }
 
 export async function getVacanciesPageData() {
   const isDemo = await getCurrentDataMode();
   const [vacancyRows, stageRows, userRows] = await Promise.all([
-    db.select().from(vacancies).where(eq(vacancies.isDemo, isDemo)).orderBy(vacancies.createdAt),
+    db.select().from(vacancies).where(and(eq(vacancies.isDemo, isDemo), isNull(vacancies.deletedAt))).orderBy(vacancies.createdAt),
     db.select().from(vacancyStages),
     db.select().from(users),
   ]);
@@ -218,7 +250,7 @@ export async function getVacancyById(id: string) {
   const rows = await db
     .select()
     .from(vacancies)
-    .where(and(eq(vacancies.id, id), eq(vacancies.isDemo, isDemo)));
+    .where(and(eq(vacancies.id, id), eq(vacancies.isDemo, isDemo), isNull(vacancies.deletedAt)));
   return rows[0] ?? null;
 }
 
@@ -227,7 +259,7 @@ export async function getVacancyEditData(id: string): Promise<VacancyEditData | 
   const [vacancyRow] = await db
     .select()
     .from(vacancies)
-    .where(and(eq(vacancies.id, id), eq(vacancies.isDemo, isDemo)));
+    .where(and(eq(vacancies.id, id), eq(vacancies.isDemo, isDemo), isNull(vacancies.deletedAt)));
 
   if (!vacancyRow) return null;
 
@@ -654,6 +686,310 @@ export async function getScreeningQuestions(vacancyId: string) {
     .from(screeningQuestions)
     .where(eq(screeningQuestions.vacancyId, vacancyId))
     .orderBy(screeningQuestions.orderIndex);
+}
+
+async function buildVacancySnapshot(vacancyId: string) {
+  const [vacancy] = await db.select().from(vacancies).where(eq(vacancies.id, vacancyId));
+  const [stageRows, questionRows, sourceRows, taskRows, appRows, automationRows] = await Promise.all([
+    db.select().from(vacancyStages).where(eq(vacancyStages.vacancyId, vacancyId)).orderBy(vacancyStages.orderIndex),
+    db.select().from(screeningQuestions).where(eq(screeningQuestions.vacancyId, vacancyId)).orderBy(screeningQuestions.orderIndex),
+    db.select().from(sources).where(eq(sources.vacancyId, vacancyId)),
+    db.select().from(testTasks).where(eq(testTasks.vacancyId, vacancyId)),
+    db.select().from(applications).where(eq(applications.vacancyId, vacancyId)),
+    db.select().from(automationRules).where(eq(automationRules.vacancyId, vacancyId)),
+  ]);
+
+  const appIds = appRows.map((app) => app.id);
+  const taskIds = taskRows.map((task) => task.id);
+  const ruleIds = automationRows.map((rule) => rule.id);
+
+  const [answerRows, eventRows, messageRows, noteRows, taskAssignmentRows, automationRunRows] = await Promise.all([
+    appIds.length > 0 ? db.select().from(screeningAnswers).where(inArray(screeningAnswers.applicationId, appIds)) : [],
+    appIds.length > 0 ? db.select().from(timelineEvents).where(inArray(timelineEvents.applicationId, appIds)) : [],
+    appIds.length > 0 ? db.select().from(telegramMessages).where(inArray(telegramMessages.applicationId, appIds)) : [],
+    appIds.length > 0 ? db.select().from(internalNotes).where(inArray(internalNotes.applicationId, appIds)) : [],
+    taskIds.length > 0 ? db.select().from(testTaskAssignments).where(inArray(testTaskAssignments.taskId, taskIds)) : [],
+    ruleIds.length > 0 ? db.select().from(automationRuns).where(inArray(automationRuns.ruleId, ruleIds)) : [],
+  ]);
+
+  return {
+    vacancy,
+    stages: stageRows,
+    questions: questionRows,
+    sources: sourceRows,
+    testTasks: taskRows,
+    applications: appRows,
+    screeningAnswers: answerRows,
+    timelineEvents: eventRows,
+    telegramMessages: messageRows,
+    internalNotes: noteRows,
+    testTaskAssignments: taskAssignmentRows,
+    automationRules: automationRows,
+    automationRuns: automationRunRows,
+    snapshotAt: new Date().toISOString(),
+  };
+}
+
+async function notifyActiveCandidatesOfVacancyClose(vacancyTitle: string, candidateIds: string[]) {
+  if (candidateIds.length === 0) return;
+  const rows = await db
+    .select({
+      id: candidates.id,
+      telegramUserId: candidates.telegramUserId,
+      languagePref: candidates.languagePref,
+      language: candidates.language,
+    })
+    .from(candidates)
+    .where(inArray(candidates.id, candidateIds));
+
+  for (const candidate of rows) {
+    if (!candidate.telegramUserId) continue;
+    const lang = candidate.languagePref ?? candidate.language ?? "uz";
+    const text =
+      lang === "ru"
+        ? `Уважаемый кандидат, вакансия *${vacancyTitle}* закрыта. Спасибо за интерес к Data365.`
+        : lang === "en"
+        ? `The position *${vacancyTitle}* has been closed. Thank you for your interest in Data365.`
+        : `Hurmatli nomzod, *${vacancyTitle}* vakansiyasi yopildi. Data365'ga qiziqishingiz uchun rahmat.`;
+    await sendBotMessage(candidate.telegramUserId, text).catch((error) => {
+      console.error("Failed to notify candidate about vacancy deletion", error);
+    });
+  }
+}
+
+export async function getVacancyDeletionCounts(vacancyId: string): Promise<VacancyDeletionCounts> {
+  await requirePermission("vacancies", "read");
+
+  const rows = await db
+    .select({
+      stageId: vacancyStages.id,
+      stageName: vacancyStages.name,
+      isFinal: vacancyStages.isFinal,
+      count: sql<number>`count(${applications.id})::int`,
+    })
+    .from(vacancyStages)
+    .leftJoin(applications, eq(applications.currentStageId, vacancyStages.id))
+    .where(eq(vacancyStages.vacancyId, vacancyId))
+    .groupBy(vacancyStages.id)
+    .orderBy(vacancyStages.orderIndex);
+
+  const stageCounts = rows.map((row) => ({
+    stageId: row.stageId,
+    stageName: row.stageName,
+    count: Number(row.count ?? 0),
+  }));
+  return {
+    total: stageCounts.reduce((sum, row) => sum + row.count, 0),
+    active: rows.reduce((sum, row) => sum + (row.isFinal ? 0 : Number(row.count ?? 0)), 0),
+    stageCounts,
+  };
+}
+
+export async function softDeleteVacancy(
+  vacancyId: string,
+  options: { notifyCandidates?: boolean } = {}
+): Promise<VacancyDeleteResult> {
+  let session: Awaited<ReturnType<typeof requirePermission>>;
+  try {
+    session = await requirePermission("vacancies", "delete");
+  } catch {
+    return { ok: false, error: { code: "FORBIDDEN", message: "You do not have permission to delete vacancies." } };
+  }
+
+  const [{ count: recentDeletes }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(auditLogs)
+    .where(
+      and(
+        eq(auditLogs.actorId, session.sub),
+        eq(auditLogs.action, "VACANCY_SOFT_DELETE"),
+        sql`${auditLogs.createdAt} > now() - interval '5 minutes'`
+      )
+    );
+  if (Number(recentDeletes ?? 0) >= 20) {
+    return { ok: false, error: { code: "RATE_LIMIT", message: "Too many deletions in the last 5 minutes." } };
+  }
+
+  const [vacancy] = await db
+    .select()
+    .from(vacancies)
+    .where(and(eq(vacancies.id, vacancyId), isNull(vacancies.deletedAt)));
+  if (!vacancy) return { ok: false, error: { code: "NOT_FOUND", message: "Vacancy not found." } };
+
+  const activeRows = await db
+    .select({
+      applicationId: applications.id,
+      candidateId: applications.candidateId,
+    })
+    .from(applications)
+    .innerJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .where(and(eq(applications.vacancyId, vacancyId), eq(vacancyStages.isFinal, false)));
+
+  const snapshot = await buildVacancySnapshot(vacancyId);
+  const deletedAt = new Date();
+  const restoreExpiresAt = new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(vacancies)
+      .set({
+        deletedAt,
+        deletedBy: session.sub,
+        status: "closed",
+      })
+      .where(eq(vacancies.id, vacancyId));
+
+    await tx.insert(vacancyDeletionBackups).values({
+      id: `vdb-${crypto.randomUUID()}`,
+      vacancyId,
+      vacancyTitle: vacancy.title,
+      snapshot,
+      deletedAt,
+      deletedBy: session.sub,
+      restoreExpiresAt,
+    });
+
+    await tx.delete(botSessions).where(eq(botSessions.vacancyId, vacancyId));
+  });
+
+  if (options.notifyCandidates) {
+    await notifyActiveCandidatesOfVacancyClose(
+      vacancy.title,
+      [...new Set(activeRows.map((row) => row.candidateId))]
+    );
+  }
+
+  audit({
+    action: "VACANCY_SOFT_DELETE",
+    actorId: session.sub,
+    actorEmail: session.email,
+    entityType: "vacancy",
+    entityId: vacancy.id,
+    entityName: vacancy.title,
+    before: { vacancy, activeApplications: activeRows.length, snapshot },
+    after: { deletedAt: deletedAt.toISOString(), restoreExpiresAt: restoreExpiresAt.toISOString() },
+  });
+
+  revalidatePath("/vacancies");
+  revalidatePath("/applications");
+  revalidatePath(`/vacancies/${vacancyId}`);
+  return { ok: true, vacancyTitle: vacancy.title, activeApplicationsAffected: activeRows.length };
+}
+
+export async function restoreVacancy(vacancyId: string): Promise<VacancyDeleteResult> {
+  let session: Awaited<ReturnType<typeof requirePermission>>;
+  try {
+    session = await requirePermission("vacancies", "delete");
+  } catch {
+    return { ok: false, error: { code: "FORBIDDEN", message: "You do not have permission to restore vacancies." } };
+  }
+
+  const [vacancy] = await db.select().from(vacancies).where(eq(vacancies.id, vacancyId));
+  if (!vacancy) return { ok: false, error: { code: "NOT_FOUND", message: "Vacancy not found." } };
+  if (!vacancy.deletedAt) {
+    return { ok: false, error: { code: "NOT_DELETED", message: "Vacancy is not in trash." } };
+  }
+
+  await db
+    .update(vacancies)
+    .set({ deletedAt: null, deletedBy: null, status: "paused" })
+    .where(eq(vacancies.id, vacancyId));
+
+  audit({
+    action: "VACANCY_RESTORE",
+    actorId: session.sub,
+    actorEmail: session.email,
+    entityType: "vacancy",
+    entityId: vacancy.id,
+    entityName: vacancy.title,
+    before: { deletedAt: vacancy.deletedAt },
+    after: { deletedAt: null, status: "paused" },
+  });
+
+  revalidatePath("/vacancies");
+  revalidatePath(`/vacancies/${vacancyId}`);
+  return { ok: true, vacancyTitle: vacancy.title, activeApplicationsAffected: 0 };
+}
+
+export async function permanentlyDeleteVacancy(vacancyId: string): Promise<VacancyDeleteResult> {
+  const session = await requirePermission("vacancies", "delete");
+  const [vacancy] = await db.select().from(vacancies).where(eq(vacancies.id, vacancyId));
+  if (!vacancy) return { ok: false, error: { code: "NOT_FOUND", message: "Vacancy not found." } };
+  if (!vacancy.deletedAt) {
+    return { ok: false, error: { code: "NOT_DELETED", message: "Move the vacancy to trash before deleting it permanently." } };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(vacancyDeletionBackups)
+      .set({ hardDeletedAt: new Date() })
+      .where(eq(vacancyDeletionBackups.vacancyId, vacancyId));
+    await tx.delete(vacancies).where(eq(vacancies.id, vacancyId));
+  });
+
+  audit({
+    action: "VACANCY_HARD_DELETE",
+    actorId: session.sub,
+    actorEmail: session.email,
+    entityType: "vacancy",
+    entityId: vacancy.id,
+    entityName: vacancy.title,
+  });
+
+  revalidatePath("/vacancies");
+  return { ok: true, vacancyTitle: vacancy.title, activeApplicationsAffected: 0 };
+}
+
+export async function bulkSoftDeleteVacancies(
+  vacancyIds: string[],
+  options: { notifyCandidates?: boolean } = {}
+): Promise<{ ok: true; deleted: number; failed: Array<{ id: string; error: string }> } | { ok: false; error: string }> {
+  await requirePermission("vacancies", "delete");
+  const uniqueIds = [...new Set(vacancyIds)].slice(0, 50);
+  if (uniqueIds.length === 0) return { ok: false, error: "Select at least one vacancy." };
+
+  const failed: Array<{ id: string; error: string }> = [];
+  let deleted = 0;
+  for (const id of uniqueIds) {
+    const result = await softDeleteVacancy(id, options);
+    if (result.ok) deleted += 1;
+    else failed.push({ id, error: result.error.message });
+  }
+  return { ok: true, deleted, failed };
+}
+
+export async function listDeletedVacancies() {
+  await requirePermission("vacancies", "delete");
+  return db
+    .select({
+      id: vacancies.id,
+      title: vacancies.title,
+      department: vacancies.department,
+      status: vacancies.status,
+      deletedAt: vacancies.deletedAt,
+      deletedBy: vacancies.deletedBy,
+      restoreExpiresAt: vacancyDeletionBackups.restoreExpiresAt,
+      deletedByName: users.fullName,
+    })
+    .from(vacancies)
+    .leftJoin(vacancyDeletionBackups, eq(vacancyDeletionBackups.vacancyId, vacancies.id))
+    .leftJoin(users, eq(users.id, vacancies.deletedBy))
+    .where(sql`${vacancies.deletedAt} is not null`)
+    .orderBy(sql`${vacancies.deletedAt} desc`);
+}
+
+export async function purgeExpiredDeletedVacancies() {
+  await requirePermission("vacancies", "delete");
+  const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ id: vacancies.id })
+    .from(vacancies)
+    .where(and(sql`${vacancies.deletedAt} is not null`, lt(vacancies.deletedAt, threshold)));
+
+  for (const row of rows) {
+    await permanentlyDeleteVacancy(row.id);
+  }
+  return { purged: rows.length };
 }
 
 // --- Screening Questions mutations ---

@@ -1,8 +1,10 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { telegramMessages, applications, candidates, vacancies, sources } from "@/lib/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export type InboxConversation = {
   candidateId: string;
@@ -75,7 +77,7 @@ export async function getInboxConversations(): Promise<InboxConversation[]> {
     .leftJoin(applications, eq(telegramMessages.applicationId, applications.id))
     .leftJoin(vacancies, eq(applications.vacancyId, vacancies.id))
     .leftJoin(sources, eq(applications.sourceId, sources.id))
-    .where(eq(candidates.isDemo, false))
+    .where(and(eq(candidates.isDemo, false), or(isNull(telegramMessages.applicationId), vacancyNotDeleted)))
     .orderBy(asc(telegramMessages.sentAt));
 
   // Group by applicationId (or candidateId if no applicationId)
@@ -130,7 +132,7 @@ export async function sendMessageToCandidate(applicationId: string, text: string
     .select({ app: applications, cand: candidates })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, false)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, false), vacancyNotDeleted))
     .where(eq(applications.id, applicationId));
 
   const row = rows[0];
@@ -175,8 +177,23 @@ export async function sendMessageToCandidate(applicationId: string, text: string
 
 export async function getMessagesForApplication(applicationId: string): Promise<InboxMessage[]> {
   const rows = await db
-    .select()
+    .select({
+      id: telegramMessages.id,
+      candidateId: telegramMessages.candidateId,
+      applicationId: telegramMessages.applicationId,
+      direction: telegramMessages.direction,
+      senderType: telegramMessages.senderType,
+      senderName: telegramMessages.senderName,
+      text: telegramMessages.text,
+      sentAt: telegramMessages.sentAt,
+      readByUserIds: telegramMessages.readByUserIds,
+      attachmentFileId: telegramMessages.attachmentFileId,
+      attachmentType: telegramMessages.attachmentType,
+      attachmentFilename: telegramMessages.attachmentFilename,
+    })
     .from(telegramMessages)
+    .innerJoin(applications, eq(telegramMessages.applicationId, applications.id))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), vacancyNotDeleted))
     .where(eq(telegramMessages.applicationId, applicationId))
     .orderBy(telegramMessages.sentAt);
   return rows.map(toInboxMessage);
@@ -185,9 +202,24 @@ export async function getMessagesForApplication(applicationId: string): Promise<
 // Used when a conversation has no applicationId (pre-application bot messages)
 export async function getMessagesByCandidateId(candidateId: string): Promise<InboxMessage[]> {
   const rows = await db
-    .select()
+    .select({
+      id: telegramMessages.id,
+      candidateId: telegramMessages.candidateId,
+      applicationId: telegramMessages.applicationId,
+      direction: telegramMessages.direction,
+      senderType: telegramMessages.senderType,
+      senderName: telegramMessages.senderName,
+      text: telegramMessages.text,
+      sentAt: telegramMessages.sentAt,
+      readByUserIds: telegramMessages.readByUserIds,
+      attachmentFileId: telegramMessages.attachmentFileId,
+      attachmentType: telegramMessages.attachmentType,
+      attachmentFilename: telegramMessages.attachmentFilename,
+    })
     .from(telegramMessages)
-    .where(eq(telegramMessages.candidateId, candidateId))
+    .leftJoin(applications, eq(telegramMessages.applicationId, applications.id))
+    .leftJoin(vacancies, eq(applications.vacancyId, vacancies.id))
+    .where(and(eq(telegramMessages.candidateId, candidateId), or(isNull(telegramMessages.applicationId), vacancyNotDeleted)))
     .orderBy(telegramMessages.sentAt);
   return rows.map(toInboxMessage);
 }
@@ -198,7 +230,9 @@ export async function getInboxUnreadCount(): Promise<number> {
     .select({ readByUserIds: telegramMessages.readByUserIds, direction: telegramMessages.direction })
     .from(telegramMessages)
     .innerJoin(candidates, eq(telegramMessages.candidateId, candidates.id))
-    .where(eq(candidates.isDemo, false));
+    .leftJoin(applications, eq(telegramMessages.applicationId, applications.id))
+    .leftJoin(vacancies, eq(applications.vacancyId, vacancies.id))
+    .where(and(eq(candidates.isDemo, false), or(isNull(telegramMessages.applicationId), vacancyNotDeleted)));
 
   return msgs.filter(
     (m) => m.direction === "inbound" && (!m.readByUserIds || (m.readByUserIds as string[]).length === 0)

@@ -51,7 +51,11 @@ export const vacancies = pgTable("vacancies", {
   introMessage: text("intro_message"),
   successMessage: text("success_message"),
   isDemo: boolean("is_demo").notNull().default(false),
-});
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: text("deleted_by").references(() => users.id, { onDelete: "set null" }),
+}, (t) => ({
+  deletedAtIdx: index("vacancies_deleted_at_idx").on(t.deletedAt),
+}));
 
 // ─── Vacancy Stages ───────────────────────────────────────────────────────────
 
@@ -501,6 +505,22 @@ export const backupRuns = pgTable("backup_runs", {
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
+
+// ─── Vacancy Deletion Backups ────────────────────────────────────────────────
+
+export const vacancyDeletionBackups = pgTable("vacancy_deletion_backups", {
+  id: text("id").primaryKey(),
+  vacancyId: text("vacancy_id").notNull(),
+  vacancyTitle: text("vacancy_title").notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+  deletedBy: text("deleted_by").references(() => users.id, { onDelete: "set null" }),
+  hardDeletedAt: timestamp("hard_deleted_at", { withTimezone: true }),
+  restoreExpiresAt: timestamp("restore_expires_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  vacancyIdx: index("vacancy_deletion_backups_vacancy_idx").on(t.vacancyId),
+  deletedAtIdx: index("vacancy_deletion_backups_deleted_at_idx").on(t.deletedAt),
+}));
 
 // ─── Bot Content ──────────────────────────────────────────────────────────────
 

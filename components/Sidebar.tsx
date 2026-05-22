@@ -23,6 +23,7 @@ import {
   Network,
   Settings,
   TrendingUp,
+  Trash2,
   Users,
 } from "lucide-react";
 
@@ -149,7 +150,8 @@ const groups: NavGroup[] = [
         href: "/vacancies",
         label: "All Vacancies",
         Icon: Briefcase,
-        activeWhen: (pathname, status) => pathname.startsWith("/vacancies") && !status,
+        activeWhen: (pathname, status) =>
+          !status && (pathname === "/vacancies" || (pathname.startsWith("/vacancies/") && !pathname.startsWith("/vacancies/trash"))),
       },
       {
         href: "/vacancies?status=active",
@@ -162,6 +164,11 @@ const groups: NavGroup[] = [
         label: "Closed",
         Icon: Archive,
         activeWhen: (pathname, status) => pathname === "/vacancies" && status === "closed",
+      },
+      {
+        href: "/vacancies/trash",
+        label: "Trash",
+        Icon: Trash2,
       },
     ],
   },

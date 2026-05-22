@@ -1,8 +1,10 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { candidates, applications, vacancies, telegramMessages } from "@/lib/db/schema";
-import { eq, desc, isNotNull, and, inArray } from "drizzle-orm";
+import { eq, desc, isNotNull, and, inArray, isNull } from "drizzle-orm";
 import { getCurrentDataMode } from "@/lib/data-mode";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export async function listLeads() {
   const isDemo = await getCurrentDataMode();
@@ -26,7 +28,7 @@ export async function listLeads() {
   const allApps = await db
     .select({ app: applications, vacancy: vacancies })
     .from(applications)
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .where(inArray(applications.candidateId, candidateIds))
     .orderBy(desc(applications.appliedAt));
 
@@ -95,10 +97,11 @@ export async function getBrowsingLeadsCount(): Promise<number> {
   let count = 0;
   for (const c of allCandidates) {
     const apps = await db
-      .select()
+      .select({ app: applications })
       .from(applications)
+      .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
       .where(eq(applications.candidateId, c.id));
-    const nonAbandoned = apps.filter((a) => a.status !== "abandoned");
+    const nonAbandoned = apps.filter((a) => a.app.status !== "abandoned");
     if (nonAbandoned.length === 0) count++;
   }
   return count;

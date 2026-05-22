@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, or, ilike, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, or, ilike, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   applicationWatches,
@@ -20,6 +20,8 @@ import {
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { HttpError } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/auth/permissions";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export type CandidateFilter =
   | "all"
@@ -174,7 +176,7 @@ async function assertApplicationInMode(applicationId: string) {
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .where(eq(applications.id, applicationId));
 
   const row = rows[0];
@@ -237,7 +239,7 @@ async function getApplicationIdsForCandidate(candidateId: string) {
   return db
     .select({ id: applications.id })
     .from(applications)
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .where(eq(applications.candidateId, candidateId));
 }
 
@@ -267,7 +269,7 @@ export async function getCandidateList(filter: CandidateFilter): Promise<Candida
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .orderBy(desc(applications.lastActivityAt));
 
@@ -616,6 +618,7 @@ export async function searchCandidates(
   }
 
   const appConditions: Parameters<typeof and>[0][] = [];
+  appConditions.push(or(isNull(applications.id), vacancyNotDeleted)!);
   if (filters.vacancyId) {
     appConditions.push(eq(applications.vacancyId, filters.vacancyId));
   }
@@ -658,6 +661,7 @@ export async function searchCandidates(
   const deduped: CandidateSearchRow[] = [];
   for (const row of rows) {
     if (seen.has(row.candidateId)) continue;
+    if (row.applicationId && !row.vacancyId) continue;
     seen.add(row.candidateId);
     deduped.push({
       candidateId: row.candidateId,
@@ -687,7 +691,7 @@ export async function listFilterableVacancies(): Promise<{ id: string; title: st
   return db
     .select({ id: vacancies.id, title: vacancies.title })
     .from(vacancies)
-    .where(eq(vacancies.isDemo, isDemo))
+    .where(and(eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .orderBy(asc(vacancies.title));
 }
 
@@ -705,7 +709,7 @@ export async function listFilterableStages(): Promise<
     .from(vacancyStages)
     .innerJoin(
       vacancies,
-      and(eq(vacancyStages.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)),
+      and(eq(vacancyStages.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted),
     )
     .orderBy(asc(vacancies.title), asc(vacancyStages.orderIndex));
 }
@@ -716,7 +720,7 @@ export async function listFilterableDepartments(): Promise<string[]> {
   const rows = await db
     .selectDistinct({ department: vacancies.department })
     .from(vacancies)
-    .where(eq(vacancies.isDemo, isDemo))
+    .where(and(eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .orderBy(asc(vacancies.department));
   return rows.map((r) => r.department);
 }

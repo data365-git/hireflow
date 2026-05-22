@@ -23,6 +23,7 @@
     "db:seed-stage-templates": "tsx scripts/seed-stage-templates.ts",
     "db:seed-question-templates": "tsx scripts/seed-question-templates.ts",
     "db:backup-pg": "tsx scripts/backup-pg.ts",
+    "purge:vacancies": "tsx scripts/purge-old-deleted-vacancies.ts",
     "backup:run": "tsx scripts/backup-cron.ts",
     "check:i18n": "tsx scripts/check-i18n.ts"
   },

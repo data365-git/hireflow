@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { automationRules, automationRuns, profiles, vacancies, vacancyStages } from "@/lib/db/schema";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
 import type { AutomationActionType, AutomationTriggerType } from "@/lib/types";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export type AutomationRuleView = {
   id: string;
@@ -83,7 +85,7 @@ export async function getAutomationPageData(): Promise<AutomationPageData> {
       title: vacancies.title,
     })
     .from(vacancies)
-    .where(eq(vacancies.isDemo, isDemo))
+    .where(and(eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .orderBy(asc(vacancies.createdAt));
 
   const vacancyIds = vacancyRows.map((vacancy) => vacancy.id);
@@ -300,7 +302,7 @@ async function validateRuleInput(vacancyId: string, input: SaveAutomationInput) 
   const vacancyRows = await db
     .select({ id: vacancies.id })
     .from(vacancies)
-    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo)));
+    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo), vacancyNotDeleted));
   if (!vacancyRows[0]) throw new Error("Vacancy not found in the current mode.");
 
   const stageIds = [input.triggerStageId, input.actionStageId].filter(Boolean) as string[];
@@ -330,7 +332,7 @@ async function renderPreviewMessage(input: TestAutomationMessageInput) {
     db
       .select({ title: vacancies.title })
       .from(vacancies)
-      .where(eq(vacancies.id, input.vacancyId)),
+      .where(and(eq(vacancies.id, input.vacancyId), vacancyNotDeleted)),
     db
       .select({ id: vacancyStages.id, name: vacancyStages.name, orderIndex: vacancyStages.orderIndex })
       .from(vacancyStages)
@@ -382,7 +384,7 @@ async function getRuleInCurrentMode(id: string) {
   const rows = await db
     .select({ rule: automationRules })
     .from(automationRules)
-    .innerJoin(vacancies, and(eq(automationRules.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(automationRules.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .where(eq(automationRules.id, id));
 
   return rows[0]?.rule ?? null;

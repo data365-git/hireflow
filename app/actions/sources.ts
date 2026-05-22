@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { validateEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { sources, applications, vacancies, vacancyStages } from "@/lib/db/schema";
-import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requirePermission } from "@/lib/auth/permissions";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import type { Source } from "@/lib/types";
 
 validateEnv();
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 function toIso(value: Date | string): string {
   if (value instanceof Date) return value.toISOString();
@@ -42,7 +44,7 @@ async function requireEditableVacancy(vacancyId: string) {
   const [vacancy] = await db
     .select({ id: vacancies.id })
     .from(vacancies)
-    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo)));
+    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo), vacancyNotDeleted));
 
   if (!vacancy) throw new Error("Vacancy not found in the current data mode.");
   return vacancy;
@@ -58,12 +60,13 @@ export async function listSourcesForVacancy(
   if (!includeArchived) conditions.push(eq(sources.isArchived, false));
 
   const rows = await db
-    .select()
+    .select({ source: sources })
     .from(sources)
+    .innerJoin(vacancies, and(eq(sources.vacancyId, vacancies.id), vacancyNotDeleted))
     .where(and(...conditions))
     .orderBy(sources.createdAt);
 
-  return rows.map(serializeSource);
+  return rows.map((row) => serializeSource(row.source));
 }
 
 export async function createBulkSources(input: {
@@ -242,6 +245,7 @@ export async function getSourcePerformance(opts?: {
   const conditions = [
     eq(sources.isArchived, false),
     eq(vacancies.isDemo, isDemo),
+    vacancyNotDeleted,
     isNotNull(applications.sourceId),
   ];
 
@@ -320,6 +324,7 @@ export async function getSourcePerformanceByName(args?: {
   const conditions = [
     eq(sources.isArchived, false),
     eq(vacancies.isDemo, isDemo),
+    vacancyNotDeleted,
     isNotNull(applications.sourceId),
   ];
 

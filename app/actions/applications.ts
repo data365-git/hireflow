@@ -1,13 +1,15 @@
 "use server";
 import { db } from "@/lib/db/client";
 import { applications, candidates, vacancyStages, timelineEvents, screeningAnswers, screeningQuestions, vacancies, sources } from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notifyCandidateOfStageChange } from "@/app/actions/bot";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
 import { fireStageEnteredAutomations } from "@/lib/automations/runner";
 import { sendStageNotification } from "@/lib/bot/notifications";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export type PipelineApplication = {
   id: string;
@@ -44,7 +46,7 @@ export async function getPipelineApplications(): Promise<PipelineApplication[]> 
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.status, "active")))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.status, "active"), vacancyNotDeleted))
     .innerJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .leftJoin(sources, eq(applications.sourceId, sources.id))
     .orderBy(desc(applications.lastActivityAt));
@@ -69,6 +71,7 @@ export async function getApplicationsForVacancy(vacancyId: string) {
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), vacancyNotDeleted))
     .leftJoin(sources, eq(applications.sourceId, sources.id))
     .where(eq(applications.vacancyId, vacancyId));
 
@@ -107,6 +110,7 @@ export async function getApplicationFull(applicationId: string) {
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), vacancyNotDeleted))
     .leftJoin(sources, eq(applications.sourceId, sources.id))
     .where(eq(applications.id, applicationId));
 
@@ -169,7 +173,7 @@ export async function getAllPipelineApplications(): Promise<UnifiedApplication[]
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .leftJoin(sources, eq(applications.sourceId, sources.id))
     .orderBy(desc(applications.lastActivityAt));
@@ -192,10 +196,11 @@ export async function moveApplicationToStage(applicationId: string, toStageId: s
     await requirePermission("candidates", "edit");
   }
   const appRows = await db
-    .select()
+    .select({ app: applications })
     .from(applications)
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), vacancyNotDeleted))
     .where(eq(applications.id, applicationId));
-  const app = appRows[0];
+  const app = appRows[0]?.app;
   if (!app) return;
   if (app.currentStageId === toStageId) return;
 
@@ -241,7 +246,7 @@ export async function deleteApplication(applicationId: string): Promise<{ ok: tr
     .select({ app: applications, vacancyId: vacancies.id, candidateName: candidates.fullName })
     .from(applications)
     .innerJoin(candidates, eq(applications.candidateId, candidates.id))
-    .innerJoin(vacancies, eq(applications.vacancyId, vacancies.id))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), vacancyNotDeleted))
     .where(eq(applications.id, applicationId));
   if (!rows[0]) return { ok: false, error: "Application not found" };
   await db.delete(applications).where(eq(applications.id, applicationId));

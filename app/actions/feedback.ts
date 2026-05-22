@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   applications,
@@ -12,6 +12,8 @@ import {
 } from "@/lib/db/schema";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export type FeedbackTarget = {
   applicationId: string;
@@ -60,7 +62,7 @@ export async function getFeedbackPageData(): Promise<{
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .orderBy(desc(applications.lastActivityAt));
 
@@ -90,6 +92,7 @@ export async function getFeedbackPageData(): Promise<{
     )
     .leftJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
+    .where(or(isNull(applications.id), vacancyNotDeleted))
     .orderBy(desc(feedback.submittedAt));
 
   return {
@@ -125,7 +128,7 @@ export async function createHrFeedback(formData: FormData) {
     })
     .from(applications)
     .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo), vacancyNotDeleted))
     .where(eq(applications.id, applicationId));
 
   if (!application) throw new Error("Application not found in the current data mode.");

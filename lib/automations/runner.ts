@@ -1,11 +1,12 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { applications, automationRules, automationRuns, candidates, telegramMessages, vacancies, vacancyStages } from "@/lib/db/schema";
 import { sendBotMessage } from "@/lib/bot/send";
 
 const MAX_AUTOMATION_DEPTH = 5;
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 type TriggerType = "stage_entered" | "application_submitted";
 
@@ -123,7 +124,7 @@ async function getAutomationContext(applicationId: string) {
     })
     .from(applications)
     .innerJoin(candidates, eq(applications.candidateId, candidates.id))
-    .innerJoin(vacancies, eq(applications.vacancyId, vacancies.id))
+    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), vacancyNotDeleted))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .where(eq(applications.id, applicationId));
 

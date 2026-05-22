@@ -3,7 +3,9 @@ import { db } from "@/lib/db/client";
 import { vacancies, applications, vacancyStages, sources, timelineEvents, telegramMessages, candidates } from "@/lib/db/schema";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+
+const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
 export type AnalyticsData = {
   vacancies: (typeof vacancies.$inferSelect)[];
@@ -21,7 +23,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   const allVacancies = await db
     .select()
     .from(vacancies)
-    .where(eq(vacancies.isDemo, isDemo));
+    .where(and(eq(vacancies.isDemo, isDemo), vacancyNotDeleted));
 
   const vacancyIds = allVacancies.map((v) => v.id);
 
