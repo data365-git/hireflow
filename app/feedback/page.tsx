@@ -20,6 +20,12 @@ function sourceLabel(source: string) {
   return source === "hr" ? "HR note" : "Candidate survey";
 }
 
+function kindLabel(kind: string) {
+  if (kind === "complaint") return "Complaint";
+  if (kind === "suggestion") return "Suggestion";
+  return "General";
+}
+
 function Rating({ value }: { value: number | null }) {
   if (!value) return <span className="text-micro text-subtle">No rating</span>;
 
@@ -37,14 +43,21 @@ function FeedbackRow({ item }: { item: FeedbackItem }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/candidates/${item.applicationId}`}
-              className="text-body-sm font-semibold text-text hover:text-primary"
-            >
-              {item.candidateName}
-            </Link>
+            {item.applicationId ? (
+              <Link
+                href={`/candidates/${item.applicationId}`}
+                className="text-body-sm font-semibold text-text hover:text-primary"
+              >
+                {item.candidateName}
+              </Link>
+            ) : (
+              <span className="text-body-sm font-semibold text-text">{item.candidateName}</span>
+            )}
             <span className="text-micro px-2 h-5 rounded-full bg-surface-2 text-muted inline-flex items-center">
               {sourceLabel(item.source)}
+            </span>
+            <span className="text-micro px-2 h-5 rounded-full bg-surface-2 text-muted inline-flex items-center">
+              {kindLabel(item.kind)}
             </span>
             {item.stageName && (
               <span className="text-micro px-2 h-5 rounded-full bg-primary/10 text-primary inline-flex items-center">
@@ -52,12 +65,16 @@ function FeedbackRow({ item }: { item: FeedbackItem }) {
               </span>
             )}
           </div>
-          <Link
-            href={`/vacancies/${item.vacancyId}`}
-            className="mt-1 block text-micro text-subtle hover:text-muted truncate"
-          >
-            {item.vacancyTitle}
-          </Link>
+          {item.vacancyId && item.vacancyTitle ? (
+            <Link
+              href={`/vacancies/${item.vacancyId}`}
+              className="mt-1 block text-micro text-subtle hover:text-muted truncate"
+            >
+              {item.vacancyTitle}
+            </Link>
+          ) : (
+            <p className="mt-1 text-micro text-subtle">General bot feedback</p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <Rating value={item.rating} />
@@ -73,8 +90,18 @@ function FeedbackRow({ item }: { item: FeedbackItem }) {
   );
 }
 
-export default async function FeedbackPage() {
+type FeedbackPageProps = {
+  searchParams?: Promise<{ kind?: string | string[] }>;
+};
+
+export default async function FeedbackPage({ searchParams }: FeedbackPageProps) {
   const { targets, items } = await getFeedbackPageData();
+  const params = await searchParams;
+  const kindParam = Array.isArray(params?.kind) ? params?.kind[0] : params?.kind;
+  const activeKind = kindParam === "complaint" || kindParam === "suggestion" || kindParam === "general"
+    ? kindParam
+    : "all";
+  const visibleItems = activeKind === "all" ? items : items.filter((item) => item.kind === activeKind);
   const hasTargets = targets.length > 0;
 
   return (
@@ -164,18 +191,40 @@ export default async function FeedbackPage() {
 
       <section className="bg-surface border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-border bg-surface-2">
-          <h2 className="text-body font-semibold text-text">Collected feedback</h2>
-          <span className="text-micro text-subtle">{items.length} total</span>
+          <div>
+            <h2 className="text-body font-semibold text-text">Collected feedback</h2>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                ["all", "All"],
+                ["complaint", "Complaints"],
+                ["suggestion", "Suggestions"],
+                ["general", "General"],
+              ].map(([kind, label]) => (
+                <Link
+                  key={kind}
+                  href={kind === "all" ? "/feedback" : `/feedback?kind=${kind}`}
+                  className={`rounded-full px-2.5 py-1 text-micro font-medium transition-colors ${
+                    activeKind === kind
+                      ? "bg-primary text-primary-fg"
+                      : "bg-surface text-muted hover:text-text"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
+          <span className="text-micro text-subtle">{visibleItems.length} total</span>
         </div>
 
-        {items.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <EmptyState
             title="No feedback collected yet"
             description="Add an HR note after an interview or final-stage decision."
           />
         ) : (
           <div className="divide-y divide-border">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <FeedbackRow key={item.id} item={item} />
             ))}
           </div>

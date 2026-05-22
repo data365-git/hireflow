@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useStore } from "@/lib/store";
 import type { CreateVacancyInput, ScreeningQuestion, QuestionTemplate } from "@/lib/types";
 import { SaveAsTemplateDialog } from "@/components/settings/SaveAsTemplateDialog";
+import { Combobox } from "@/components/ui/Combobox";
 import { createVacancy } from "@/app/actions/vacancies";
+import { listDepartments, type DepartmentOption } from "@/app/actions/departments";
 import { getAssignableHrUsers, type AssignableHrUser } from "@/app/actions/users";
+import { UZ_CITIES } from "@/lib/locations";
 
 type TemplateStage = {
   id: string;
@@ -31,7 +33,6 @@ const STEPS = [
   { label: "App Flow" },
   { label: "Questions" },
   { label: "Stages" },
-  { label: "Sources" },
   { label: "Review" },
 ];
 
@@ -71,10 +72,20 @@ type StageDraft = {
   isReserve?: boolean;
 };
 
-type SourceDraft = {
-  id: string;
-  name: string;
+type VacancyFormState = Omit<CreateVacancyInput, "salaryMin" | "salaryMax"> & {
+  salaryMin?: number;
+  salaryMax?: number;
 };
+
+function formatThousands(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function parseSalary(value: string): number | undefined {
+  const cleaned = value.replace(/[^\d]/g, "");
+  if (!cleaned) return undefined;
+  return Number(cleaned);
+}
 
 export default function NewVacancyPage() {
   const router = useRouter();
@@ -91,15 +102,18 @@ export default function NewVacancyPage() {
   const [responsibleHrs, setResponsibleHrs] = useState<AssignableHrUser[]>([]);
   const [isLoadingHrs, setIsLoadingHrs] = useState(true);
   const [hrLoadError, setHrLoadError] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
+  const [departmentLoadError, setDepartmentLoadError] = useState<string | null>(null);
 
-  const [form, setForm] = useState<CreateVacancyInput>({
+  const [form, setForm] = useState<VacancyFormState>({
     title: "",
     department: "",
     workType: "office",
     employmentType: "full-time",
-    location: "Tashkent",
-    salaryMin: 0,
-    salaryMax: 0,
+    location: "",
+    salaryMin: undefined,
+    salaryMax: undefined,
     description: "",
     language: "uz",
     responsibleHrId: "",
@@ -113,7 +127,7 @@ export default function NewVacancyPage() {
       { name: "Rejected", color: "rejected", isFinal: true, isRejected: true },
     ],
     questions: [],
-    sources: [{ name: "Telegram" }],
+    sources: [],
   });
 
   // Local draft state for questions (need per-item id + optionsRaw)
@@ -142,6 +156,33 @@ export default function NewVacancyPage() {
       .then((r) => r.json())
       .then((d) => setTemplates(Array.isArray(d) ? d : []))
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDepartments() {
+      try {
+        setIsLoadingDepartments(true);
+        setDepartmentLoadError(null);
+        const rows = await listDepartments();
+        if (cancelled) return;
+        setDepartments(rows);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load departments", err);
+          setDepartmentLoadError("Could not load departments.");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingDepartments(false);
+      }
+    }
+
+    loadDepartments();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -191,13 +232,9 @@ export default function NewVacancyPage() {
     setSelectedTemplateId("");
   }
 
-  // Local draft state for sources (need per-item id)
-  const [sources, setSources] = useState<SourceDraft[]>([{ id: "src0", name: "Telegram" }]);
-  const [newSourceName, setNewSourceName] = useState("");
-
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  function patchForm(patch: Partial<CreateVacancyInput>) {
+  function patchForm(patch: Partial<VacancyFormState>) {
     setForm((f) => ({ ...f, ...patch }));
   }
 
@@ -273,21 +310,10 @@ export default function NewVacancyPage() {
     setStages((ss) => ss.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
 
-  // Sources
-  function addSource() {
-    if (!newSourceName.trim()) return;
-    setSources((ss) => [...ss, { id: `src_${Date.now()}`, name: newSourceName.trim() }]);
-    setNewSourceName("");
-  }
-
-  function removeSource(id: string) {
-    setSources((ss) => ss.filter((s) => s.id !== id));
-  }
-
   // ── Navigation ───────────────────────────────────────────────────────────
 
   function handleNext() {
-    if (step < 6) setStep(step + 1);
+    if (step < STEPS.length) setStep(step + 1);
   }
 
   function handleBack() {
@@ -298,7 +324,6 @@ export default function NewVacancyPage() {
     if (!field) return step;
     if (["title", "department", "location", "salaryMin", "salaryMax", "responsibleHrId"].includes(field)) return 1;
     if (["stages"].includes(field)) return 4;
-    if (["sources"].includes(field)) return 5;
     return step;
   }
 
@@ -322,13 +347,13 @@ export default function NewVacancyPage() {
       isReserve: s.isReserve ?? false,
     }));
 
-    const finalSources = sources.map((s) => ({ name: s.name }));
-
     const input: CreateVacancyInput = {
       ...form,
+      salaryMin: form.salaryMin ?? 0,
+      salaryMax: form.salaryMax ?? 0,
       questions: finalQuestions,
       stages: finalStages,
-      sources: finalSources,
+      sources: [],
     };
 
     try {
@@ -367,20 +392,46 @@ export default function NewVacancyPage() {
           </div>
           <div>
             <label className={LABEL_CLS}>Department</label>
-            <input
-              className={INPUT_CLS}
-              value={form.department}
-              onChange={(e) => patchForm({ department: e.target.value })}
-              placeholder="e.g. Engineering"
-            />
+            {isLoadingDepartments || departments.length > 0 ? (
+              <select
+                className={INPUT_CLS}
+                value={form.department}
+                onChange={(e) => patchForm({ department: e.target.value })}
+                disabled={isLoadingDepartments}
+              >
+                <option value="">
+                  {isLoadingDepartments ? "Loading departments..." : "Select department..."}
+                </option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.name}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className={INPUT_CLS}
+                value={form.department}
+                onChange={(e) => patchForm({ department: e.target.value })}
+                placeholder="e.g. Engineering"
+              />
+            )}
+            {departmentLoadError && <p className="mt-1 text-caption text-danger">{departmentLoadError}</p>}
+            {!isLoadingDepartments && departments.length === 0 && (
+              <p className="mt-1 text-caption text-warning">
+                No active departments found. You can type one now, then add departments in Settings.
+              </p>
+            )}
           </div>
           <div>
             <label className={LABEL_CLS}>Location</label>
-            <input
+            <Combobox
               className={INPUT_CLS}
               value={form.location}
-              onChange={(e) => patchForm({ location: e.target.value })}
-              placeholder="e.g. Tashkent"
+              onChange={(location) => patchForm({ location })}
+              options={UZ_CITIES}
+              placeholder="Start typing a city..."
+              allowCustom
             />
           </div>
           <div>
@@ -412,18 +463,22 @@ export default function NewVacancyPage() {
             <label className={LABEL_CLS}>Salary Min (UZS)</label>
             <input
               className={INPUT_CLS}
-              type="number"
-              value={form.salaryMin}
-              onChange={(e) => patchForm({ salaryMin: Number(e.target.value) })}
+              type="text"
+              inputMode="numeric"
+              value={form.salaryMin === undefined ? "" : formatThousands(form.salaryMin)}
+              onChange={(e) => patchForm({ salaryMin: parseSalary(e.target.value) })}
+              placeholder="e.g. 5,000,000"
             />
           </div>
           <div>
             <label className={LABEL_CLS}>Salary Max (UZS)</label>
             <input
               className={INPUT_CLS}
-              type="number"
-              value={form.salaryMax}
-              onChange={(e) => patchForm({ salaryMax: Number(e.target.value) })}
+              type="text"
+              inputMode="numeric"
+              value={form.salaryMax === undefined ? "" : formatThousands(form.salaryMax)}
+              onChange={(e) => patchForm({ salaryMax: parseSalary(e.target.value) })}
+              placeholder="e.g. 10,000,000"
             />
           </div>
           <div>
@@ -809,52 +864,6 @@ export default function NewVacancyPage() {
   }
 
   function renderStep5() {
-    return (
-      <div className="space-y-5">
-        <p className={SECTION_HEADER_CLS}>Source Channels</p>
-
-        <div className="space-y-2">
-          {sources.map((s) => (
-            <div key={s.id} className="flex items-center gap-2">
-              <input
-                className={INPUT_CLS + " flex-1"}
-                value={s.name}
-                onChange={(e) =>
-                  setSources((ss) => ss.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)))
-                }
-                placeholder="Source name"
-              />
-              <button
-                onClick={() => removeSource(s.id)}
-                className="text-muted hover:text-red-500 transition-colors px-2"
-                title="Remove"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex gap-2 items-center">
-          <input
-            className={INPUT_CLS + " flex-1"}
-            value={newSourceName}
-            onChange={(e) => setNewSourceName(e.target.value)}
-            placeholder="Add source channel…"
-            onKeyDown={(e) => e.key === "Enter" && addSource()}
-          />
-          <button
-            onClick={addSource}
-            className="h-9 px-4 bg-primary text-primary-fg text-body-sm rounded-lg shrink-0 hover:opacity-90 transition-opacity"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  function renderStep6() {
     const hr = responsibleHrs.find((u) => u.id === form.responsibleHrId);
     const workTypeLabels = { office: "Office", remote: "Remote", hybrid: "Hybrid" };
     const empTypeLabels = {
@@ -880,8 +889,8 @@ export default function NewVacancyPage() {
             <ReviewRow
               label="Salary"
               value={
-                form.salaryMin || form.salaryMax
-                  ? `${form.salaryMin.toLocaleString()} – ${form.salaryMax.toLocaleString()} UZS`
+                form.salaryMin !== undefined || form.salaryMax !== undefined
+                  ? `${form.salaryMin === undefined ? "—" : formatThousands(form.salaryMin)} – ${form.salaryMax === undefined ? "—" : formatThousands(form.salaryMax)} UZS`
                   : "—"
               }
             />
@@ -898,10 +907,9 @@ export default function NewVacancyPage() {
         </div>
 
         {/* Counts */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <CountCard label="Stages" count={stages.length} />
           <CountCard label="Questions" count={questions.length} />
-          <CountCard label="Sources" count={sources.length} />
         </div>
 
         {/* Stages preview */}
@@ -1054,7 +1062,6 @@ export default function NewVacancyPage() {
               {step === 3 && renderStep3()}
               {step === 4 && renderStep4()}
               {step === 5 && renderStep5()}
-              {step === 6 && renderStep6()}
             </div>
           </div>
         </div>
@@ -1074,7 +1081,7 @@ export default function NewVacancyPage() {
             Back
           </button>
 
-          {step < 6 ? (
+          {step < STEPS.length ? (
             <button
               onClick={handleNext}
               className="h-9 px-5 bg-primary text-primary-fg text-body-sm rounded-lg hover:opacity-90 transition-opacity"

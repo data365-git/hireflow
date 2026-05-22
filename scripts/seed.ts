@@ -45,6 +45,91 @@ const STANDARD_FULL_FUNNEL = {
   ],
 };
 
+const VIDEO_EDITOR_QUESTION_TEMPLATE = {
+  id: "qt-video-editor-full",
+  name: "Video Editor — Full Application",
+  description: "Comprehensive screening for Video Editor roles",
+  items: [
+    { text: "📱 Telefon raqamingizni yuboring", type: "phone" },
+    {
+      text: "Oilaviy ahvolingizni ko'rsating",
+      type: "single-choice",
+      options: ["Yolg'iz", "Turmush qurgan", "Ajrashgan", "Boshqa"],
+    },
+    { text: "Talabamisiz?", type: "yes-no" },
+    { text: "Ta'lim muassasasining nomi?", type: "short-text" },
+    { text: "Ta'lim sohangizni ko'rsating", type: "short-text" },
+    {
+      text: "Qaysi shaklda o'qiysiz?",
+      type: "single-choice",
+      options: ["Kunduzgi", "Sirtqi", "Kechki"],
+    },
+    {
+      text: "Nechanchi kursda o'qiysiz?",
+      type: "single-choice",
+      options: ["1-kurs", "2-kurs", "3-kurs", "4-kurs", "Magistratura", "Bitirgan"],
+    },
+    {
+      text: "Ingliz tilini bilish darajangiz qanday?",
+      type: "single-choice",
+      options: ["None", "A1-A2", "B1-B2", "C1-C2", "Native"],
+    },
+    {
+      text: "Rus tilini bilish darajangiz qanday?",
+      type: "single-choice",
+      options: ["None", "A1-A2", "B1-B2", "C1-C2", "Native"],
+    },
+    {
+      text: "💼 Ish tajribangiz haqida ma'lumot bering.\n🏢 Kompaniya nomi\n👤 Lavozimingiz\n📅 Ishlagan davringiz\n📝 Ishdan ketish sababi",
+      type: "long-text",
+    },
+    { text: "Eng yaxshi 3 ta editingiz va portfoliongiz linkini yuboring", type: "long-text" },
+    {
+      text: "Nega aynan sizni ushbu lavozimga munosib nomzod sifatida tanlashimiz kerak? 100 so'zdan iborat motivatsion xat yozing. E'tibor bering: ushbu xat saralash jarayonida muhim rol o'ynaydi.",
+      type: "long-text",
+    },
+  ],
+};
+
+const MESSAGE_TEMPLATES = [
+  {
+    id: "mt-intro-uz-standard",
+    kind: "intro",
+    name: "Standard Intro — UZ",
+    content: "Salom! Data365 jamoasiga qiziqishingiz uchun tashakkur. Quyidagi savollarga javob bering, biz sizning arizangizni ko'rib chiqamiz.",
+  },
+  {
+    id: "mt-success-uz-standard",
+    kind: "success",
+    name: "Standard Success — UZ",
+    content: "Arizangiz qabul qilindi! 5 ish kuni ichida sizga javob beramiz. Tashakkur!",
+  },
+  {
+    id: "mt-intro-ru-standard",
+    kind: "intro",
+    name: "Standard Intro — RU",
+    content: "Здравствуйте! Спасибо за интерес к команде Data365. Ответьте на вопросы ниже, и мы рассмотрим вашу заявку.",
+  },
+  {
+    id: "mt-success-ru-standard",
+    kind: "success",
+    name: "Standard Success — RU",
+    content: "Ваша заявка принята! Мы свяжемся с вами в течение 5 рабочих дней. Спасибо!",
+  },
+  {
+    id: "mt-intro-en-standard",
+    kind: "intro",
+    name: "Standard Intro — EN",
+    content: "Hi! Thanks for your interest in Data365. Please answer the questions below so we can review your application.",
+  },
+  {
+    id: "mt-success-en-standard",
+    kind: "success",
+    name: "Standard Success — EN",
+    content: "Your application has been received. We will get back to you within 5 business days. Thank you!",
+  },
+];
+
 async function seed() {
   console.log("Seeding...");
 
@@ -305,6 +390,36 @@ async function seed() {
     }))
   ).onConflictDoNothing();
   console.log("  stage_templates done");
+
+  // 17. Question template defaults
+  await db.insert(schema.questionTemplates).values({
+    id: VIDEO_EDITOR_QUESTION_TEMPLATE.id,
+    name: VIDEO_EDITOR_QUESTION_TEMPLATE.name,
+    description: VIDEO_EDITOR_QUESTION_TEMPLATE.description,
+    isSystem: true,
+  }).onConflictDoNothing();
+  await db.insert(schema.questionTemplateItems).values(
+    VIDEO_EDITOR_QUESTION_TEMPLATE.items.map((item, index) => ({
+      id: `${VIDEO_EDITOR_QUESTION_TEMPLATE.id}-q${index}`,
+      templateId: VIDEO_EDITOR_QUESTION_TEMPLATE.id,
+      text: item.text,
+      type: item.type,
+      options: "options" in item ? item.options : null,
+      orderIndex: index,
+    }))
+  ).onConflictDoNothing();
+  console.log("  question_templates done");
+
+  // 18. Message template defaults
+  await db.insert(schema.messageTemplates).values(
+    MESSAGE_TEMPLATES.map((template) => ({
+      ...template,
+      isSystem: true,
+      isGlobal: true,
+      ownerId: null,
+    }))
+  ).onConflictDoNothing();
+  console.log("  message_templates done");
 
   console.log("Done.");
   process.exit(0);

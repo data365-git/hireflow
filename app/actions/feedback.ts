@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   applications,
@@ -22,9 +22,16 @@ export type FeedbackTarget = {
   status: string;
 };
 
-export type FeedbackItem = FeedbackTarget & {
+export type FeedbackItem = {
   id: string;
   source: string;
+  kind: string;
+  applicationId: string | null;
+  candidateName: string;
+  vacancyId: string | null;
+  vacancyTitle: string | null;
+  stageName: string | null;
+  status: string | null;
   rating: number | null;
   comment: string | null;
   submittedAt: string;
@@ -61,6 +68,7 @@ export async function getFeedbackPageData(): Promise<{
     .select({
       id: feedback.id,
       source: feedback.source,
+      kind: feedback.kind,
       applicationId: applications.id,
       candidateName: candidates.fullName,
       vacancyId: vacancies.id,
@@ -72,9 +80,15 @@ export async function getFeedbackPageData(): Promise<{
       submittedAt: feedback.submittedAt,
     })
     .from(feedback)
-    .innerJoin(applications, eq(feedback.applicationId, applications.id))
-    .innerJoin(candidates, and(eq(applications.candidateId, candidates.id), eq(candidates.isDemo, isDemo)))
-    .innerJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
+    .leftJoin(applications, eq(feedback.applicationId, applications.id))
+    .innerJoin(
+      candidates,
+      and(
+        or(eq(feedback.candidateId, candidates.id), eq(applications.candidateId, candidates.id)),
+        eq(candidates.isDemo, isDemo),
+      ),
+    )
+    .leftJoin(vacancies, and(eq(applications.vacancyId, vacancies.id), eq(vacancies.isDemo, isDemo)))
     .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .orderBy(desc(feedback.submittedAt));
 
@@ -106,6 +120,7 @@ export async function createHrFeedback(formData: FormData) {
   const [application] = await db
     .select({
       applicationId: applications.id,
+      candidateId: applications.candidateId,
       vacancyId: applications.vacancyId,
     })
     .from(applications)
@@ -118,6 +133,8 @@ export async function createHrFeedback(formData: FormData) {
   await db.insert(feedback).values({
     id: `fb-${crypto.randomUUID()}`,
     source: "hr",
+    kind: "general",
+    candidateId: application.candidateId,
     applicationId: application.applicationId,
     vacancyId: application.vacancyId,
     rating,

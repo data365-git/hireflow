@@ -319,14 +319,6 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
     return createVacancyError("VALIDATION", "salaryMin", "Minimum salary cannot be greater than maximum salary.");
   }
 
-  const sourceRows = input.sources
-    .map((source) => ({ id: `src-${crypto.randomUUID()}`, name: source.name.trim() }))
-    .filter((source) => source.name);
-
-  if (input.sources.length > 0 && sourceRows.length !== input.sources.length) {
-    return createVacancyError("VALIDATION", "sources", "Every source needs a name.");
-  }
-
   let responsibleHrId = input.responsibleHrId || null;
   if (responsibleHrId) {
     const [responsibleHr] = await db
@@ -382,16 +374,13 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
         );
       }
 
-      if (sourceRows.length > 0) {
-        await tx.insert(sources).values(
-          sourceRows.map((source) => ({
-            id: source.id,
-            vacancyId,
-            name: source.name,
-            botLink: `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${source.id}`,
-          }))
-        );
-      }
+      const directSourceId = `src-${crypto.randomUUID()}`;
+      await tx.insert(sources).values({
+        id: directSourceId,
+        vacancyId,
+        name: "Direct",
+        botLink: `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${directSourceId}`,
+      });
     });
   } catch (error) {
     const code = getDbErrorCode(error);

@@ -8,6 +8,7 @@ import {
   archiveSource,
   unarchiveSource,
   getSourceStatsForVacancy,
+  createBulkSources,
   type SourceStatRow,
 } from "@/app/actions/sources";
 import { addVacancySource } from "@/app/actions/vacancies";
@@ -35,6 +36,11 @@ export function SourcesTab({ vacancyId }: Props) {
   // Add source form
   const [addName, setAddName] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Bulk generation form
+  const [bulkPrefix, setBulkPrefix] = useState("Channel");
+  const [bulkCount, setBulkCount] = useState(10);
+  const [bulkGenerating, setBulkGenerating] = useState(false);
 
   // Rename state
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -85,6 +91,28 @@ export function SourcesTab({ vacancyId }: Props) {
       toast.error(err instanceof Error ? err.message : "Could not add source");
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleBulkGenerate() {
+    const namePrefix = bulkPrefix.trim();
+    if (!namePrefix || bulkCount < 1) return;
+    setBulkGenerating(true);
+    try {
+      const created = await createBulkSources({ vacancyId, namePrefix, count: bulkCount });
+      setSources((prev) => [...prev, ...created]);
+      setStats((prev) => {
+        const next = new Map(prev);
+        for (const src of created) {
+          next.set(src.id, { sourceId: src.id, views: 0, submitted: 0, hired: 0 });
+        }
+        return next;
+      });
+      toast.success(`Generated ${created.length} sources`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not generate sources");
+    } finally {
+      setBulkGenerating(false);
     }
   }
 
@@ -179,6 +207,43 @@ export function SourcesTab({ vacancyId }: Props) {
               className="h-9 px-4 bg-primary text-primary-fg text-body-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               {adding ? "Adding…" : "+ Add source"}
+            </button>
+          </div>
+        </div>
+
+        {/* Bulk source generator */}
+        <div className="mb-6 rounded-xl border border-border bg-surface px-4 py-4">
+          <div className="mb-3">
+            <p className="text-body-sm font-semibold text-text">Bulk add sources</p>
+            <p className="text-micro text-muted">Generate numbered links for channels, promoters, or campaigns.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_96px_auto]">
+            <label className="min-w-0">
+              <span className="mb-1 block text-micro font-medium text-muted">Name prefix</span>
+              <input
+                type="text"
+                value={bulkPrefix}
+                onChange={(e) => setBulkPrefix(e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-micro font-medium text-muted">Count</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={bulkCount}
+                onChange={(e) => setBulkCount(Number(e.target.value))}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-body-sm text-text outline-none focus:border-primary"
+              />
+            </label>
+            <button
+              onClick={handleBulkGenerate}
+              disabled={!bulkPrefix.trim() || bulkCount < 1 || bulkGenerating}
+              className="h-9 self-end rounded-lg bg-surface-2 px-4 text-body-sm font-semibold text-text transition-colors hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {bulkGenerating ? "Generating…" : `Generate ${bulkCount || 0}`}
             </button>
           </div>
         </div>

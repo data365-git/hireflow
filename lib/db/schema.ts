@@ -294,6 +294,23 @@ export const questionTemplateItems = pgTable("question_template_items", {
   orderIndex: integer("order_index").notNull(),
 });
 
+// ─── Message Templates ───────────────────────────────────────────────────────
+
+export const messageTemplates = pgTable("message_templates", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(), // "intro" | "success" | future message surfaces
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  ownerId: text("owner_id").references(() => users.id, { onDelete: "set null" }),
+  isGlobal: boolean("is_global").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  kindIdx: index("message_templates_kind_idx").on(t.kind),
+  ownerIdx: index("message_templates_owner_idx").on(t.ownerId),
+}));
+
 // ─── RBAC — Profiles ──────────────────────────────────────────────────────────
 
 export const profiles = pgTable("profiles", {
@@ -449,12 +466,15 @@ export const candidateBlacklist = pgTable("candidate_blacklist", {
 export const feedback = pgTable("feedback", {
   id: text("id").primaryKey(),
   source: text("source").notNull(), // "candidate" | "hr"
+  kind: text("kind").notNull().default("general"), // "general" | "complaint" | "suggestion"
+  candidateId: text("candidate_id").references(() => candidates.id, { onDelete: "cascade" }),
   applicationId: text("application_id").references(() => applications.id, { onDelete: "cascade" }),
   vacancyId: text("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
   rating: integer("rating"),
   comment: text("comment"),
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
+  candidateIdx: index("feedback_candidate_idx").on(t.candidateId),
   applicationIdx: index("feedback_application_idx").on(t.applicationId),
   vacancyIdx: index("feedback_vacancy_idx").on(t.vacancyId),
 }));

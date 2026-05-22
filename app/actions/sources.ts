@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { validateEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { sources, applications, vacancies, vacancyStages } from "@/lib/db/schema";
@@ -26,6 +27,27 @@ function serializeSource(row: typeof sources.$inferSelect): Source {
   };
 }
 
+function botLinkForSource(vacancyId: string, sourceId: string): string {
+  return `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${sourceId}`;
+}
+
+function revalidateSources(vacancyId: string) {
+  revalidatePath(`/vacancies/${vacancyId}`);
+  revalidatePath(`/vacancies/${vacancyId}/edit`);
+  revalidatePath("/reports/sources");
+}
+
+async function requireEditableVacancy(vacancyId: string) {
+  const isDemo = await getCurrentDataMode();
+  const [vacancy] = await db
+    .select({ id: vacancies.id })
+    .from(vacancies)
+    .where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, isDemo)));
+
+  if (!vacancy) throw new Error("Vacancy not found in the current data mode.");
+  return vacancy;
+}
+
 export async function listSourcesForVacancy(
   vacancyId: string,
   includeArchived = false
@@ -41,6 +63,37 @@ export async function listSourcesForVacancy(
     .where(and(...conditions))
     .orderBy(sources.createdAt);
 
+  return rows.map(serializeSource);
+}
+
+export async function createBulkSources(input: {
+  vacancyId: string;
+  namePrefix: string;
+  count: number;
+}): Promise<Source[]> {
+  await requirePermission("vacancies", "edit");
+  await requireEditableVacancy(input.vacancyId);
+
+  const prefix = input.namePrefix.trim();
+  if (!prefix) throw new Error("Name prefix is required.");
+
+  const count = Math.trunc(input.count);
+  if (!Number.isFinite(count) || count < 1 || count > 100) {
+    throw new Error("Choose a count between 1 and 100.");
+  }
+
+  const rowsToInsert = Array.from({ length: count }, (_, index) => {
+    const id = `src-${crypto.randomUUID()}`;
+    return {
+      id,
+      vacancyId: input.vacancyId,
+      name: `${prefix} ${index + 1}`,
+      botLink: botLinkForSource(input.vacancyId, id),
+    };
+  });
+
+  const rows = await db.insert(sources).values(rowsToInsert).returning();
+  revalidateSources(input.vacancyId);
   return rows.map(serializeSource);
 }
 

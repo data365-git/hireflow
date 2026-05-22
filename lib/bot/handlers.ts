@@ -1,7 +1,7 @@
 import { InlineKeyboard, Keyboard } from "grammy";
 import type { Context } from "grammy";
 import { db } from "@/lib/db/client";
-import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments, botContent } from "@/lib/db/schema";
+import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applications, candidates, departments, botContent, feedback } from "@/lib/db/schema";
 import { saveBotMessageRecord } from "./messageLog";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, createInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
@@ -114,26 +114,58 @@ async function getCandidateByTelegramId(telegramUserId: string) {
   return rows[0] ?? null;
 }
 
+async function showMainMenu(ctx: Context, lang: Lang) {
+  const kb = new InlineKeyboard()
+    .text(tr(lang, "btn_browse_jobs"), "browse_jobs").row()
+    .text(tr(lang, "btn_about_us"), "about_us")
+    .text(tr(lang, "btn_contact_us"), "contact_us").row()
+    .text(tr(lang, "btn_feedback"), "feedback").row()
+    .text(tr(lang, "btn_my_applications"), "my_applications");
+
+  await ctx.reply(
+    `${tr(lang, "welcome_no_payload")}\n\n${tr(lang, "welcome_browse")}`,
+    { reply_markup: kb, parse_mode: "Markdown" }
+  );
+}
+
+async function askFirstLanguage(ctx: Context, payload: string) {
+  const telegramUserId = String(ctx.from!.id);
+  const parts = payload ? payload.split("_") : [];
+  await saveBotSession(telegramUserId, {
+    vacancyId: parts[0] || null,
+    state: "awaiting_first_lang",
+    collectedData: {
+      sourceId: parts[1] || null,
+    },
+  });
+
+  const kb = new InlineKeyboard()
+    .text("🇺🇿 O'zbekcha", "first_lang_uz").row()
+    .text("🇷🇺 Русский", "first_lang_ru").row()
+    .text("🇬🇧 English", "first_lang_en");
+
+  await ctx.reply("Tilni tanlang / Выберите язык / Choose your language", { reply_markup: kb });
+}
+
 // ---- /start ----
 export async function handleStart(ctx: Context) {
-  const lang = await resolveBotLang(ctx);
   const payload = typeof ctx.match === "string" ? ctx.match.trim() : "";
   const telegramUserId = String(ctx.from!.id);
+  const candidate = await getCandidateByTelegramId(telegramUserId);
+
+  if (!candidate?.languagePref) {
+    await askFirstLanguage(ctx, payload);
+    return;
+  }
+
+  const lang = candidateLang(candidate, await resolveBotLang(ctx));
   const parts = payload ? payload.split("_") : [];
   const vacancyId = parts[0] || undefined;
   const sourceId = parts[1] || undefined;
 
   if (!payload) {
     await clearBotSession(telegramUserId);
-    const kb = new InlineKeyboard()
-      .text(tr(lang, "btn_browse_jobs"), "browse_jobs").row()
-      .text(tr(lang, "btn_about_us"), "about_us")
-      .text(tr(lang, "btn_contact_us"), "contact_us").row()
-      .text(tr(lang, "btn_my_applications"), "my_applications");
-    await ctx.reply(
-      `${tr(lang, "welcome_no_payload")}\n\n${tr(lang, "welcome_browse")}`,
-      { reply_markup: kb, parse_mode: "Markdown" }
-    );
+    await showMainMenu(ctx, lang);
     return;
   }
 
@@ -236,6 +268,29 @@ export async function handleCallbackQuery(ctx: Context) {
 
   if (data.startsWith("qans_")) {
     return handleQansCallback(ctx, data, lang);
+  }
+
+  if (data.startsWith("first_lang_")) {
+    const selected = data.replace("first_lang_", "") as Lang;
+    const nextLang: Lang = selected === "ru" || selected === "uz" || selected === "en" ? selected : "uz";
+    const telegramUserId = String(ctx.from!.id);
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+
+    if (candidate) {
+      await db.update(candidates)
+        .set({ languagePref: nextLang, language: nextLang })
+        .where(eq(candidates.id, candidate.id));
+    }
+
+    const session = await getBotSession(telegramUserId);
+    const sourceId = ((session?.collectedData as Record<string, unknown> | null)?.sourceId ?? undefined) as string | undefined;
+    const pendingVacancyId = session?.vacancyId ?? null;
+    await clearBotSession(telegramUserId);
+
+    if (pendingVacancyId) {
+      return startVacancyFlow(ctx, pendingVacancyId, nextLang, sourceId);
+    }
+    return showMainMenu(ctx, nextLang);
   }
 
   if (data.startsWith("view_")) {
@@ -402,6 +457,24 @@ export async function handleCallbackQuery(ctx: Context) {
     const telegramUserId = String(ctx.from!.id);
     await saveBotSession(telegramUserId, { state: "awaiting_contact_message", currentQuestionIndex: 0, collectedData: {} });
     return ctx.reply(tr(lang, "contact_us_prompt"), { parse_mode: "Markdown" });
+  }
+
+  if (data === "feedback") {
+    const kb = new InlineKeyboard()
+      .text(tr(lang, "btn_complaint"), "feedback_complaint").row()
+      .text(tr(lang, "btn_suggestion"), "feedback_suggestion");
+    return ctx.reply(tr(lang, "feedback_prompt"), { reply_markup: kb, parse_mode: "Markdown" });
+  }
+
+  if (data === "feedback_complaint" || data === "feedback_suggestion") {
+    const telegramUserId = String(ctx.from!.id);
+    const kind = data === "feedback_complaint" ? "complaint" : "suggestion";
+    await saveBotSession(telegramUserId, {
+      state: "awaiting_feedback_text",
+      currentQuestionIndex: 0,
+      collectedData: { feedbackKind: kind },
+    });
+    return ctx.reply(tr(lang, kind === "complaint" ? "ask_complaint" : "ask_suggestion"), { parse_mode: "Markdown" });
   }
 
   if (data.startsWith("dept_")) {
@@ -594,6 +667,10 @@ export async function handlePhoto(ctx: Context) {
     return finishAnketa(ctx, candidate.id, lang, photoData);
   }
 
+  if (session?.state === "awaiting_feedback_text") {
+    return ctx.reply(tr(lang, "err_send_text"), { parse_mode: "Markdown" });
+  }
+
   if (session?.state && session.state !== "complete") {
     // Photo during other active states — not expected
     return ctx.reply(tr(lang, "err_send_text"), { parse_mode: "Markdown" });
@@ -626,6 +703,27 @@ export async function handleText(ctx: Context) {
     }
     await clearBotSession(telegramUserId);
     return ctx.reply(tr(lang, "contact_us_thanks"), { parse_mode: "Markdown" });
+  }
+
+  if (session.state === "awaiting_feedback_text") {
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+    const kind = ((session.collectedData as Record<string, unknown> | null)?.feedbackKind ?? "general") as string;
+    if (!text || text.length < 5) {
+      return ctx.reply(tr(lang, "err_feedback_too_short"), { parse_mode: "Markdown" });
+    }
+    await db.insert(feedback).values({
+      id: `fb-${crypto.randomUUID()}`,
+      source: "candidate",
+      kind: kind === "complaint" || kind === "suggestion" ? kind : "general",
+      candidateId: candidate?.id ?? null,
+      applicationId: session.applicationId ?? null,
+      vacancyId: session.vacancyId ?? null,
+      rating: null,
+      comment: text,
+      submittedAt: new Date(),
+    });
+    await clearBotSession(telegramUserId);
+    return ctx.reply(tr(lang, "feedback_thanks"), { parse_mode: "Markdown" });
   }
 
   const data = (session.collectedData as Record<string, unknown>) ?? {};
