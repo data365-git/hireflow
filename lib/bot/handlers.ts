@@ -429,7 +429,33 @@ export async function handleCallbackQuery(ctx: Context) {
           .limit(1);
 
         if (existingSubmitted[0]) {
-          return ctx.reply(tr(lang, "already_applied", { vacancy: vacancy.title }), { parse_mode: "Markdown" });
+          const dupKb = new InlineKeyboard()
+            .text(tr(lang, "btn_view_my_apps"), "my_applications").row()
+            .text(tr(lang, "btn_other_jobs"), "browse_jobs");
+          return ctx.reply(
+            tr(lang, "already_applied_with_help", { vacancy: vacancy.title }),
+            { reply_markup: dupKb, parse_mode: "Markdown" }
+          );
+        }
+      }
+
+      // Case 2: vacancy reopened — prior app exists but lifecycle check passed
+      if (!isBotAdmin) {
+        const priorApp = await db
+          .select({ id: applications.id })
+          .from(applications)
+          .where(and(
+            eq(applications.candidateId, existingCand[0].id),
+            eq(applications.vacancyId, vacancyId),
+            eq(applications.status, "submitted"),
+          ))
+          .limit(1);
+
+        if (priorApp[0]) {
+          const reapplyKb = new InlineKeyboard()
+            .text(tr(lang, "btn_apply_again"), `reapply_${vacancyId}`).row()
+            .text(tr(lang, "btn_other_jobs"), "browse_jobs");
+          return ctx.reply(tr(lang, "welcome_back_reapply"), { reply_markup: reapplyKb, parse_mode: "Markdown" });
         }
       }
 
@@ -1849,33 +1875,31 @@ function isValidEmail(email: string): boolean {
 export async function handleReset(ctx: Context) {
   const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
-  const adminIds = (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!adminIds.includes(telegramUserId)) {
-    return ctx.reply("Unauthorized", { parse_mode: "Markdown" });
+  if (!isBotAdminTelegramUser(telegramUserId)) {
+    return ctx.reply(tr(lang, "unauthorized"), { parse_mode: "Markdown" });
   }
   const [cand] = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));
-  if (!cand) return ctx.reply("No data to reset.", { parse_mode: "Markdown" });
+  if (!cand) return ctx.reply(tr(lang, "reset_no_data"), { parse_mode: "Markdown" });
   await db.delete(applications).where(eq(applications.candidateId, cand.id));
   await db.update(candidates)
     .set({ profileCompleted: false })
     .where(eq(candidates.id, cand.id));
   await clearBotSession(telegramUserId);
-  return ctx.reply("✅ Reset complete. /start to test again.", { parse_mode: "Markdown" });
+  return ctx.reply(tr(lang, "reset_success"), { parse_mode: "Markdown" });
 }
 
 // ---- /testreset (admin only — wipes applications but keeps profile) ----
 export async function handleTestReset(ctx: Context) {
   const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
-  const adminIds = (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!adminIds.includes(telegramUserId)) {
-    return ctx.reply("Unauthorized", { parse_mode: "Markdown" });
+  if (!isBotAdminTelegramUser(telegramUserId)) {
+    return ctx.reply(tr(lang, "unauthorized"), { parse_mode: "Markdown" });
   }
   const [cand] = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));
-  if (!cand) return ctx.reply("No data to reset.", { parse_mode: "Markdown" });
+  if (!cand) return ctx.reply(tr(lang, "reset_no_data"), { parse_mode: "Markdown" });
   await db.delete(applications).where(eq(applications.candidateId, cand.id));
   await clearBotSession(telegramUserId);
-  return ctx.reply("✅ Applications cleared. Profile kept. /start to test again.", { parse_mode: "Markdown" });
+  return ctx.reply(tr(lang, "reset_success"), { parse_mode: "Markdown" });
 }
 
 // ---- /back ----

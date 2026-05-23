@@ -169,6 +169,12 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     confirm_existing_phone: "We found your phone number from a previous application:\n\n📱 {phone}\n\nUse this number?",
     btn_use_existing_phone: "Use this number",
     btn_enter_new_phone: "Enter a new number",
+    already_applied_with_help: "You've already applied to *{vacancy}*. You can view your status or browse other positions.",
+    btn_view_my_apps: "📋 My applications",
+    welcome_back_reapply: "This vacancy reopened! We have your previous info on file. Submit a fresh application?",
+    unauthorized: "⛔ Unauthorized.",
+    reset_no_data: "No data to reset.",
+    reset_success: "✅ Test data wiped. Press /start to test again.",
   },
   ru: {
     welcome_no_payload: "👋 Добро пожаловать в data365 HR!\nЯ помогу вам откликнуться на вакансии.",
@@ -331,6 +337,12 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     confirm_existing_phone: "Мы нашли ваш номер телефона из прошлой заявки:\n\n📱 {phone}\n\nИспользовать этот номер?",
     btn_use_existing_phone: "Использовать этот номер",
     btn_enter_new_phone: "Ввести новый номер",
+    already_applied_with_help: "Вы уже подавали заявку на *{vacancy}*. Можете посмотреть статус или подать заявку на другие позиции.",
+    btn_view_my_apps: "📋 Мои заявки",
+    welcome_back_reapply: "Вакансия снова открыта! Ваши предыдущие данные сохранены. Подать новую заявку?",
+    unauthorized: "⛔ Доступ запрещён.",
+    reset_no_data: "Нет данных для очистки.",
+    reset_success: "✅ Тестовые данные очищены. Нажмите /start для нового теста.",
   },
   uz: {
     welcome_no_payload: "👋 data365 HR botiga xush kelibsiz!\nMen sizga ish o'rinlariga murojaat qilishda yordam beraman.",
@@ -493,6 +505,12 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     confirm_existing_phone: "Oldingi arizangizdan telefon raqamingizni topdik:\n\n📱 {phone}\n\nShu raqamdan foydalanasizmi?",
     btn_use_existing_phone: "Shu raqamni ishlatish",
     btn_enter_new_phone: "Yangi raqam kiritish",
+    already_applied_with_help: "Siz allaqachon *{vacancy}* lavozimiga ariza topshirgansiz. Holatingizni ko'rishingiz yoki boshqa lavozimlarga murojaat qilishingiz mumkin.",
+    btn_view_my_apps: "📋 Mening murojaatlarim",
+    welcome_back_reapply: "Bu vakansiya qayta ochildi! Oldingi ma'lumotlaringiz saqlangan. Yangi ariza topshirasizmi?",
+    unauthorized: "⛔ Ruxsat etilmagan.",
+    reset_no_data: "Tozalanadigan ma'lumot yo'q.",
+    reset_success: "✅ Test ma'lumotlari tozalandi. Yangi sinov uchun /start ni bosing.",
   },
 };
 
