@@ -5,6 +5,8 @@ import { vacancies, vacancyStages, screeningQuestions, screeningAnswers, applica
 import { saveBotMessageRecord } from "./messageLog";
 import { eq, and, asc, desc, gte, isNull } from "drizzle-orm";
 import { getBotSession, saveBotSession, clearBotSession, createApplicationFromBot, getOrCreateBrowsingApplication, createInProgressApplication, ensureApplicationInProgress, saveScreeningAnswerLive, submitApplication, abandonApplication, finalizeApplicationDetails, setCandidatePhotoFileId, recordConsent, createFreshApplication } from "@/app/actions/bot";
+import { isBotTestUser } from "@/app/actions/bot-test-users";
+import { audit } from "@/lib/auth/audit";
 import { detectLang, tr, type Lang } from "./i18n";
 import { resolveBotLang } from "./lang";
 
@@ -117,12 +119,11 @@ async function getCandidateByTelegramId(telegramUserId: string) {
   return rows[0] ?? null;
 }
 
-function botAdminIds(): string[] {
-  return (process.env.BOT_ADMIN_TELEGRAM_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-function isBotAdminTelegramUser(telegramUserId: string): boolean {
-  return botAdminIds().includes(telegramUserId);
+async function isBotAdminTelegramUser(
+  telegramUserId: string,
+  telegramUsername?: string | null,
+): Promise<boolean> {
+  return isBotTestUser({ telegramUserId, telegramUsername });
 }
 
 function hasStablePrefillData(candidate: typeof candidates.$inferSelect): boolean {
@@ -409,7 +410,7 @@ export async function handleCallbackQuery(ctx: Context) {
 
     const existingCand = await db.select().from(candidates)
       .where(eq(candidates.telegramUserId, telegramUserId));
-    const isBotAdmin = isBotAdminTelegramUser(telegramUserId);
+    const isBotAdmin = await isBotAdminTelegramUser(telegramUserId, ctx.from?.username ?? null);
     if (existingCand[0]) {
       if (!existingCand[0].profileCompleted) {
         await startAnketa(ctx, existingCand[0].id, candidateLang(existingCand[0], lang), vacancyId);
@@ -438,6 +439,16 @@ export async function handleCallbackQuery(ctx: Context) {
           );
         }
       }
+
+    if (isBotAdmin) {
+      audit({
+        action: "BOT_TEST_USER_BYPASS",
+        actorEmail: `tg:${telegramUserId}`,
+        entityType: "application",
+        vacancyId,
+        description: `Test user bypassed duplicate check on vacancy ${vacancy.title}`,
+      });
+    }
 
       // Case 2: vacancy reopened — prior app exists but lifecycle check passed
       if (!isBotAdmin) {
@@ -1875,7 +1886,7 @@ function isValidEmail(email: string): boolean {
 export async function handleReset(ctx: Context) {
   const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
-  if (!isBotAdminTelegramUser(telegramUserId)) {
+  if (!(await isBotAdminTelegramUser(telegramUserId, ctx.from?.username ?? null))) {
     return ctx.reply(tr(lang, "unauthorized"), { parse_mode: "Markdown" });
   }
   const [cand] = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));
@@ -1892,7 +1903,7 @@ export async function handleReset(ctx: Context) {
 export async function handleTestReset(ctx: Context) {
   const lang = await resolveBotLang(ctx);
   const telegramUserId = String(ctx.from!.id);
-  if (!isBotAdminTelegramUser(telegramUserId)) {
+  if (!(await isBotAdminTelegramUser(telegramUserId, ctx.from?.username ?? null))) {
     return ctx.reply(tr(lang, "unauthorized"), { parse_mode: "Markdown" });
   }
   const [cand] = await db.select().from(candidates).where(eq(candidates.telegramUserId, telegramUserId));

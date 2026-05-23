@@ -570,3 +570,17 @@ export const botTranslations = pgTable("bot_translations", {
   pk: primaryKey({ columns: [t.key, t.language] }),
   keyIdx: index("bot_translations_key_idx").on(t.key),
 }));
+
+// ─── Bot Test Users ──────────────────────────────────────────────────────────
+
+export const botTestUsers = pgTable("bot_test_users", {
+  id: text("id").primaryKey(),
+  telegramUserId: text("telegram_user_id"),
+  telegramUsername: text("telegram_username"),
+  label: text("label"),
+  isActive: boolean("is_active").notNull().default(true),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  addedBy: text("added_by").references(() => users.id, { onDelete: "set null" }),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

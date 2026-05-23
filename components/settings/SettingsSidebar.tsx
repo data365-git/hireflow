@@ -16,6 +16,7 @@ const tabs = [
   { label: "Message Templates", icon: MessageSquare, href: "/settings/message-templates", gated: true },
   { label: "Bot Content", icon: MessageSquare, href: "/settings/bot-content", gated: true },
   { label: "Demo", icon: FlaskConical, href: "/settings/demo", gated: true },
+  { label: "Test Users", icon: FlaskConical, href: "/settings/test-users", gated: true },
   { label: "Backup History", icon: Database, href: "/settings/backups", gated: true },
 ];
 
