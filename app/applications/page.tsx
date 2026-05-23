@@ -133,6 +133,33 @@ export default function PipelinePage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
+  // Auto-scroll while dragging near edges of the kanban scroll container.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const scrollDirRef = useRef<number>(0); // -1 = left, 0 = none, 1 = right
+
+  const stopAutoScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    }
+    scrollDirRef.current = 0;
+  }, []);
+
+  const startAutoScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    function tick() {
+      const el = scrollContainerRef.current;
+      if (el && scrollDirRef.current !== 0) {
+        el.scrollLeft += scrollDirRef.current * 10;
+        scrollRafRef.current = requestAnimationFrame(tick);
+      } else {
+        scrollRafRef.current = null;
+      }
+    }
+    scrollRafRef.current = requestAnimationFrame(tick);
+  }, []);
+
   // Filters
   const [filterVacancyId, setFilterVacancyId] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -338,7 +365,28 @@ export default function PipelinePage() {
         </div>
       ) : (
         <div className="px-8 pb-8">
-          <div className="flex gap-4 overflow-x-auto pb-6">
+          <div
+            ref={scrollContainerRef}
+            className="flex gap-4 overflow-x-auto pb-6"
+            onDragOver={(e) => {
+              const el = scrollContainerRef.current;
+              if (!el) return;
+              const { left, width } = el.getBoundingClientRect();
+              const x = e.clientX - left;
+              const EDGE = 80;
+              if (x < EDGE) {
+                scrollDirRef.current = -1;
+                startAutoScroll();
+              } else if (x > width - EDGE) {
+                scrollDirRef.current = 1;
+                startAutoScroll();
+              } else {
+                stopAutoScroll();
+              }
+            }}
+            onDragLeave={stopAutoScroll}
+            onDrop={stopAutoScroll}
+          >
             {columnsToShow.map((colorKey) => {
               const colApps = appsByColor.get(colorKey) ?? [];
               const isOver = dropTarget === colorKey;
@@ -410,6 +458,7 @@ export default function PipelinePage() {
                           draggedIdRef.current = null;
                           setDraggingId(null);
                           setDropTarget(null);
+                          stopAutoScroll();
                         }}
                         className={`transition-opacity duration-150 cursor-grab active:cursor-grabbing ${
                           isDragging ? "opacity-30" : ""
