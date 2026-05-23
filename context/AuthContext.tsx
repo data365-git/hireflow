@@ -30,6 +30,7 @@ interface AuthState {
   rolePermissions: PermMap;
   permissionsLoaded: boolean;
   loading: boolean;
+  authReady: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (screen: string, perm: "read" | "write" | "create" | "edit" | "delete") => boolean;
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [rolePermissions, setRolePermissions] = useState<PermMap>(new Map());
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const refreshTimer = useRef<number | null>(null);
   const sseRef = useRef<EventSource | null>(null);
 
@@ -137,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Not authenticated — stay on loading=false, user=null
       } finally {
         setLoading(false);
+        setAuthReady(true);
       }
     })();
     return () => {
@@ -192,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         rolePermissions,
         permissionsLoaded,
         loading,
+        authReady,
         signIn,
         signOut,
         hasPermission,

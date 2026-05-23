@@ -23,7 +23,7 @@ import {
   vacancyStatusChanges,
   vacancyStages,
 } from "@/lib/db/schema";
-import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getCurrentDataMode } from "@/lib/data-mode";
 import { requirePermission } from "@/lib/auth/permissions";
 import { audit } from "@/lib/auth/audit";
@@ -903,6 +903,7 @@ export async function softDeleteVacancy(
     entityType: "vacancy",
     entityId: vacancy.id,
     entityName: vacancy.title,
+    vacancyId: vacancy.id,
     before: { vacancy, activeApplications: activeRows.length, snapshot },
     after: { deletedAt: deletedAt.toISOString(), restoreExpiresAt: restoreExpiresAt.toISOString() },
   });
@@ -949,6 +950,7 @@ export async function restoreVacancy(vacancyId: string): Promise<VacancyDeleteRe
     entityType: "vacancy",
     entityId: vacancy.id,
     entityName: vacancy.title,
+    vacancyId: vacancy.id,
     before: { deletedAt: vacancy.deletedAt },
     after: { deletedAt: null, status: "paused" },
   });
@@ -981,6 +983,7 @@ export async function permanentlyDeleteVacancy(vacancyId: string): Promise<Vacan
     entityType: "vacancy",
     entityId: vacancy.id,
     entityName: vacancy.title,
+    vacancyId: vacancy.id,
   });
 
   revalidatePath("/vacancies");
@@ -1083,4 +1086,14 @@ export async function reorderScreeningQuestions(
         .where(and(eq(screeningQuestions.id, id), eq(screeningQuestions.vacancyId, vacancyId)))
     )
   );
+}
+
+export async function getVacancyAuditLog(vacancyId: string) {
+  await requirePermission("vacancies.audit", "read");
+  return db
+    .select()
+    .from(auditLogs)
+    .where(eq(auditLogs.vacancyId, vacancyId))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(500);
 }

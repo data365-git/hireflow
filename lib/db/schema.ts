@@ -8,6 +8,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -409,6 +410,7 @@ export const auditLogs = pgTable("audit_logs", {
   after: jsonb("after"),
   ip: text("ip"),
   userAgent: text("user_agent"),
+  vacancyId: text("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -554,4 +556,17 @@ export const botContent = pgTable("bot_content", {
   updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
 }, (t) => ({
   keyLangIdx: uniqueIndex("bot_content_key_lang_idx").on(t.key, t.language),
+}));
+
+// ─── Bot Translations ─────────────────────────────────────────────────────────
+
+export const botTranslations = pgTable("bot_translations", {
+  key: text("key").notNull(),
+  language: text("language").notNull(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.key, t.language] }),
+  keyIdx: index("bot_translations_key_idx").on(t.key),
 }));

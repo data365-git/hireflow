@@ -22,6 +22,7 @@ const ANKETA_STATES = new Set([
   "awaiting_full_name",
   "awaiting_dob",
   "awaiting_address",
+  "awaiting_phone_confirm",
   "awaiting_phone",
   "awaiting_marital_status",
   "awaiting_student_status",
@@ -575,6 +576,26 @@ export async function handleCallbackQuery(ctx: Context) {
       step: 2,
       total: (emailData.totalSteps as number) ?? 6,
     }), { parse_mode: "Markdown" });
+  }
+
+  if (data === "phone_use_existing" || data === "phone_enter_new") {
+    const telegramUserId = String(ctx.from!.id);
+    const session = await getBotSession(telegramUserId);
+    if (!session || session.state !== "awaiting_phone_confirm") return;
+
+    const candidate = await getCandidateByTelegramId(telegramUserId);
+    const phoneData = ((session.collectedData as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+    const resolvedLang = candidate ? candidateLang(candidate, lang) : lang;
+
+    if (data === "phone_use_existing" && candidate?.phone) {
+      // Phone already saved on candidate — skip to marital
+      await saveBotSession(telegramUserId, { state: "awaiting_marital_status", collectedData: phoneData });
+      return askMarital(ctx, resolvedLang);
+    }
+
+    // Enter new phone
+    await saveBotSession(telegramUserId, { state: "awaiting_phone", collectedData: phoneData });
+    return askPhone(ctx, resolvedLang);
   }
 
   if (data.startsWith("dept_")) {
@@ -1338,6 +1359,16 @@ async function handleAnketaText(ctx: Context, text: string, fallbackLang: Lang) 
     await db.update(candidates)
       .set({ address: text, city: text })
       .where(eq(candidates.id, candidate.id));
+
+    const existingPhone = candidate.phone?.trim();
+    if (existingPhone) {
+      const kb = new InlineKeyboard()
+        .text(tr(lang, "btn_use_existing_phone"), "phone_use_existing").row()
+        .text(tr(lang, "btn_enter_new_phone"), "phone_enter_new");
+      await saveBotSession(telegramUserId, { state: "awaiting_phone_confirm", collectedData: data });
+      return ctx.reply(tr(lang, "confirm_existing_phone", { phone: existingPhone }), { reply_markup: kb, parse_mode: "Markdown" });
+    }
+
     await saveBotSession(telegramUserId, { state: "awaiting_phone", collectedData: data });
     return askPhone(ctx, lang);
   }

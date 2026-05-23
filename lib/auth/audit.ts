@@ -15,6 +15,7 @@ export function audit(entry: {
   after?: unknown;
   ip?: string;
   userAgent?: string;
+  vacancyId?: string;
 }): void {
   const clean = (o: unknown) => {
     if (!o || typeof o !== "object") return o;
@@ -33,5 +34,6 @@ export function audit(entry: {
     after: clean(entry.after) as never,
     ip: entry.ip,
     userAgent: entry.userAgent,
+    vacancyId: entry.vacancyId,
   }).catch((e) => console.error("audit failed", e));
 }

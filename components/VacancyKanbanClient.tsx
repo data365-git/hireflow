@@ -9,6 +9,7 @@ import { formatSalary } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import { ExportModal } from "@/components/export/ExportModal";
 import { SourcesTab } from "@/components/vacancies/SourcesTab";
+import { VacancyHistoryTab } from "@/components/vacancies/VacancyHistoryTab";
 import { getSourcePerformance, type SourcePerformanceRow } from "@/app/actions/sources";
 import type { ExportRow } from "@/lib/export/types";
 import type { TestTask } from "@/lib/types";
@@ -117,7 +118,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
   const timeline = useStore((s) => s.timeline);
   const messages = useStore((s) => s.messages);
 
-  const [activeTab, setActiveTab] = useState<"pipeline" | "tasks" | "automations" | "analytics" | "sources">("pipeline");
+  const [activeTab, setActiveTab] = useState<"pipeline" | "tasks" | "automations" | "analytics" | "sources" | "history">("pipeline");
   const [filteredAppRows, setFilteredAppRows] = useState<typeof appRows>(appRows);
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
   const [batchMsgText, setBatchMsgText] = useState("");
@@ -277,6 +278,7 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
             { id: "automations", label: "Automations", badge: automations.filter((a) => a.isEnabled).length || undefined },
             { id: "analytics", label: "Analytics", badge: undefined },
             { id: "sources", label: "Sources", badge: undefined },
+            { id: "history", label: "History", badge: undefined },
           ] as Array<{ id: typeof activeTab; label: string; badge: number | undefined }>
         ).map(({ id: tabId, label, badge }) => (
           <button
@@ -629,6 +631,13 @@ export function VacancyKanbanClient({ vacancy, stages, appRows }: Props) {
       {/* Sources tab */}
       {activeTab === "sources" && (
         <SourcesTab vacancyId={id} />
+      )}
+
+      {/* History tab */}
+      {activeTab === "history" && (
+        <div className="overflow-y-auto flex-1">
+          <VacancyHistoryTab vacancyId={id} />
+        </div>
       )}
 
       <ExportModal

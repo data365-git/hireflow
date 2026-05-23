@@ -10,17 +10,17 @@ interface Props {
 }
 
 export function ProtectedRoute({ screen, permission = "read", children }: Props) {
-  const { loading, user, hasPermission, permissionsLoaded } = useAuth();
+  const { loading, authReady, user, hasPermission, permissionsLoaded } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading && !user && pathname !== "/login") {
+    if (authReady && !user && pathname !== "/login") {
       router.replace("/login");
     }
-  }, [loading, user, router, pathname]);
+  }, [authReady, user, router, pathname]);
 
-  if (loading) {
+  if (loading || !authReady) {
     return (
       <div className="flex h-screen items-center justify-center text-muted">
         Loading...

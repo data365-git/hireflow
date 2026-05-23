@@ -166,6 +166,9 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     stage_hired: "🎊 Congratulations, {name}! We're thrilled to welcome you to the team for *{vacancy}*. You'll receive further details soon.",
     stage_reserve: "👋 Hi {name}, thank you for applying to *{vacancy}*. We've added you to our talent pool and will reach out when a matching opportunity arises.",
     stage_other: "🔔 Hi {name}, your application for *{vacancy}* has been updated. Current stage: *{stage}*.",
+    confirm_existing_phone: "We found your phone number from a previous application:\n\n📱 {phone}\n\nUse this number?",
+    btn_use_existing_phone: "Use this number",
+    btn_enter_new_phone: "Enter a new number",
   },
   ru: {
     welcome_no_payload: "👋 Добро пожаловать в data365 HR!\nЯ помогу вам откликнуться на вакансии.",
@@ -325,6 +328,9 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     stage_hired: "🎊 Поздравляем, {name}! Мы рады принять вас в команду по вакансии *{vacancy}*. Детали скоро пришлём.",
     stage_reserve: "👋 Привет, {name}, спасибо за отклик на *{vacancy}*. Мы добавили вас в наш кадровый резерв и свяжемся при подходящей возможности.",
     stage_other: "🔔 Привет, {name}, статус вашего отклика на *{vacancy}* изменился. Текущий этап: *{stage}*.",
+    confirm_existing_phone: "Мы нашли ваш номер телефона из прошлой заявки:\n\n📱 {phone}\n\nИспользовать этот номер?",
+    btn_use_existing_phone: "Использовать этот номер",
+    btn_enter_new_phone: "Ввести новый номер",
   },
   uz: {
     welcome_no_payload: "👋 data365 HR botiga xush kelibsiz!\nMen sizga ish o'rinlariga murojaat qilishda yordam beraman.",
@@ -484,6 +490,9 @@ Data365 jamoasiga qo'shiling — biz bilan birga rivojlaning, tajriba orttiring 
     stage_hired: "🎊 Tabriklaymiz, {name}! Siz *{vacancy}* lavozimiga qabul qilindingiz. Tafsilotlar tez orada yuboriladi.",
     stage_reserve: "👋 Salom, {name}, *{vacancy}* uchun murojaat qilganingiz uchun rahmat. Siz nomzodlar bazasiga qo'shildingiz — mosroq imkoniyat paydo bo'lganda murojaat qilamiz.",
     stage_other: "🔔 Salom, {name}, *{vacancy}* uchun arizangiz holati yangilandi. Joriy bosqich: *{stage}*.",
+    confirm_existing_phone: "Oldingi arizangizdan telefon raqamingizni topdik:\n\n📱 {phone}\n\nShu raqamdan foydalanasizmi?",
+    btn_use_existing_phone: "Shu raqamni ishlatish",
+    btn_enter_new_phone: "Yangi raqam kiritish",
   },
 };
 
