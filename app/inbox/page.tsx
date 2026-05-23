@@ -81,7 +81,7 @@ export default function InboxPage() {
 
   // Fetch conversations on mount and on mode change
   useEffect(() => {
-    getInboxConversations().then(setConversations);
+    getInboxConversations().then(setConversations).catch(() => {});
   }, [mode]);
 
   // Initialize selectedKey to first conversation once loaded

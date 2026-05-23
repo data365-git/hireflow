@@ -58,6 +58,8 @@ export default function AnalyticsPage() {
       setData(d);
       setSourceRows(src);
       setLoading(false);
+    }).catch(() => {
+      setLoading(false);
     });
   }, [mode]);
 

@@ -148,7 +148,9 @@ export default function BotContentPage() {
         .catch(() => {
           if (!cancelled) setLoading(false);
         })
-    );
+    ).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };

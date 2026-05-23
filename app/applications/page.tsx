@@ -143,6 +143,8 @@ export default function PipelinePage() {
       setVacancies(v.map((vac) => ({ id: vac.id, title: vac.title })));
       setSourceNames(s);
       setLoading(false);
+    }).catch(() => {
+      setLoading(false);
     });
   }, [mode]);
 

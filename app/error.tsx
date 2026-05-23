@@ -4,10 +4,10 @@ import { useEffect } from "react";
 
 export default function Error({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     console.error(error);
@@ -22,7 +22,7 @@ export default function Error({
         </p>
         <div className="mt-5 flex justify-center gap-3">
           <button
-            onClick={() => unstable_retry()}
+            onClick={() => reset()}
             className="rounded-lg bg-primary px-4 py-2 text-body-sm font-semibold text-primary-fg transition-opacity hover:opacity-90"
           >
             Try again

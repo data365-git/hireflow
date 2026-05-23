@@ -74,7 +74,9 @@ export default function BackupsPage() {
       }).catch(() => {
         if (!cancelled) setLoading(false);
       })
-    );
+    ).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => { cancelled = true; };
   }, []);
 
