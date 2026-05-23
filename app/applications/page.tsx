@@ -394,8 +394,12 @@ export default function PipelinePage() {
               return (
                 <div
                   key={colorKey}
-                  className={`min-w-[220px] max-w-[220px] flex flex-col gap-2 rounded-xl p-1 -m-1 transition-colors duration-150 ${
-                    isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""
+                  className={`min-w-[220px] max-w-[220px] flex flex-col gap-2 rounded-xl p-1 -m-1 transition-all duration-200 ${
+                    isOver
+                      ? "bg-primary/5 ring-1 ring-primary/30 scale-[1.015]"
+                      : draggingId
+                      ? "opacity-80"
+                      : ""
                   }`}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -427,11 +431,13 @@ export default function PipelinePage() {
                   {/* Empty drop zone */}
                   {colApps.length === 0 && (
                     <div
-                      className={`min-h-[60px] flex items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
-                        isOver ? "border-primary/40 bg-primary/5" : "border-border"
+                      className={`min-h-[60px] flex items-center justify-center rounded-lg border-2 border-dashed transition-all duration-200 ${
+                        isOver
+                          ? "border-primary/60 bg-primary/8 scale-[1.02] animate-pulse"
+                          : "border-border"
                       }`}
                     >
-                      <span className="text-micro text-subtle">
+                      <span className={`text-micro transition-colors duration-150 ${isOver ? "text-primary font-semibold" : "text-subtle"}`}>
                         {isOver ? "Drop here" : "Empty"}
                       </span>
                     </div>
@@ -460,14 +466,14 @@ export default function PipelinePage() {
                           setDropTarget(null);
                           stopAutoScroll();
                         }}
-                        className={`transition-opacity duration-150 cursor-grab active:cursor-grabbing ${
-                          isDragging ? "opacity-30" : ""
+                        className={`transition-all duration-150 cursor-grab active:cursor-grabbing ${
+                          isDragging ? "opacity-20 scale-95 blur-[1px]" : "hover:-translate-y-0.5"
                         }`}
                       >
                         <Link
                           href={`/candidates/${app.id}`}
                           draggable={false}
-                          className={`block bg-surface border border-border rounded-lg p-3 hover:border-primary/40 hover:shadow-sm transition-all select-none ${
+                          className={`kanban-card-enter block bg-surface border border-border rounded-lg p-3 hover:border-primary/40 hover:shadow-md transition-all duration-150 select-none ${
                             isAbandoned ? "opacity-40" : isBrowsing || isInProgress ? "opacity-70" : ""
                           }`}
                         >

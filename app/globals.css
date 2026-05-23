@@ -143,3 +143,12 @@
 :root {
   --font-sans: var(--font-manrope), system-ui, sans-serif;
 }
+
+@keyframes card-drop-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.kanban-card-enter {
+  animation: card-drop-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
