@@ -16,12 +16,14 @@ type Props = {
 };
 
 const STATUS_OPTIONS = [
-  { value: "all", label: "All statuses" },
-  { value: "in_progress", label: "In progress" },
-  { value: "submitted", label: "Submitted" },
+  { value: "all", label: "All stages" },
+  { value: "new", label: "New" },
+  { value: "screening", label: "Screening" },
+  { value: "qualified", label: "Qualified" },
+  { value: "test", label: "Test" },
+  { value: "interview", label: "Interview" },
   { value: "hired", label: "Hired" },
   { value: "rejected", label: "Rejected" },
-  { value: "abandoned", label: "Abandoned" },
 ];
 
 export function PipelineFilters({

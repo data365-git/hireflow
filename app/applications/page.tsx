@@ -266,7 +266,7 @@ export default function PipelinePage() {
 
   const filteredApps = apps.filter((a) => {
     if (filterVacancyId !== "all" && a.vacancyId !== filterVacancyId) return false;
-    if (filterStatus !== "all" && a.status !== filterStatus) return false;
+    if (filterStatus !== "all" && a.stageColor !== filterStatus) return false;
     if (filterSource !== "all" && a.sourceName !== filterSource) return false;
     if (filterSearch && !a.candidateName.toLowerCase().includes(filterSearch.toLowerCase()))
       return false;
