@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
@@ -11,8 +11,11 @@ import { formatRelativeTime } from "@/lib/utils";
 import { useDataMode } from "@/context/DataModeContext";
 import {
   getAllPipelineApplications,
+  getStagesForActiveVacancies,
+  moveApplicationToStage,
   listAllSourceNames,
   type UnifiedApplication,
+  type PipelineStage,
 } from "@/app/actions/applications";
 import { getAllVacancies } from "@/app/actions/vacancies";
 
@@ -121,7 +124,14 @@ export default function PipelinePage() {
   const [apps, setApps] = useState<UnifiedApplication[]>([]);
   const [vacancies, setVacancies] = useState<SimpleVacancy[]>([]);
   const [sourceNames, setSourceNames] = useState<string[]>([]);
+  const [allStages, setAllStages] = useState<PipelineStage[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Drag state — ref for the ID being dragged (avoids re-renders mid-drag),
+  // state for visual feedback (drop target highlight + dragged card dim).
+  const draggedIdRef = useRef<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   // Filters
   const [filterVacancyId, setFilterVacancyId] = useState("all");
@@ -129,7 +139,6 @@ export default function PipelinePage() {
   const [filterSearch, setFilterSearch] = useState("");
   const [filterSource, setFilterSource] = useState("all");
 
-  // Persist view choice
   function handleViewChange(v: "kanban" | "list") {
     setView(v);
     localStorage.setItem("pipelineView", v);
@@ -138,17 +147,62 @@ export default function PipelinePage() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getAllPipelineApplications(), getAllVacancies(), listAllSourceNames()]).then(([a, v, s]) => {
+    Promise.all([
+      getAllPipelineApplications(),
+      getAllVacancies(),
+      listAllSourceNames(),
+      getStagesForActiveVacancies(),
+    ]).then(([a, v, s, stages]) => {
       setApps(a);
       setVacancies(v.map((vac) => ({ id: vac.id, title: vac.title })));
       setSourceNames(s);
+      setAllStages(stages);
       setLoading(false);
     }).catch(() => {
       setLoading(false);
     });
   }, [mode]);
 
-  // ── Derived data ───────────────────────────────────────────────────────────
+  // ── Drag-and-drop handlers ────────────────────────────────────────────────
+
+  const handleDrop = useCallback(
+    async (targetColorKey: string) => {
+      const appId = draggedIdRef.current;
+      draggedIdRef.current = null;
+      setDraggingId(null);
+      setDropTarget(null);
+
+      if (!appId) return;
+
+      // Snapshot current state for rollback
+      const prevApps = apps;
+      const app = apps.find((a) => a.id === appId);
+      if (!app || app.stageColor === targetColorKey) return;
+
+      // Find the target stage for this vacancy by color
+      const targetStage = allStages.find(
+        (s) => s.vacancyId === app.vacancyId && s.color === targetColorKey
+      );
+      if (!targetStage) return; // vacancy doesn't have this stage color
+
+      // Optimistic update
+      setApps((prev) =>
+        prev.map((a) =>
+          a.id === appId
+            ? { ...a, stageId: targetStage.id, stageColor: targetColorKey, stageName: targetStage.name }
+            : a
+        )
+      );
+
+      // Server call — rollback on error
+      moveApplicationToStage(appId, targetStage.id).catch(() => {
+        setApps(prevApps);
+      });
+    },
+    [apps, allStages]
+  );
+
+  // ── Derived data ──────────────────────────────────────────────────────────
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -163,9 +217,7 @@ export default function PipelinePage() {
   todayStart.setHours(0, 0, 0, 0);
 
   const awaitingReply = apps
-    .filter(
-      (a) => a.hasUnread && Date.now() - new Date(a.lastActivityAt).getTime() > oneDayMs
-    )
+    .filter((a) => a.hasUnread && Date.now() - new Date(a.lastActivityAt).getTime() > oneDayMs)
     .slice(0, 5);
 
   const stuckCandidates = apps
@@ -181,24 +233,20 @@ export default function PipelinePage() {
     .filter((a) => new Date(a.appliedAt).getTime() >= todayStart.getTime())
     .slice(0, 5);
 
-  const hasAttention =
-    awaitingReply.length > 0 || stuckCandidates.length > 0 || newToday.length > 0;
+  const hasAttention = awaitingReply.length > 0 || stuckCandidates.length > 0 || newToday.length > 0;
 
-  // ── Filtered apps ──────────────────────────────────────────────────────────
+  // ── Filtered apps ─────────────────────────────────────────────────────────
 
   const filteredApps = apps.filter((a) => {
     if (filterVacancyId !== "all" && a.vacancyId !== filterVacancyId) return false;
     if (filterStatus !== "all" && a.status !== filterStatus) return false;
     if (filterSource !== "all" && a.sourceName !== filterSource) return false;
-    if (
-      filterSearch &&
-      !a.candidateName.toLowerCase().includes(filterSearch.toLowerCase())
-    )
+    if (filterSearch && !a.candidateName.toLowerCase().includes(filterSearch.toLowerCase()))
       return false;
     return true;
   });
 
-  // ── Kanban grouping ────────────────────────────────────────────────────────
+  // ── Kanban grouping ───────────────────────────────────────────────────────
 
   const appsByColor = new Map<string, UnifiedApplication[]>();
   for (const colorKey of STAGE_ORDER) {
@@ -293,19 +341,34 @@ export default function PipelinePage() {
           <div className="flex gap-4 overflow-x-auto pb-6">
             {columnsToShow.map((colorKey) => {
               const colApps = appsByColor.get(colorKey) ?? [];
+              const isOver = dropTarget === colorKey;
+
               return (
                 <div
                   key={colorKey}
-                  className="min-w-[220px] max-w-[220px] flex flex-col gap-2"
+                  className={`min-w-[220px] max-w-[220px] flex flex-col gap-2 rounded-xl p-1 -m-1 transition-colors duration-150 ${
+                    isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropTarget !== colorKey) setDropTarget(colorKey);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setDropTarget(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleDrop(colorKey);
+                  }}
                 >
                   {/* Column header */}
                   <div className="flex items-center gap-1.5 px-1">
                     <span
                       className="size-2 rounded-full shrink-0"
-                      style={{
-                        backgroundColor:
-                          STAGE_DOT_COLOR[colorKey] ?? "var(--color-border)",
-                      }}
+                      style={{ backgroundColor: STAGE_DOT_COLOR[colorKey] ?? "var(--color-border)" }}
                     />
                     <span className="text-body-sm font-semibold text-text">
                       {STAGE_LABELS[colorKey]}
@@ -313,28 +376,54 @@ export default function PipelinePage() {
                     <span className="ml-auto text-micro text-subtle">{colApps.length}</span>
                   </div>
 
+                  {/* Empty drop zone */}
+                  {colApps.length === 0 && (
+                    <div
+                      className={`min-h-[60px] flex items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
+                        isOver ? "border-primary/40 bg-primary/5" : "border-border"
+                      }`}
+                    >
+                      <span className="text-micro text-subtle">
+                        {isOver ? "Drop here" : "Empty"}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Cards */}
-                  {colApps.length === 0 ? (
-                    <div className="text-micro text-subtle px-1">Empty</div>
-                  ) : (
-                    colApps.map((app) => {
-                      const isBrowsing = app.status === "browsing";
-                      const isInProgress = app.status === "in_progress";
-                      const isAbandoned = app.status === "abandoned";
-                      return (
+                  {colApps.map((app) => {
+                    const isBrowsing = app.status === "browsing";
+                    const isInProgress = app.status === "in_progress";
+                    const isAbandoned = app.status === "abandoned";
+                    const isDragging = draggingId === app.id;
+
+                    return (
+                      <div
+                        key={app.id}
+                        draggable
+                        onDragStart={(e) => {
+                          draggedIdRef.current = app.id;
+                          setDraggingId(app.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", app.id);
+                        }}
+                        onDragEnd={() => {
+                          draggedIdRef.current = null;
+                          setDraggingId(null);
+                          setDropTarget(null);
+                        }}
+                        className={`transition-opacity duration-150 cursor-grab active:cursor-grabbing ${
+                          isDragging ? "opacity-30" : ""
+                        }`}
+                      >
                         <Link
-                          key={app.id}
                           href={`/candidates/${app.id}`}
-                          className={`block bg-surface border border-border rounded-lg p-3 hover:border-primary/40 hover:shadow-sm transition-all ${
+                          draggable={false}
+                          className={`block bg-surface border border-border rounded-lg p-3 hover:border-primary/40 hover:shadow-sm transition-all select-none ${
                             isAbandoned ? "opacity-40" : isBrowsing || isInProgress ? "opacity-70" : ""
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <Avatar
-                              name={app.candidateName}
-                              id={app.candidateId}
-                              size="sm"
-                            />
+                            <Avatar name={app.candidateName} id={app.candidateId} size="sm" />
                             <div className="flex-1 min-w-0">
                               <p className="text-body-sm font-semibold text-text truncate">
                                 {app.candidateName}
@@ -354,9 +443,9 @@ export default function PipelinePage() {
                             {formatRelativeTime(app.lastActivityAt)}
                           </p>
                         </Link>
-                      );
-                    })
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}

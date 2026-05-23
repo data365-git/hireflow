@@ -255,6 +255,37 @@ export async function deleteApplication(applicationId: string): Promise<{ ok: tr
   return { ok: true };
 }
 
+export type PipelineStage = {
+  id: string;
+  vacancyId: string;
+  name: string;
+  color: string;
+  orderIndex: number;
+};
+
+export async function getStagesForActiveVacancies(): Promise<PipelineStage[]> {
+  await requirePermission("candidates", "read");
+  const isDemo = await getCurrentDataMode();
+  return db
+    .select({
+      id: vacancyStages.id,
+      vacancyId: vacancyStages.vacancyId,
+      name: vacancyStages.name,
+      color: vacancyStages.color,
+      orderIndex: vacancyStages.orderIndex,
+    })
+    .from(vacancyStages)
+    .innerJoin(
+      vacancies,
+      and(
+        eq(vacancyStages.vacancyId, vacancies.id),
+        eq(vacancies.isDemo, isDemo),
+        isNull(vacancies.deletedAt)
+      )
+    )
+    .orderBy(vacancyStages.vacancyId, vacancyStages.orderIndex);
+}
+
 export async function listAllSourceNames(): Promise<string[]> {
   await requirePermission("candidates", "read");
   const rows = await db
