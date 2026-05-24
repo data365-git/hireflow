@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import type { Application, Candidate, VacancyStage } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { Avatar } from "./Avatar";
@@ -38,15 +40,18 @@ type Props = {
   candidate: Candidate;
   stage: VacancyStage;
   onClick: () => void;
-  onDragStart: (e: React.DragEvent) => void;
   selected?: boolean;
   onToggleSelect?: () => void;
   onDelete?: () => void;
   sourceName?: string | null;
   applicationRank?: number;
+  /** True when this card is being dragged (renders as ghost in column). */
+  isDragging?: boolean;
+  /** True when rendered inside DragOverlay (disables useDraggable). */
+  isOverlay?: boolean;
 };
 
-export function CandidateCard({ application, candidate, stage, onClick, onDragStart, selected, onToggleSelect, onDelete, sourceName, applicationRank }: Props) {
+export function CandidateCard({ application, candidate, stage, onClick, selected, onToggleSelect, onDelete, sourceName, applicationRank, isDragging, isOverlay }: Props) {
   const allMessages = useStore(s => s.messages);
   const currentUserId = useStore(s => s.currentUserId);
   const messages = useMemo(
@@ -54,6 +59,13 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
       .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()),
     [allMessages, application.id],
   );
+
+  // useDraggable must always be called (Rules of Hooks). When isOverlay we still
+  // call it but don't apply the transform/listeners.
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: application.id,
+    disabled: !!isOverlay,
+  });
 
   const isNew = (() => {
     const days = Math.floor((Date.now() - new Date(application.appliedAt).getTime()) / (1000 * 60 * 60 * 24));
@@ -73,15 +85,31 @@ export function CandidateCard({ application, candidate, stage, onClick, onDragSt
   const statusPill = APPLICATION_STATUS_PILLS[application.status];
   const isDimmedStatus = DIMMED_APPLICATION_STATUSES.has(application.status);
 
+  // When the card is being dragged in the column, render a translucent ghost placeholder.
+  if (isDragging && !isOverlay) {
+    return (
+      <div
+        className="relative bg-surface/40 border border-dashed border-border border-l-2 rounded-lg p-3 select-none"
+        style={{ borderLeftColor: accentColor, minHeight: "72px" }}
+      />
+    );
+  }
+
+  const style = isOverlay
+    ? undefined
+    : transform
+      ? { transform: CSS.Translate.toString(transform) }
+      : undefined;
+
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      ref={isOverlay ? undefined : setNodeRef}
+      style={{ ...style, borderLeftColor: accentColor }}
+      {...(isOverlay ? {} : { ...listeners, ...attributes })}
       onClick={onClick}
       className={`relative bg-surface border border-border border-l-2 rounded-lg p-3 cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group select-none ${
         isDimmedStatus ? "opacity-[0.68]" : ""
-      }`}
-      style={{ borderLeftColor: accentColor }}
+      } ${isOverlay ? "shadow-xl rotate-1 opacity-95" : ""}`}
     >
       {onToggleSelect !== undefined && (
         <input

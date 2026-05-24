@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { AlertCircle } from "lucide-react";
 import type { CreateVacancyInput, ScreeningQuestion, QuestionTemplate } from "@/lib/types";
+import { toI18nText, hasI18nGap } from "@/lib/utils";
 import { SaveAsTemplateDialog } from "@/components/settings/SaveAsTemplateDialog";
 import { Combobox } from "@/components/ui/Combobox";
 import { createVacancy } from "@/app/actions/vacancies";
@@ -61,9 +63,15 @@ const LABEL_CLS = "block text-body-sm text-muted mb-1";
 const SECTION_HEADER_CLS = "text-micro uppercase tracking-wider text-subtle mb-3";
 const PANEL_CLS = "bg-surface-elevated border border-border rounded-xl p-5 shadow-sm";
 
+type I18nDraft = { uz: string; ru: string; en: string };
+type LangTab = "uz" | "ru" | "en";
+const Q_LANGS: LangTab[] = ["uz", "ru", "en"];
+const Q_LANG_LABELS: Record<LangTab, string> = { uz: "UZ", ru: "RU", en: "EN" };
+
 type QuestionDraft = {
   id: string;
-  text: string;
+  text: I18nDraft;
+  activeLang: LangTab;
   type: ScreeningQuestion["type"];
   options?: string[];
   optionsRaw: string;
@@ -144,7 +152,8 @@ export default function NewVacancyPage() {
 
   // Local draft state for questions (need per-item id + optionsRaw)
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
-  const [newQText, setNewQText] = useState("");
+  const [newQText, setNewQText] = useState<I18nDraft>({ uz: "", ru: "", en: "" });
+  const [newQLang, setNewQLang] = useState<LangTab>("uz");
   const [newQType, setNewQType] = useState<ScreeningQuestion["type"]>("short-text");
 
   // Local draft state for stages (need per-item id)
@@ -342,12 +351,13 @@ export default function NewVacancyPage() {
 
   // Questions
   function addQuestion() {
-    if (!newQText.trim()) return;
+    if (!newQText.uz.trim() && !newQText.ru.trim() && !newQText.en.trim()) return;
     setQuestions((qs) => [
       ...qs,
-      { id: `q_${Date.now()}`, text: newQText.trim(), type: newQType, optionsRaw: "" },
+      { id: `q_${Date.now()}`, text: { uz: newQText.uz.trim(), ru: newQText.ru.trim(), en: newQText.en.trim() }, activeLang: "uz", type: newQType, optionsRaw: "" },
     ]);
-    setNewQText("");
+    setNewQText({ uz: "", ru: "", en: "" });
+    setNewQLang("uz");
     setNewQType("short-text");
   }
 
@@ -375,7 +385,8 @@ export default function NewVacancyPage() {
     setQuestions(
       tpl.questions.map((q, i) => ({
         id: `qtpl_${i}_${Date.now()}`,
-        text: q.text,
+        text: toI18nText(q.text),
+        activeLang: "uz" as LangTab,
         type: q.type,
         options: q.options,
         optionsRaw: q.options?.join(", ") ?? "",
@@ -434,7 +445,7 @@ export default function NewVacancyPage() {
     setCreateError(null);
 
     const finalQuestions = questions.map((q) => ({
-      text: q.text,
+      text: JSON.stringify({ uz: q.text.uz, ru: q.text.ru, en: q.text.en }),
       type: q.type,
       options: q.type === "single-choice" && q.optionsRaw
         ? q.optionsRaw.split(",").map((o) => o.trim()).filter(Boolean)
@@ -767,7 +778,7 @@ export default function NewVacancyPage() {
                   onClick={() => {
                     setQuestions((qs) => [
                       ...qs,
-                      { id: `q_${Date.now()}_${Math.random()}`, text: s.text, type: s.type, options: undefined, optionsRaw: "" },
+                      { id: `q_${Date.now()}_${Math.random()}`, text: { uz: s.text, ru: "", en: "" }, activeLang: "uz" as LangTab, type: s.type, options: undefined, optionsRaw: "" },
                     ]);
                   }}
                   className="text-body-sm px-3 py-1.5 rounded-full bg-surface border border-border hover:border-primary hover:text-primary transition-colors"
@@ -780,7 +791,9 @@ export default function NewVacancyPage() {
         )}
 
         <div className="space-y-3">
-          {questions.map((q, i) => (
+          {questions.map((q, i) => {
+            const gap = hasI18nGap(q.text);
+            return (
             <div key={q.id} className="bg-surface-elevated border border-border rounded-xl p-3 space-y-2 shadow-xs">
               <div className="flex items-start gap-2">
                 <div className="flex flex-col gap-1 pt-1 shrink-0">
@@ -802,11 +815,33 @@ export default function NewVacancyPage() {
                   </button>
                 </div>
                 <div className="flex-1 min-w-0 space-y-2">
+                  {/* Language tabs */}
+                  <div className="flex gap-0 border-b border-border mb-1">
+                    {Q_LANGS.map((lang) => (
+                      <button
+                        key={lang}
+                        type="button"
+                        onClick={() => patchQuestion(q.id, { activeLang: lang })}
+                        className={`px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                          q.activeLang === lang
+                            ? "border-b-2 border-primary text-primary"
+                            : "text-muted hover:text-text"
+                        } ${!q.text[lang].trim() ? "after:content-['*'] after:text-warning after:ml-0.5" : ""}`}
+                      >
+                        {Q_LANG_LABELS[lang]}
+                      </button>
+                    ))}
+                    {gap && (
+                      <span title="Some translations are missing" className="ml-auto text-warning self-center pr-1">
+                        <AlertCircle className="w-3 h-3" />
+                      </span>
+                    )}
+                  </div>
                   <input
                     className={INPUT_CLS}
-                    value={q.text}
-                    onChange={(e) => patchQuestion(q.id, { text: e.target.value })}
-                    placeholder="Question text"
+                    value={q.text[q.activeLang]}
+                    onChange={(e) => patchQuestion(q.id, { text: { ...q.text, [q.activeLang]: e.target.value } })}
+                    placeholder={`Question text (${q.activeLang.toUpperCase()})`}
                   />
                   <select
                     className="bg-surface border border-border rounded-lg px-2 h-8 text-body-sm text-text outline-none focus:border-primary"
@@ -840,36 +875,56 @@ export default function NewVacancyPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Add question row */}
-        <div className="flex gap-2 items-center pt-1 flex-wrap">
-          <input
-            className={INPUT_CLS + " min-w-56 flex-1"}
-            value={newQText}
-            onChange={(e) => setNewQText(e.target.value)}
-            placeholder="New question…"
-            onKeyDown={(e) => e.key === "Enter" && addQuestion()}
-          />
-          <select
-            className="bg-surface border border-border rounded-lg px-2 h-9 text-body-sm text-text outline-none focus:border-primary shrink-0"
-            value={newQType}
-            onChange={(e) => setNewQType(e.target.value as ScreeningQuestion["type"])}
-          >
-            <option value="short-text">Short text</option>
-            <option value="long-text">Long text</option>
-            <option value="phone">Phone</option>
-            <option value="single-choice">Single choice</option>
-            <option value="yes-no">Yes / No</option>
-            <option value="rating">Rating</option>
-          </select>
-          <button
-            onClick={addQuestion}
-            className="h-9 px-4 bg-primary text-primary-fg text-body-sm rounded-lg shrink-0 hover:opacity-90 transition-opacity"
-          >
-            Add
-          </button>
+        <div className="space-y-2 pt-1">
+          {/* Language tabs for new question */}
+          <div className="flex gap-0 border-b border-border">
+            {Q_LANGS.map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setNewQLang(lang)}
+                className={`px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                  newQLang === lang
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted hover:text-text"
+                } ${!newQText[lang].trim() ? "after:content-['*'] after:text-warning after:ml-0.5" : ""}`}
+              >
+                {Q_LANG_LABELS[lang]}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
+            <input
+              className={INPUT_CLS + " min-w-56 flex-1"}
+              value={newQText[newQLang]}
+              onChange={(e) => setNewQText((t) => ({ ...t, [newQLang]: e.target.value }))}
+              placeholder={`New question (${newQLang.toUpperCase()})…`}
+              onKeyDown={(e) => e.key === "Enter" && addQuestion()}
+            />
+            <select
+              className="bg-surface border border-border rounded-lg px-2 h-9 text-body-sm text-text outline-none focus:border-primary shrink-0"
+              value={newQType}
+              onChange={(e) => setNewQType(e.target.value as ScreeningQuestion["type"])}
+            >
+              <option value="short-text">Short text</option>
+              <option value="long-text">Long text</option>
+              <option value="phone">Phone</option>
+              <option value="single-choice">Single choice</option>
+              <option value="yes-no">Yes / No</option>
+              <option value="rating">Rating</option>
+            </select>
+            <button
+              onClick={addQuestion}
+              className="h-9 px-4 bg-primary text-primary-fg text-body-sm rounded-lg shrink-0 hover:opacity-90 transition-opacity"
+            >
+              Add
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1129,7 +1184,7 @@ export default function NewVacancyPage() {
         <div className="space-y-3">
           {questions.map((q) => (
             <div key={q.id} className="space-y-1.5">
-              <BotBubble text={q.text} faint={false} />
+              <BotBubble text={q.text[q.activeLang] || q.text.uz || q.text.ru || q.text.en || "…"} faint={false} />
               {/* Candidate answer placeholder */}
               <div className="flex justify-end">
                 <div className="max-w-[80%] bg-primary/10 text-primary text-body-sm rounded-xl rounded-br-sm px-3 py-2 italic opacity-50">

@@ -785,6 +785,19 @@ export async function deleteMyTestApplications(): Promise<{ ok: true; count: num
   return { ok: true, count: deleted.length };
 }
 
+export async function deleteCandidate(candidateId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requirePermission("candidates", "delete");
+  const candidate = await assertCandidateInMode(candidateId);
+
+  // Delete candidate — DB cascades take care of applications, telegramMessages,
+  // applicationAnswers, timelineEvents, applicationWatches, candidateBlacklist,
+  // candidateRelationships, etc.
+  await db.delete(candidates).where(eq(candidates.id, candidate.id));
+
+  revalidateCandidateSurfaces();
+  return { ok: true };
+}
+
 export async function setMyTelegramUserId(telegramUserId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await requirePermission("settings", "write");
   if (!telegramUserId.trim()) return { ok: false, error: "Telegram user ID cannot be empty" };

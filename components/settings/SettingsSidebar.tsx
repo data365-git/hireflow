@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Users, Shield, Zap, Layers, FlaskConical, Database, MessageSquare, Building2 } from "lucide-react";
+import { User, Users, Shield, Zap, Layers, FlaskConical, Database, MessageSquare, Building2, ClipboardList } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const tabs = [
@@ -18,6 +18,7 @@ const tabs = [
   { label: "Demo", icon: FlaskConical, href: "/settings/demo", gated: true },
   { label: "Test Users", icon: FlaskConical, href: "/settings/test-users", gated: true },
   { label: "Backup History", icon: Database, href: "/settings/backups", gated: true },
+  { label: "Audit Logs", icon: ClipboardList, href: "/settings/audit-logs", gated: true },
 ];
 
 export function SettingsSidebar() {

@@ -305,7 +305,7 @@ export const questionTemplates = pgTable("question_templates", {
 export const questionTemplateItems = pgTable("question_template_items", {
   id: text("id").primaryKey(),
   templateId: text("template_id").notNull().references(() => questionTemplates.id, { onDelete: "cascade" }),
-  text: text("text").notNull(),
+  text: jsonb("text").$type<{ uz: string; ru: string; en: string } | string>().notNull(),
   type: text("type").notNull(), // "short-text" | "long-text" | "phone" | "single-choice" | "yes-no" | "rating"
   options: jsonb("options").$type<string[]>(),
   orderIndex: integer("order_index").notNull(),

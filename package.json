@@ -30,6 +30,8 @@
     "expire:test-users": "tsx scripts/expire-bot-test-users.ts"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/utilities": "^3.2.2",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.2.1",

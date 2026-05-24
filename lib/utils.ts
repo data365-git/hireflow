@@ -56,3 +56,22 @@ export function formatSalary(min: number, max: number): string {
 export function daysAgo(isoDate: string): number {
   return Math.floor((Date.now() - new Date(isoDate).getTime()) / (1000 * 60 * 60 * 24));
 }
+
+/** Coerce a question text value (possibly a legacy plain string) to an I18nText object. */
+export function toI18nText(value: unknown): { uz: string; ru: string; en: string } {
+  if (typeof value === "object" && value !== null && "uz" in value) {
+    const v = value as Record<string, unknown>;
+    return {
+      uz: typeof v.uz === "string" ? v.uz : "",
+      ru: typeof v.ru === "string" ? v.ru : "",
+      en: typeof v.en === "string" ? v.en : "",
+    };
+  }
+  // Legacy plain string — treat as Uzbek
+  return { uz: typeof value === "string" ? value : "", ru: "", en: "" };
+}
+
+/** Return true if any language field is empty in an I18nText object. */
+export function hasI18nGap(text: { uz: string; ru: string; en: string }): boolean {
+  return !text.uz.trim() || !text.ru.trim() || !text.en.trim();
+}

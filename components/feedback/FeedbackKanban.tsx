@@ -234,16 +234,6 @@ export function FeedbackKanban({ items }: { items: FeedbackItem[] }) {
     return groups;
   }, [items]);
 
-  if (items.length === 0) {
-    return (
-      <EmptyState
-        icon="!"
-        title="No complaints or suggestions yet"
-        description="Candidate submissions and HR-entered items will appear here."
-      />
-    );
-  }
-
   return (
     <div className="flex gap-4 overflow-x-auto pb-3">
       {FEEDBACK_STATUSES.map((status) => (

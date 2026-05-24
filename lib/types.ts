@@ -1,6 +1,8 @@
 export type UUID = string;
 export type ISODate = string;
 export type Language = "uz" | "en" | "ru";
+
+export type I18nText = { uz: string; ru: string; en: string };
 export type VacancyStatus = "active" | "paused" | "closed";
 
 export type Vacancy = {
@@ -146,7 +148,7 @@ export type QuestionTemplate = {
   description: string | null;
   isSystem: boolean;
   createdAt: string;
-  questions: Array<{ id: string; text: string; type: ScreeningQuestion["type"]; options?: string[]; orderIndex: number }>;
+  questions: Array<{ id: string; text: I18nText | string; type: ScreeningQuestion["type"]; options?: string[]; orderIndex: number }>;
 };
 
 export type CreateVacancyInput = {

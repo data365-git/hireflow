@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Clock3, Pencil, Send, Trash2 } from "lucide-react";
+import { Clock3, Eye, Pencil, Send, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   createAutomationRule,
   deleteAutomationRule,
   getAutomationPageData,
+  previewAutomationMessage,
   sendAutomationTestMessage,
   toggleAutomationRule,
   updateAutomationRule,
@@ -51,6 +53,8 @@ export default function AutomationsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewRuleName, setPreviewRuleName] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isTestPending, startTestTransition] = useTransition();
@@ -232,6 +236,19 @@ export default function AutomationsPage() {
     });
   }
 
+  function handlePreview(rule: AutomationRuleView) {
+    if (rule.actionType !== "send_message") return;
+    startTransition(async () => {
+      try {
+        const text = await previewAutomationMessage(rule.id);
+        setPreviewRuleName(rule.name);
+        setPreviewText(text);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load preview.");
+      }
+    });
+  }
+
   function getValidationErrors() {
     const errors: string[] = [];
     const actionMessageText = form.actionMessageText.trim();
@@ -272,6 +289,26 @@ export default function AutomationsPage() {
 
   return (
     <div className="px-8 py-8 max-w-[760px]">
+      <Dialog
+        open={previewText !== null}
+        onClose={() => setPreviewText(null)}
+        title={`Preview: ${previewRuleName}`}
+        size="sm"
+      >
+        <p className="whitespace-pre-wrap text-body-sm text-text">
+          {previewText || "No message text."}
+        </p>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setPreviewText(null)}
+            className="h-8 px-3 rounded-lg border border-border text-body-sm text-muted hover:bg-surface-2"
+          >
+            Close
+          </button>
+        </div>
+      </Dialog>
+
       <ConfirmDialog
         open={confirmRemoveId !== null}
         title="Delete automation rule?"
@@ -370,6 +407,7 @@ export default function AutomationsPage() {
                             setEditingId(rule.id);
                             setFormOpen(true);
                           }}
+                          onPreview={rule.actionType === "send_message" ? () => handlePreview(rule) : undefined}
                           onRemove={() => setConfirmRemoveId(rule.id)}
                         />
                       ))}
@@ -608,10 +646,11 @@ type RuleCardProps = {
   vacancyName: string;
   onToggle: () => void;
   onEdit: () => void;
+  onPreview?: () => void;
   onRemove: () => void;
 };
 
-function RuleCard({ rule, description, vacancyName, onToggle, onEdit, onRemove }: RuleCardProps) {
+function RuleCard({ rule, description, vacancyName, onToggle, onEdit, onPreview, onRemove }: RuleCardProps) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -646,6 +685,15 @@ function RuleCard({ rule, description, vacancyName, onToggle, onEdit, onRemove }
       </div>
 
       <div className={`shrink-0 flex items-center gap-1 transition-all ${hovered ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        {onPreview && (
+          <button
+            onClick={onPreview}
+            aria-label="Preview message"
+            className="w-7 h-7 flex items-center justify-center rounded-md text-subtle hover:text-primary hover:bg-accent-soft transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+        )}
         <button
           onClick={onEdit}
           aria-label="Edit rule"

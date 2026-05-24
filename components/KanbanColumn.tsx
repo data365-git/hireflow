@@ -1,8 +1,8 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import type { Application, Candidate, VacancyStage } from "@/lib/types";
 import { CandidateCard } from "./CandidateCard";
-import { EmptyState } from "./EmptyState";
 import { StagePill } from "./StagePill";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
@@ -11,8 +11,6 @@ type Props = {
   stage: VacancyStage;
   applications: Application[];
   getCandidateForApplication: (id: string) => Candidate | undefined;
-  onDrop: (stageId: string) => void;
-  onDragStart: (applicationId: string) => void;
   selectedAppIds: Set<string>;
   onToggleSelect: (appId: string) => void;
   allSelected: boolean;
@@ -23,14 +21,13 @@ type Props = {
   nextStageConversion?: number;
   staleCount: number;
   onDeleteApplication?: (appId: string) => void;
+  activeAppId: string | null;
 };
 
 export function KanbanColumn({
   stage,
   applications,
   getCandidateForApplication,
-  onDrop,
-  onDragStart,
   selectedAppIds,
   onToggleSelect,
   allSelected,
@@ -41,11 +38,13 @@ export function KanbanColumn({
   nextStageConversion,
   staleCount,
   onDeleteApplication,
+  activeAppId,
 }: Props) {
   const router = useRouter();
   const getCandidateForApplicationStore = useStore(s => s.getCandidateForApplication);
   const allApplications = useStore(s => s.applications);
-  const [isDragOver, setIsDragOver] = useState(false);
+
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   // Compute application rank per candidate×vacancy (chronological order of appliedAt)
   const applicationRankMap = useMemo(() => {
@@ -72,21 +71,6 @@ export function KanbanColumn({
         return candidate?.fullName.toLowerCase().includes(search.toLowerCase());
       })
     : applications;
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    onDrop(stage.id);
-  };
 
   return (
     <div className="flex flex-col min-w-[280px] max-w-[280px]">
@@ -137,11 +121,9 @@ export function KanbanColumn({
 
       {/* Drop zone */}
       <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        ref={setNodeRef}
         className={`flex-1 flex flex-col gap-2 min-h-[120px] rounded-xl transition-all p-1.5 ${
-          isDragOver ? "bg-accent-soft ring-2 ring-primary ring-offset-1" : ""
+          isOver ? "bg-accent-soft ring-2 ring-primary ring-offset-1" : ""
         }`}
       >
         {applications.length === 0 ? (
@@ -159,14 +141,11 @@ export function KanbanColumn({
                 candidate={candidate}
                 stage={stage}
                 onClick={() => router.push(`/candidates/${app.id}`)}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = "move";
-                  onDragStart(app.id);
-                }}
                 selected={selectedAppIds.has(app.id)}
                 onToggleSelect={() => onToggleSelect(app.id)}
                 onDelete={onDeleteApplication ? () => onDeleteApplication(app.id) : undefined}
                 applicationRank={applicationRankMap.get(app.id)}
+                isDragging={activeAppId === app.id}
               />
             );
           })

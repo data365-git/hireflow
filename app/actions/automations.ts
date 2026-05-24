@@ -390,6 +390,25 @@ async function getRuleInCurrentMode(id: string) {
   return rows[0]?.rule ?? null;
 }
 
+export async function previewAutomationMessage(ruleId: string): Promise<string> {
+  await requirePermission("automations", "read");
+  const [rule] = await db.select().from(automationRules).where(eq(automationRules.id, ruleId));
+  if (!rule) throw new Error("Rule not found");
+  // substitute placeholder variables
+  let text = rule.actionMessageText ?? "";
+  const sampleVars = {
+    name: "Sample Candidate",
+    firstName: "Sample",
+    vacancy: "Sample Vacancy",
+    stage: "Sample Stage",
+    nextStage: "Sample Stage",
+  };
+  for (const [k, v] of Object.entries(sampleVars)) {
+    text = text.replaceAll(`{${k}}`, v);
+  }
+  return text;
+}
+
 function revalidateAutomationPaths() {
   revalidatePath("/automations");
   revalidatePath("/settings/automations");

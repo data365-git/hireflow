@@ -6,7 +6,7 @@ import { Pencil } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { sendMessageToCandidate } from "@/app/actions/messages";
 import { moveApplicationToStage as moveApplicationToStageAction, deleteApplication } from "@/app/actions/applications";
-import { updateCandidateAnketa, type CandidateAnketaInput } from "@/app/actions/candidate-actions";
+import { updateCandidateAnketa, deleteCandidate, type CandidateAnketaInput } from "@/app/actions/candidate-actions";
 import { listSourcesForVacancy, setApplicationSource } from "@/app/actions/sources";
 import { addVacancySource } from "@/app/actions/vacancies";
 import { toast } from "@/lib/hooks/useToast";
@@ -129,6 +129,7 @@ function ProfileContent({
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [isAnketaOpen, setIsAnketaOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteCandidateConfirm, setShowDeleteCandidateConfirm] = useState(false);
   const [anketaForm, setAnketaForm] = useState<AnketaFormState>(() => createEmptyAnketaForm());
   const [anketaError, setAnketaError] = useState<string | null>(null);
   const [candidateOverrides, setCandidateOverrides] = useState<Partial<Candidate> | null>(null);
@@ -601,6 +602,7 @@ function ProfileContent({
               initialIsBlacklisted={Boolean((candidate as { isBlacklisted?: boolean }).isBlacklisted)}
               showRelationships
               onDelete={() => setShowDeleteConfirm(true)}
+              onDeleteCandidate={() => setShowDeleteCandidateConfirm(true)}
             />
             {showDeleteConfirm && (
               <Dialog
@@ -637,6 +639,47 @@ function ProfileContent({
                       className="h-8 px-3 rounded-lg bg-danger text-white text-body-sm font-medium hover:bg-danger/90"
                     >
                       Delete
+                    </button>
+                  </div>
+                </div>
+              </Dialog>
+            )}
+            {showDeleteCandidateConfirm && (
+              <Dialog
+                open={showDeleteCandidateConfirm}
+                onClose={() => setShowDeleteCandidateConfirm(false)}
+                title="Permanently delete candidate?"
+                size="sm"
+              >
+                <div className="space-y-4">
+                  <p className="text-body-sm text-muted">
+                    This will permanently delete <strong>{candidate.fullName}</strong> and{" "}
+                    <strong>all</strong> their applications, messages, and screening data across all
+                    vacancies. This cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteCandidateConfirm(false)}
+                      className="h-8 px-3 rounded-lg border border-border text-body-sm text-muted hover:bg-surface-2"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const result = await deleteCandidate(candidate.id);
+                        if (result.ok) {
+                          toast.show({ message: "Candidate deleted", type: "info", duration: 3000 });
+                          router.push("/candidates");
+                        } else {
+                          toast.show({ message: result.error, type: "error", duration: 4000 });
+                          setShowDeleteCandidateConfirm(false);
+                        }
+                      }}
+                      className="h-8 px-3 rounded-lg bg-danger text-white text-body-sm font-medium hover:bg-danger/90"
+                    >
+                      Delete candidate
                     </button>
                   </div>
                 </div>

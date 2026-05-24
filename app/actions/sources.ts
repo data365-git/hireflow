@@ -162,6 +162,7 @@ export async function setApplicationSource(input: {
         : "Source cleared",
       before: { sourceId: app.sourceId },
       after: { sourceId: input.sourceId },
+      vacancyId: app.vacancyId,
     });
     revalidatePath(`/candidates/${input.applicationId}`);
   })();

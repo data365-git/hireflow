@@ -1,10 +1,12 @@
 "use client";
 import { use, useEffect, useState } from "react";
+import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/EmptyState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/lib/hooks/useToast";
 import type { ScreeningQuestion, VacancyStage, Vacancy, User, Source, TestTask, Application, QuestionTemplate } from "@/lib/types";
+import { toI18nText, hasI18nGap } from "@/lib/utils";
 import {
   getVacancyEditData,
   getScreeningQuestions,
@@ -385,15 +387,16 @@ export default function EditVacancyPage({ params }: { params: Promise<{ id: stri
 
               const startIndex = mode === "append" ? questions.length : 0;
               await Promise.all(
-                template.questions.map((q, index) =>
-                  createScreeningQuestion({
+                template.questions.map((q, index) => {
+                  const textStr = typeof q.text === "string" ? q.text : JSON.stringify(q.text);
+                  return createScreeningQuestion({
                     vacancyId: id,
-                    text: q.text,
+                    text: textStr,
                     type: q.type,
                     options: q.options,
                     orderIndex: startIndex + index,
-                  })
-                )
+                  });
+                })
               );
 
               const updatedQuestions = await getScreeningQuestions(id);
@@ -914,6 +917,11 @@ function DetailsTab({
 
 // ── Questions Tab ────────────────────────────────────────────────────────────
 
+type I18nDraft = { uz: string; ru: string; en: string };
+type LangTab = "uz" | "ru" | "en";
+const Q_LANGS: LangTab[] = ["uz", "ru", "en"];
+const Q_LANG_LABELS: Record<LangTab, string> = { uz: "UZ", ru: "RU", en: "EN" };
+
 function QuestionsTab({
   questions,
   questionTemplates,
@@ -935,7 +943,8 @@ function QuestionsTab({
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{
-    text: string;
+    text: I18nDraft;
+    activeLang: LangTab;
     type: ScreeningQuestion["type"];
     options: string;
   } | null>(null);
@@ -944,15 +953,18 @@ function QuestionsTab({
   const [pendingTemplate, setPendingTemplate] = useState<QuestionTemplate | null>(null);
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [addDraft, setAddDraft] = useState<{
-    text: string;
+    text: I18nDraft;
+    activeLang: LangTab;
     type: ScreeningQuestion["type"];
     options: string;
-  }>({ text: "", type: "short-text", options: "" });
+  }>({ text: { uz: "", ru: "", en: "" }, activeLang: "uz", type: "short-text", options: "" });
 
   function openEdit(q: ScreeningQuestion) {
     setExpandedId(q.id);
+    const i18n = toI18nText(q.text);
     setEditDraft({
-      text: q.text,
+      text: i18n,
+      activeLang: "uz",
       type: q.type,
       options: q.options ? q.options.join(", ") : "",
     });
@@ -961,7 +973,7 @@ function QuestionsTab({
   function saveEdit(q: ScreeningQuestion) {
     if (!editDraft) return;
     const patch: Partial<Pick<ScreeningQuestion, "text" | "type" | "options">> = {
-      text: editDraft.text,
+      text: JSON.stringify(editDraft.text),
       type: editDraft.type,
     };
     if (editDraft.type === "single-choice") {
@@ -987,9 +999,9 @@ function QuestionsTab({
   }
 
   function submitAdd() {
-    if (!addDraft.text.trim()) return;
+    if (!addDraft.text.uz.trim() && !addDraft.text.ru.trim() && !addDraft.text.en.trim()) return;
     const q: { text: string; type: ScreeningQuestion["type"]; options?: string[] } = {
-      text: addDraft.text.trim(),
+      text: JSON.stringify({ uz: addDraft.text.uz.trim(), ru: addDraft.text.ru.trim(), en: addDraft.text.en.trim() }),
       type: addDraft.type,
     };
     if (addDraft.type === "single-choice") {
@@ -999,7 +1011,7 @@ function QuestionsTab({
         .filter(Boolean);
     }
     onAdd(q);
-    setAddDraft({ text: "", type: "short-text", options: "" });
+    setAddDraft({ text: { uz: "", ru: "", en: "" }, activeLang: "uz", type: "short-text", options: "" });
     setShowAdd(false);
   }
 
@@ -1105,7 +1117,10 @@ function QuestionsTab({
         <EmptyState title="No questions yet" description="Add screening questions to qualify candidates." />
       )}
 
-      {questions.map((q, i) => (
+      {questions.map((q, i) => {
+        const i18n = toI18nText(q.text);
+        const gap = hasI18nGap(i18n);
+        return (
         <div key={q.id} className="bg-surface-elevated border border-border rounded-xl overflow-hidden shadow-xs">
           {/* Row */}
           <div
@@ -1120,7 +1135,12 @@ function QuestionsTab({
             }}
           >
             <span className="text-micro text-muted w-5 text-center shrink-0">{i + 1}</span>
-            <p className="flex-1 min-w-0 text-body-sm text-text line-clamp-1">{q.text}</p>
+            <p className="flex-1 min-w-0 text-body-sm text-text line-clamp-1">{i18n.uz || i18n.ru || i18n.en || <em className="text-subtle">No text</em>}</p>
+            {gap && (
+              <span title="Some translations are missing" className="text-warning shrink-0">
+                <AlertCircle className="w-3.5 h-3.5" />
+              </span>
+            )}
             <span className="text-micro px-2 h-5 rounded-full bg-accent-soft text-accent-fg inline-flex items-center shrink-0">
               {QUESTION_TYPE_LABELS[q.type]}
             </span>
@@ -1163,11 +1183,38 @@ function QuestionsTab({
             >
               <div>
                 <label className={LABEL_CLS}>Question text</label>
+                {/* Language tab bar */}
+                <div className="flex gap-0 mb-1 border-b border-border">
+                  {Q_LANGS.map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setEditDraft((d) => d && { ...d, activeLang: lang })}
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${
+                        editDraft.activeLang === lang
+                          ? "border-b-2 border-primary text-primary"
+                          : "text-muted hover:text-text"
+                      } ${!editDraft.text[lang].trim() ? "after:content-['*'] after:text-warning after:ml-0.5" : ""}`}
+                    >
+                      {Q_LANG_LABELS[lang]}
+                    </button>
+                  ))}
+                </div>
                 <input
                   className={INPUT_CLS}
-                  value={editDraft.text}
-                  onChange={(e) => setEditDraft((d) => d && { ...d, text: e.target.value })}
+                  placeholder={`Question (${editDraft.activeLang.toUpperCase()})`}
+                  value={editDraft.text[editDraft.activeLang]}
+                  onChange={(e) =>
+                    setEditDraft((d) =>
+                      d && { ...d, text: { ...d.text, [d.activeLang]: e.target.value } }
+                    )
+                  }
                 />
+                {hasI18nGap(editDraft.text) && (
+                  <p className="text-micro text-warning mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> Some translations are missing
+                  </p>
+                )}
               </div>
               <div>
                 <label className={LABEL_CLS}>Type</label>
@@ -1218,20 +1265,45 @@ function QuestionsTab({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Add question form */}
       {showAdd ? (
         <div className="bg-surface-elevated border border-border rounded-xl px-4 py-4 space-y-3 shadow-sm">
           <div>
             <label className={LABEL_CLS}>Question text</label>
+            {/* Language tab bar */}
+            <div className="flex gap-0 mb-1 border-b border-border">
+              {Q_LANGS.map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => setAddDraft((d) => ({ ...d, activeLang: lang }))}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    addDraft.activeLang === lang
+                      ? "border-b-2 border-primary text-primary"
+                      : "text-muted hover:text-text"
+                  } ${!addDraft.text[lang].trim() ? "after:content-['*'] after:text-warning after:ml-0.5" : ""}`}
+                >
+                  {Q_LANG_LABELS[lang]}
+                </button>
+              ))}
+            </div>
             <input
               className={INPUT_CLS}
-              placeholder="e.g. How many years of experience do you have?"
-              value={addDraft.text}
-              onChange={(e) => setAddDraft((d) => ({ ...d, text: e.target.value }))}
+              placeholder={`e.g. How many years of experience do you have? (${addDraft.activeLang.toUpperCase()})`}
+              value={addDraft.text[addDraft.activeLang]}
+              onChange={(e) =>
+                setAddDraft((d) => ({ ...d, text: { ...d.text, [d.activeLang]: e.target.value } }))
+              }
               autoFocus
             />
+            {hasI18nGap(addDraft.text) && (
+              <p className="text-micro text-warning mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Some translations are missing
+              </p>
+            )}
           </div>
           <div>
             <label className={LABEL_CLS}>Type</label>
@@ -1271,7 +1343,7 @@ function QuestionsTab({
               className="h-8 px-4 rounded-lg border border-border text-body-sm text-muted hover:text-text transition-colors"
               onClick={() => {
                 setShowAdd(false);
-                setAddDraft({ text: "", type: "short-text", options: "" });
+                setAddDraft({ text: { uz: "", ru: "", en: "" }, activeLang: "uz", type: "short-text", options: "" });
               }}
             >
               Cancel

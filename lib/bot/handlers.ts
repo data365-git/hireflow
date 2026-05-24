@@ -12,6 +12,16 @@ import { resolveBotLang } from "./lang";
 
 const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
+function questionText(q: { text: unknown }, lang: "uz" | "ru" | "en"): string {
+  const t = q.text;
+  if (typeof t === "string") return t; // legacy fallback
+  if (t && typeof t === "object") {
+    const obj = t as Record<string, string>;
+    return obj[lang] || obj.uz || obj.en || obj.ru || "[missing translation]";
+  }
+  return "[missing translation]";
+}
+
 async function getLiveActiveVacancy(vacancyId: string) {
   const rows = await db.select().from(vacancies).where(and(eq(vacancies.id, vacancyId), eq(vacancies.isDemo, false), vacancyNotDeleted));
   const vacancy = rows[0];
@@ -1684,12 +1694,12 @@ async function handleQansCallback(ctx: Context, data: string, lang: Lang) {
 
 async function askQuestion(
   ctx: Context,
-  q: { id: string; text: string; type: string; options: string[] | null | undefined },
+  q: { id: string; text: unknown; type: string; options: string[] | null | undefined },
   step: number,
   total: number,
   lang: Lang
 ) {
-  const questionText = tr(lang, "ask_question", { step, total, question: q.text });
+  const questionPrompt = tr(lang, "ask_question", { step, total, question: questionText(q, lang) });
 
   if (q.type === "single-choice" && Array.isArray(q.options) && q.options.length > 0) {
     const kb = new InlineKeyboard();
@@ -1701,9 +1711,9 @@ async function askQuestion(
         kb.text(opts[i], `qans_${i}`).row();
       }
     }
-    await ctx.reply(questionText, { reply_markup: kb, parse_mode: "Markdown" });
+    await ctx.reply(questionPrompt, { reply_markup: kb, parse_mode: "Markdown" });
   } else {
-    await ctx.reply(questionText, { parse_mode: "Markdown" });
+    await ctx.reply(questionPrompt, { parse_mode: "Markdown" });
   }
 }
 

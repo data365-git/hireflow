@@ -1,9 +1,19 @@
 "use client";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { moveApplicationToStage as moveApplicationToStageAction, deleteApplication as deleteApplicationAction } from "@/app/actions/applications";
 import { useStore } from "@/lib/store";
 import { KanbanColumn } from "./KanbanColumn";
+import { CandidateCard } from "./CandidateCard";
 import { toast } from "@/lib/hooks/useToast";
 import type { VacancyStage } from "@/lib/types";
 
@@ -36,7 +46,7 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
   const messages = useStore((s) => s.messages);
   const currentUserId = useStore((s) => s.currentUserId);
 
-  const draggingId = useRef<string | null>(null);
+  const [activeAppId, setActiveAppId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterUnread, setFilterUnread] = useState(false);
   const [filterStale, setFilterStale] = useState(false);
@@ -49,6 +59,12 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletePending, startDeleteTransition] = useTransition();
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+  );
+
   const now = Date.now();
 
   // Pre-compute per-stage app lists (unfiltered) for conversion rate denominator
@@ -56,6 +72,21 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
   const selectedMoveStage = pendingMove
     ? stages.find((stage) => stage.id === pendingMove.toStageId)
     : null;
+
+  // Find active drag card + stage for DragOverlay
+  const activeApp = activeAppId
+    ? (() => {
+        for (const apps of stageApps) {
+          const found = apps.find((a) => a.id === activeAppId);
+          if (found) return found;
+        }
+        return null;
+      })()
+    : null;
+  const activeStage = activeApp
+    ? stages.find((s) => s.id === activeApp.currentStageId) ?? null
+    : null;
+  const activeCandidate = activeApp ? getCandidateForApplication(activeApp.id) : undefined;
 
   function resetCommentPrompt() {
     setPendingMove(null);
@@ -133,20 +164,18 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
     });
   }
 
-  function requestStageMove(stageId: string) {
-    const appId = draggingId.current;
-    draggingId.current = null;
-    if (!appId || movingAppId === appId || movePending) return;
+  function requestStageMove(applicationId: string, stageId: string) {
+    if (!applicationId || movingAppId === applicationId || movePending) return;
 
     const { applications, candidates } = useStore.getState();
-    const app = applications.find((a) => a.id === appId);
+    const app = applications.find((a) => a.id === applicationId);
     const toStage = stages.find((stage) => stage.id === stageId);
     if (!app || !toStage || app.currentStageId === stageId) return;
 
     if (toStage.isFinal || toStage.isRejected) {
       const candidate = candidates.find((c) => c.id === app.candidateId);
       setPendingMove({
-        applicationId: appId,
+        applicationId,
         fromStageId: app.currentStageId,
         toStageId: stageId,
         candidateName: candidate?.fullName ?? "Candidate",
@@ -156,7 +185,7 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
       return;
     }
 
-    executeStageMove(appId, toStage, app.currentStageId);
+    executeStageMove(applicationId, toStage, app.currentStageId);
   }
 
   function confirmCommentedMove() {
@@ -169,97 +198,122 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
     );
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    setActiveAppId(event.active.id as string);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveAppId(null);
+    const { active, over } = event;
+    if (!over) return;
+    requestStageMove(active.id as string, over.id as string);
+  }
+
   return (
-    <div>
-      <div className="mb-4 flex items-center gap-2 flex-wrap">
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle text-body-sm">⌕</span>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search candidates…"
-            className="h-8 pl-8 pr-3 bg-surface border border-border rounded-lg text-body-sm text-text placeholder:text-subtle outline-none focus:border-primary w-56"
-          />
-        </div>
-        <button
-          onClick={() => setFilterUnread(f => !f)}
-          className={`h-7 px-2.5 rounded-md text-body-sm border transition-colors ${filterUnread ? "bg-primary text-primary-fg border-primary" : "bg-surface border-border text-muted hover:bg-surface-2"}`}
-        >
-          💬 Has unread
-        </button>
-        <button
-          onClick={() => setFilterStale(f => !f)}
-          className={`h-7 px-2.5 rounded-md text-body-sm border transition-colors ${filterStale ? "bg-warning-soft text-warning border-warning/30" : "bg-surface border-border text-muted hover:bg-surface-2"}`}
-        >
-          ⏱ Stale &gt;7d
-        </button>
-        {(filterUnread || filterStale || search) && (
-          <button
-            onClick={() => { setFilterUnread(false); setFilterStale(false); setSearch(""); }}
-            className="h-7 px-2.5 text-micro text-muted hover:text-text"
-          >
-            ✕ Clear
-          </button>
-        )}
-      </div>
-      <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1">
-        {stages.map((stage, i) => {
-          let apps = stageApps[i];
-
-          // Compute staleCount before filtering (represents all apps in the column)
-          const staleCount = apps.filter(a => now - new Date(a.lastActivityAt).getTime() > STALE_MS).length;
-
-          // Compute conversion rate: next stage count / this stage count * 100
-          const nextApps = i + 1 < stageApps.length ? stageApps[i + 1] : undefined;
-          const nextStageConversion = nextApps !== undefined
-            ? (apps.length > 0 ? (nextApps.length / apps.length) * 100 : 0)
-            : undefined;
-
-          // Apply outer filter (from ApplicationSearch)
-          if (filteredAppIds) {
-            apps = apps.filter((a) => filteredAppIds.has(a.id));
-          }
-
-          // Apply filters
-          if (filterUnread) {
-            apps = apps.filter(a =>
-              messages.some(m => m.applicationId === a.id && m.direction === "inbound" && !m.readByUserIds.includes(currentUserId))
-            );
-          }
-          if (filterStale) {
-            apps = apps.filter(a => now - new Date(a.lastActivityAt).getTime() > STALE_MS);
-          }
-
-          const allSelected = apps.length > 0 && apps.every((a) => selectedAppIds.has(a.id));
-
-          return (
-            <KanbanColumn
-              key={stage.id}
-              stage={stage}
-              applications={apps}
-              getCandidateForApplication={getCandidateForApplication}
-              selectedAppIds={selectedAppIds}
-              onToggleSelect={onToggleSelect}
-              allSelected={allSelected}
-              onToggleSelectAll={() => {
-                if (allSelected) {
-                  apps.forEach((a) => { if (selectedAppIds.has(a.id)) onToggleSelect(a.id); });
-                } else {
-                  apps.forEach((a) => { if (!selectedAppIds.has(a.id)) onToggleSelect(a.id); });
-                }
-              }}
-              onDragStart={(applicationId) => { draggingId.current = applicationId; }}
-              onDrop={requestStageMove}
-              search={search}
-              filterUnread={filterUnread}
-              filterStale={filterStale}
-              nextStageConversion={nextStageConversion}
-              staleCount={staleCount}
-              onDeleteApplication={handleDeleteApplication}
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div>
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle text-body-sm">⌕</span>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search candidates…"
+              className="h-8 pl-8 pr-3 bg-surface border border-border rounded-lg text-body-sm text-text placeholder:text-subtle outline-none focus:border-primary w-56"
             />
-          );
-        })}
+          </div>
+          <button
+            onClick={() => setFilterUnread(f => !f)}
+            className={`h-7 px-2.5 rounded-md text-body-sm border transition-colors ${filterUnread ? "bg-primary text-primary-fg border-primary" : "bg-surface border-border text-muted hover:bg-surface-2"}`}
+          >
+            💬 Has unread
+          </button>
+          <button
+            onClick={() => setFilterStale(f => !f)}
+            className={`h-7 px-2.5 rounded-md text-body-sm border transition-colors ${filterStale ? "bg-warning-soft text-warning border-warning/30" : "bg-surface border-border text-muted hover:bg-surface-2"}`}
+          >
+            ⏱ Stale &gt;7d
+          </button>
+          {(filterUnread || filterStale || search) && (
+            <button
+              onClick={() => { setFilterUnread(false); setFilterStale(false); setSearch(""); }}
+              className="h-7 px-2.5 text-micro text-muted hover:text-text"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+        <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1">
+          {stages.map((stage, i) => {
+            let apps = stageApps[i];
+
+            // Compute staleCount before filtering (represents all apps in the column)
+            const staleCount = apps.filter(a => now - new Date(a.lastActivityAt).getTime() > STALE_MS).length;
+
+            // Compute conversion rate: next stage count / this stage count * 100
+            const nextApps = i + 1 < stageApps.length ? stageApps[i + 1] : undefined;
+            const nextStageConversion = nextApps !== undefined
+              ? (apps.length > 0 ? (nextApps.length / apps.length) * 100 : 0)
+              : undefined;
+
+            // Apply outer filter (from ApplicationSearch)
+            if (filteredAppIds) {
+              apps = apps.filter((a) => filteredAppIds.has(a.id));
+            }
+
+            // Apply filters
+            if (filterUnread) {
+              apps = apps.filter(a =>
+                messages.some(m => m.applicationId === a.id && m.direction === "inbound" && !m.readByUserIds.includes(currentUserId))
+              );
+            }
+            if (filterStale) {
+              apps = apps.filter(a => now - new Date(a.lastActivityAt).getTime() > STALE_MS);
+            }
+
+            const allSelected = apps.length > 0 && apps.every((a) => selectedAppIds.has(a.id));
+
+            return (
+              <KanbanColumn
+                key={stage.id}
+                stage={stage}
+                applications={apps}
+                getCandidateForApplication={getCandidateForApplication}
+                selectedAppIds={selectedAppIds}
+                onToggleSelect={onToggleSelect}
+                allSelected={allSelected}
+                onToggleSelectAll={() => {
+                  if (allSelected) {
+                    apps.forEach((a) => { if (selectedAppIds.has(a.id)) onToggleSelect(a.id); });
+                  } else {
+                    apps.forEach((a) => { if (!selectedAppIds.has(a.id)) onToggleSelect(a.id); });
+                  }
+                }}
+                search={search}
+                filterUnread={filterUnread}
+                filterStale={filterStale}
+                nextStageConversion={nextStageConversion}
+                staleCount={staleCount}
+                onDeleteApplication={handleDeleteApplication}
+                activeAppId={activeAppId}
+              />
+            );
+          })}
+        </div>
+
+        <DragOverlay>
+          {activeApp && activeStage && activeCandidate ? (
+            <CandidateCard
+              application={activeApp}
+              candidate={activeCandidate}
+              stage={activeStage}
+              onClick={() => {}}
+              selected={selectedAppIds.has(activeApp.id)}
+              isOverlay
+            />
+          ) : null}
+        </DragOverlay>
       </div>
 
       {pendingMove && selectedMoveStage && (
@@ -350,6 +404,6 @@ export function KanbanBoard({ vacancyId, selectedAppIds, onToggleSelect, filtere
           </div>
         </div>
       )}
-    </div>
+    </DndContext>
   );
 }

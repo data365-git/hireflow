@@ -30,6 +30,7 @@ type Props = {
   compact?: boolean;
   showRelationships?: boolean;
   onDelete?: () => void;
+  onDeleteCandidate?: () => void;
 };
 
 const RELATIONSHIP_TYPES: Array<{ value: RelationshipType; label: string }> = [
@@ -49,6 +50,7 @@ export function CandidateActionControls({
   compact = false,
   showRelationships = false,
   onDelete,
+  onDeleteCandidate,
 }: Props) {
   const router = useRouter();
   const { hasPermission } = useAuth();
@@ -230,6 +232,19 @@ export function CandidateActionControls({
         >
           <Trash2 className="size-4" />
           {!compact && <span>Delete application</span>}
+        </button>
+      )}
+
+      {canDelete && onDeleteCandidate && (
+        <button
+          type="button"
+          onClick={onDeleteCandidate}
+          disabled={pending}
+          title="Permanently delete candidate"
+          className={`${buttonClass} inline-flex items-center gap-2 text-muted hover:text-danger hover:bg-danger-soft transition-colors disabled:opacity-50`}
+        >
+          <Trash2 className="size-4" />
+          {!compact && <span>Delete candidate</span>}
         </button>
       )}
 
