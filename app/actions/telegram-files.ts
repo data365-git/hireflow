@@ -1,16 +1,19 @@
 "use server";
+import { LRUCache } from "lru-cache";
 import { db } from "@/lib/db/client";
 import { candidates } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requirePermission } from "@/lib/auth/permissions";
 
-// In-memory cache: Telegram file URLs are valid ~1 hour; we cache for 55 minutes.
-// Keyed by photoFileId (not candidateId) so repeated views skip the API roundtrip.
-const PHOTO_URL_CACHE = new Map<string, { url: string; expiresAt: number }>();
+// LRU cache: max 5,000 entries, 55-minute TTL (Telegram URLs expire at ~60 min)
+const PHOTO_URL_CACHE = new LRUCache<string, string>({
+  max: 5000,
+  ttl: 55 * 60 * 1000,
+});
 
 export async function getFileUrl(fileId: string): Promise<string | null> {
   const cached = PHOTO_URL_CACHE.get(fileId);
-  if (cached && cached.expiresAt > Date.now()) return cached.url;
+  if (cached) return cached;
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return null;
@@ -22,7 +25,7 @@ export async function getFileUrl(fileId: string): Promise<string | null> {
     const fileJson = await fileRes.json();
     if (!fileJson.ok || !fileJson.result?.file_path) return null;
     const url = `https://api.telegram.org/file/bot${token}/${fileJson.result.file_path}`;
-    PHOTO_URL_CACHE.set(fileId, { url, expiresAt: Date.now() + 55 * 60 * 1000 });
+    PHOTO_URL_CACHE.set(fileId, url);
     return url;
   } catch (err) {
     console.error("[getFileUrl] fetch failed:", err);
@@ -43,27 +46,9 @@ export async function getCandidatePhotoUrl(candidateId: string): Promise<string 
 
   const c = rows[0];
   if (!c) return null;
-  if (c.photoUrl) return c.photoUrl;
+  if (c.photoUrl) return c.photoUrl; // external URL (e.g. from Telegram profile) — OK to expose
   if (!c.photoFileId) return null;
 
-  // Cache lookup
-  const cached = PHOTO_URL_CACHE.get(c.photoFileId);
-  if (cached && cached.expiresAt > Date.now()) return cached.url;
-
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return null;
-
-  try {
-    const fileRes = await fetch(
-      `https://api.telegram.org/bot${token}/getFile?file_id=${c.photoFileId}`
-    );
-    const fileJson = await fileRes.json();
-    if (!fileJson.ok || !fileJson.result?.file_path) return null;
-    const url = `https://api.telegram.org/file/bot${token}/${fileJson.result.file_path}`;
-    PHOTO_URL_CACHE.set(c.photoFileId, { url, expiresAt: Date.now() + 55 * 60 * 1000 });
-    return url;
-  } catch (err) {
-    console.error("[getCandidatePhotoUrl] fetch failed:", err);
-    return null;
-  }
+  // Return proxy URL — the bot token never reaches the client
+  return `/api/telegram-file/${encodeURIComponent(c.photoFileId)}`;
 }
