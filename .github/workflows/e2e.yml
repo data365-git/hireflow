@@ -1,0 +1,83 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: hireflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run E2E scenario tests (excludes load)
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: postgres://postgres:test@localhost:5432/hireflow_test
+          TELEGRAM_BOT_TOKEN: test-token-not-real
+          TELEGRAM_WEBHOOK_SECRET: test-secret
+          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: hireflow_test_bot
+          BACKUP_SECRET: test-backup-secret
+          NODE_ENV: test
+
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only on main branch or if commit message contains [load]
+    if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[load]')
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: hireflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Run load tests
+        run: npm run test:e2e:load
+        env:
+          DATABASE_URL: postgres://postgres:test@localhost:5432/hireflow_test
+          TELEGRAM_BOT_TOKEN: test-token-not-real
+          TELEGRAM_WEBHOOK_SECRET: test-secret
+          NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: hireflow_test_bot
+          BACKUP_SECRET: test-backup-secret
+          NODE_ENV: test
