@@ -12,6 +12,16 @@ import { resolveBotLang } from "./lang";
 
 const vacancyNotDeleted = isNull(vacancies.deletedAt);
 
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // 2 MB
+
+function getLargestPhoto(photos: import("grammy/types").PhotoSize[] | undefined) {
+  return photos?.[photos.length - 1];
+}
+
+function isPhotoTooLarge(photo: import("grammy/types").PhotoSize | undefined): boolean {
+  return typeof photo?.file_size === "number" && photo.file_size > MAX_PHOTO_BYTES;
+}
+
 function questionText(q: { text: unknown }, lang: "uz" | "ru" | "en"): string {
   const t = q.text;
   if (typeof t === "string") return t; // legacy fallback
@@ -886,9 +896,12 @@ export async function handlePhoto(ctx: Context) {
     if (!photo || photo.length === 0 || !candidate) {
       return ctx.reply(tr(lang, "err_photo_required"), { parse_mode: "Markdown" });
     }
-    const largest = photo[photo.length - 1];
+    const largest = getLargestPhoto(photo);
+    if (isPhotoTooLarge(largest)) {
+      return ctx.reply(tr(lang, "err_photo_too_large"), { parse_mode: "Markdown" });
+    }
     const appPhotoData = (session.collectedData as Record<string, unknown>) ?? {};
-    appPhotoData.applicationPhotoFileId = largest.file_id;
+    appPhotoData.applicationPhotoFileId = largest!.file_id;
     const totalSteps = (appPhotoData.totalSteps as number) ?? 6;
     const motivationStep = totalSteps - 1;
     await saveBotSession(telegramUserId, { state: "awaiting_motivation", collectedData: appPhotoData });
@@ -901,8 +914,11 @@ export async function handlePhoto(ctx: Context) {
     if (!photo || photo.length === 0 || !candidate) {
       return ctx.reply(tr(lang, "err_photo_required"), { parse_mode: "Markdown" });
     }
-    const largest = photo[photo.length - 1];
-    await setCandidatePhotoFileId({ candidateId: candidate.id, photoFileId: largest.file_id });
+    const largest = getLargestPhoto(photo);
+    if (isPhotoTooLarge(largest)) {
+      return ctx.reply(tr(lang, "err_photo_too_large"), { parse_mode: "Markdown" });
+    }
+    await setCandidatePhotoFileId({ candidateId: candidate.id, photoFileId: largest!.file_id });
     const photoData = (session.collectedData as Record<string, unknown>) ?? {};
     return finishAnketa(ctx, candidate.id, lang, photoData);
   }

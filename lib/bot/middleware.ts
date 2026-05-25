@@ -1,5 +1,7 @@
 import type { Context, NextFunction } from "grammy";
 import { getBotSession, getLatestApplicationIdForTelegramUser, upsertCandidateFromTelegram, saveBotMessage } from "@/app/actions/bot";
+import { tr } from "@/lib/bot/i18n";
+import { resolveBotLang } from "@/lib/bot/lang";
 
 // Stash candidateId on the context for downstream handlers
 declare module "grammy" {
@@ -48,14 +50,39 @@ export async function persistenceMiddleware(ctx: Context, next: NextFunction) {
         attachmentType: "photo",
       });
     } else if (ctx.message?.document) {
+      const doc = ctx.message.document;
+      const MAX_DOC_BYTES = 5 * 1024 * 1024; // 5 MB
+      const ALLOWED_MIME = new Set([
+        "application/pdf",
+        "image/jpeg", "image/png", "image/webp",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ]);
+
+      const isImage = doc.mime_type?.startsWith("image/");
+      const sizeLimit = isImage ? 2 * 1024 * 1024 : MAX_DOC_BYTES;
+
+      if (typeof doc.file_size === "number" && doc.file_size > sizeLimit) {
+        const key = isImage ? "err_photo_too_large" : "err_doc_too_large";
+        const lang = await resolveBotLang(ctx).catch(() => "uz" as const);
+        await ctx.reply(tr(lang, key));
+        return next();
+      }
+
+      if (doc.mime_type && !ALLOWED_MIME.has(doc.mime_type)) {
+        const lang = await resolveBotLang(ctx).catch(() => "uz" as const);
+        await ctx.reply(tr(lang, "err_doc_type_not_allowed"));
+        return next();
+      }
+
       await saveBotMessage({
         candidateId,
         applicationId,
         direction: "inbound",
         text: ctx.message.caption ?? "",
-        attachmentFileId: ctx.message.document.file_id,
+        attachmentFileId: doc.file_id,
         attachmentType: "document",
-        attachmentFilename: ctx.message.document.file_name,
+        attachmentFilename: doc.file_name,
       });
     } else if (ctx.callbackQuery?.data) {
       // Persist the button tap as a "user action" message
