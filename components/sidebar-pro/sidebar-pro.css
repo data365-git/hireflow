@@ -1,0 +1,21 @@
+/* Sidebar Pro — scrollbar hidden until hover. Works in WebKit + Firefox. */
+.sidebar-pro-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar-pro-scroll:hover,
+.sidebar-pro-scroll:focus-within {
+  scrollbar-color: var(--color-border) transparent;
+}
+.sidebar-pro-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-pro-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-pro-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.sidebar-pro-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+.sidebar-pro-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
