@@ -1,6 +1,9 @@
+// tests/e2e/harness/verify.ts
 import { db, pool } from "@/lib/db/client";
 import { applications, candidates, auditLogs } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { mkdirSync, writeFileSync } from "fs";
+import { resolve } from "path";
 
 export async function countApplications(vacancyId: string): Promise<number> {
   const rows = await db
@@ -45,14 +48,14 @@ export async function getSourceDistribution(vacancyId: string): Promise<Record<s
 }
 
 export async function assertNoDuplicateApplications(vacancyId: string): Promise<void> {
-  const result = await pool.query<{ candidate_id: string; n: string }>(`
-    SELECT candidate_id, COUNT(*) AS n
-    FROM applications
-    WHERE vacancy_id = $1
-    GROUP BY candidate_id
-    HAVING COUNT(*) > 1
-  `, [vacancyId]);
-
+  const result = await pool.query<{ candidate_id: string; n: string }>(
+    `SELECT candidate_id, COUNT(*) AS n
+     FROM applications
+     WHERE vacancy_id = $1
+     GROUP BY candidate_id
+     HAVING COUNT(*) > 1`,
+    [vacancyId]
+  );
   if (result.rows.length > 0) {
     throw new Error(
       `Duplicate applications found: ${JSON.stringify(result.rows)}`
@@ -74,4 +77,56 @@ export async function getApplicationStatus(candidateTelegramId: number, vacancyI
 export async function isApplicationSubmitted(candidateTelegramId: number, vacancyId: string): Promise<boolean> {
   const app = await getApplication(candidateTelegramId, vacancyId);
   return app?.status === "submitted";
+}
+
+/** Returns current pool total connections — useful for high-water mark tracking. */
+export function getPoolTotalCount(): number {
+  return (pool as unknown as { totalCount: number }).totalCount ?? 0;
+}
+
+export function getHeapUsageMB(): number {
+  return process.memoryUsage().heapUsed / 1024 / 1024;
+}
+
+export type RunReport = {
+  scenario: string;
+  totalMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  counts: Record<string, number>;
+  errors: string[];
+  dbPoolHighWater: number;
+  heapDeltaMB: number;
+};
+
+export function buildReport(
+  scenario: string,
+  latencies: number[],
+  counts: Record<string, number>,
+  errors: string[],
+  totalMs: number,
+  dbPoolHighWater: number,
+  heapBefore: number
+): RunReport {
+  const sorted = [...latencies].sort((a, b) => a - b);
+  const p = (q: number) => sorted[Math.floor(sorted.length * q)] ?? 0;
+  return {
+    scenario,
+    totalMs,
+    p50Ms: p(0.5),
+    p95Ms: p(0.95),
+    p99Ms: p(0.99),
+    counts,
+    errors,
+    dbPoolHighWater,
+    heapDeltaMB: Math.round((getHeapUsageMB() - heapBefore) * 10) / 10,
+  };
+}
+
+export function writeReport(report: RunReport): void {
+  const dir = resolve(process.cwd(), "tests/reports");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(resolve(dir, `${report.scenario}-${Date.now()}.json`), JSON.stringify(report, null, 2));
+  writeFileSync(resolve(dir, "latest.json"), JSON.stringify(report, null, 2));
 }

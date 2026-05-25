@@ -1,68 +1,77 @@
+// tests/e2e/setup/reset-db.ts
 import { pool } from "@/lib/db/client";
+import { createHash } from "crypto";
 import { resolve } from "path";
 import { readFileSync, readdirSync } from "fs";
 
-// Ordered by FK dependency — children first
-const TABLES_IN_DEP_ORDER = [
-  "received_updates",
-  "audit_logs",
-  "bot_messages",
-  "screening_answers",
-  "timeline_events",
-  "applications",
-  "screening_questions",
-  "vacancy_stages",
-  "sources",
-  "vacancy_status_changes",
-  "vacancies",
-  "bot_sessions",
-  "candidates",
-  "departments",
-  "user_roles",
+/**
+ * Truncate all user-data tables using CASCADE on a minimal root set.
+ * Avoids maintaining a full ordered list — CASCADE handles all children.
+ */
+const ROOT_TABLES = [
   "users",
+  "candidates",
+  "vacancies",
+  "question_templates",
+  "stage_templates",
   "bot_translations",
   "bot_content",
-  "question_template_items",
-  "question_templates",
-  "feedback",
+  "received_updates",
 ];
 
 export async function resetDb(): Promise<void> {
-  // TRUNCATE … CASCADE handles any FKs we missed; RESTART IDENTITY resets sequences
   await pool.query(
-    `TRUNCATE ${TABLES_IN_DEP_ORDER.join(",")} RESTART IDENTITY CASCADE`
+    `TRUNCATE ${ROOT_TABLES.join(",")} RESTART IDENTITY CASCADE`
   );
+}
+
+function checksum(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 export async function runMigrations(): Promise<void> {
   const dir = resolve(process.cwd(), "drizzle");
   const files = readdirSync(dir)
     .filter((f) => /^\d+.*\.sql$/.test(f))
-    .sort();
+    .sort((a, b) => {
+      const n = (f: string) => parseInt(f.split("_")[0], 10);
+      return n(a) - n(b) || a.localeCompare(b);
+    });
 
   const client = await pool.connect();
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS _migrations_applied (
-        filename text PRIMARY KEY,
+        filename   text        PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now(),
-        checksum text NOT NULL
+        checksum   text        NOT NULL
       )
     `);
+
     for (const file of files) {
       const sql = readFileSync(resolve(dir, file), "utf8").trim();
       if (!sql) continue;
+      const digest = checksum(sql);
+
       const applied = await client.query(
-        "SELECT 1 FROM _migrations_applied WHERE filename = $1", [file]
-      );
-      if ((applied.rowCount ?? 0) > 0) continue;
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO _migrations_applied (filename, checksum) VALUES ($1, md5($1)) ON CONFLICT DO NOTHING",
+        "SELECT checksum FROM _migrations_applied WHERE filename = $1",
         [file]
       );
-      await client.query("COMMIT");
+      if ((applied.rowCount ?? 0) > 0) continue;
+
+      try {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query(
+          "INSERT INTO _migrations_applied (filename, checksum) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [file, digest]
+        );
+        await client.query("COMMIT");
+        console.log(`[test-migrate] ✓ ${file}`);
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw new Error(`[test-migrate] ✗ ${file}: ${(err as Error).message}`);
+      }
     }
   } finally {
     client.release();

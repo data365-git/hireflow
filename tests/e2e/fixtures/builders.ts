@@ -129,7 +129,11 @@ export function makeCandidate(overrides: Partial<CandidateProfile> & { telegramU
     email: overrides.email ?? `candidate${id}@test.com`,
     city: overrides.city ?? "Tashkent",
     fullName: overrides.fullName ?? `Test Candidate ${id}`,
-    motivation: overrides.motivation ?? "I want to work here because it is a great company.",
+    // MUST be ≥50 words — bot enforces wordCount < 50 at handlers.ts:1102.
+    motivation: overrides.motivation ??
+      "I am deeply interested in this position because it aligns perfectly with my professional background and career aspirations. " +
+      "Over the past several years I have developed strong technical skills in software engineering and team collaboration. " +
+      "I believe this role offers an excellent opportunity for meaningful growth and I am excited to contribute positively to your organization.",
     portfolioLinks: overrides.portfolioLinks ?? ["https://portfolio.example.com"],
     photoSizeBytes: overrides.photoSizeBytes ?? 500_000,
     answers: overrides.answers ?? ["Yes", "3 years", "TeamWork", "English B2"],

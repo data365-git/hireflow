@@ -5,7 +5,19 @@ export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+// ── Test escape hatch ──────────────────────────────────────────────────────
+// In NODE_ENV=test, bypass cookie/header reading so server actions can be
+// called directly from vitest without a real HTTP request context.
+// Install via _installTestSessionHook in tests/e2e/setup/global-setup.ts.
+let _testSessionHook: (() => JwtPayload | null) | null = null;
+
+export function _installTestSessionHook(fn: (() => JwtPayload | null) | null) {
+  _testSessionHook = fn;
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 export async function getSession(): Promise<JwtPayload | null> {
+  if (_testSessionHook) return _testSessionHook();
   const auth = (await headers()).get("authorization");
   if (auth?.startsWith("Bearer ")) {
     try { return await verifyAccessToken(auth.slice(7)); } catch { /* fall through */ }

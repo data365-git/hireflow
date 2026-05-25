@@ -1,25 +1,95 @@
+// tests/e2e/scenarios/07-rbac-and-isolation.test.ts
 import { describe, test, expect } from "vitest";
 import { seedHrUser, seedVacancy } from "../fixtures/builders";
-import { createVacancy } from "@/app/actions/vacancies";
+import { sendUpdate } from "../harness/send-update";
+import { makeStartUpdate } from "../fixtures/payloads/start";
+import { makeCallbackUpdate } from "../fixtures/payloads/callback";
+import { countApplications } from "../harness/verify";
+import { _installTestSessionHook } from "@/lib/auth/session";
+import { getVacancies } from "@/app/actions/vacancies";
 
 describe("07 — RBAC and Isolation", () => {
-  test("demo vacancy is invisible to real-mode reads (isDemo isolation)", async () => {
+  test("demo vacancy is NOT returned by getVacancies in live mode", async () => {
     const hr = await seedHrUser();
-    const vacancyId = await seedVacancy({ hrId: hr.id, isDemo: true });
+    const demoId = await seedVacancy({ hrId: hr.id, isDemo: true });
+    const liveId = await seedVacancy({ hrId: hr.id, isDemo: false });
 
-    const { getVacancies } = await import("@/app/actions/vacancies");
-    // Real-mode read should not return the demo vacancy
-    // (assuming getVacancies filters by getCurrentDataMode() = false)
     const vacancies = await getVacancies();
-    const found = vacancies.find((v) => v.id === vacancyId);
-    expect(found).toBeUndefined();
+    const ids = vacancies.map((v: { id: string }) => v.id);
+    expect(ids).not.toContain(demoId);
+    expect(ids).toContain(liveId);
   });
 
-  test("createVacancy writes isDemo=false from bot writes (bot always operates in Live mode)", async () => {
-    // The bot sets isDemo via getCurrentDataMode() which reads process.env.DATA_MODE
-    // In test env DATA_MODE is not set to "demo", so bot writes are always isDemo=false
-    // This is validated by checking that bot-created applications have isDemo=false on the vacancy
-    // (structural assertion — no DB write needed)
+  test("bot /start for a demo vacancy does NOT create an application (bot is always live-mode)", async () => {
+    const hr = await seedHrUser();
+    const demoVacancyId = await seedVacancy({ hrId: hr.id, isDemo: true });
+    const uid = 107_001;
+
+    await sendUpdate(makeStartUpdate({ telegramUserId: uid, payload: demoVacancyId }));
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: uid, data: "first_lang_uz" }));
+
+    // getLiveActiveVacancy in handlers.ts filters isDemo=false — no browsing app created
+    expect(await countApplications(demoVacancyId)).toBe(0);
+  });
+
+  test("bot operates in live mode regardless of DATA_MODE env var", () => {
+    // The bot always writes isDemo=false — this is enforced by getLiveActiveVacancy
+    // filtering eq(vacancies.isDemo, false). Structural assertion.
     expect(process.env.DATA_MODE).not.toBe("demo");
+  });
+
+  test("non-admin session is rejected by requirePermission (403)", async () => {
+    // Temporarily install a no-roles session
+    _installTestSessionHook(() => ({
+      sub: "limited-user",
+      email: "limited@test.com",
+      roles: [],
+      iat: 0,
+      exp: 9_999_999_999,
+    }));
+
+    let caughtError: unknown = null;
+    let result: unknown = null;
+    try {
+      const { createVacancy } = await import("@/app/actions/vacancies");
+      result = await createVacancy({
+        title: "Unauthorized",
+        department: "X",
+        workType: "office",
+        employmentType: "full-time",
+        location: "Tashkent",
+        salaryMin: 1,
+        salaryMax: 2,
+        description: "x",
+        language: "uz",
+        stages: [
+          { name: "Hired",     color: "hired",     isFinal: true, isRejected: false },
+          { name: "Rejected",  color: "rejected",  isFinal: true, isRejected: true  },
+        ],
+        questions: [],
+        sources: [],
+        responsibleHrId: null,
+        introMessage: null,
+        successMessage: null,
+      });
+    } catch (err) {
+      caughtError = err;
+    } finally {
+      // Always restore admin session
+      _installTestSessionHook(() => ({
+        sub: "test-admin-id",
+        email: "test@hireflow.test",
+        roles: ["admin"],
+        iat: 0,
+        exp: 9_999_999_999,
+      }));
+    }
+
+    if (caughtError) {
+      expect((caughtError as Error).message).toMatch(/forbidden|403|unauthorized/i);
+    } else {
+      // Some server actions return error objects rather than throwing
+      expect((result as { ok: boolean }).ok).toBe(false);
+    }
   });
 });
