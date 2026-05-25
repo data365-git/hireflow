@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { fileId: string } }
+  { params }: { params: Promise<{ fileId: string }> }
 ) {
   // Auth check — only logged-in HR can fetch candidate photos
   try {
@@ -15,7 +15,7 @@ export async function GET(
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const { fileId } = params;
+  const { fileId } = await params;
   if (!fileId) return new NextResponse("Missing fileId", { status: 400 });
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
