@@ -158,6 +158,7 @@ export const applications = pgTable("applications", {
   sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
   motivationLetter: text("motivation_letter"),
   portfolioLinks: jsonb("portfolio_links").$type<string[]>(),
+  applicationPhotoFileId: text("application_photo_file_id"),
 });
 
 // ─── Screening Answers ────────────────────────────────────────────────────────

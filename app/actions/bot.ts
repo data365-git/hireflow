@@ -502,6 +502,7 @@ export async function finalizeApplicationDetails(args: {
   cvFilename?: string;
   motivationLetter?: string;
   portfolioLinks?: string[];
+  applicationPhotoFileId?: string;
 }): Promise<void> {
   // Resolve candidateId from the application
   const appRows = await db
@@ -532,6 +533,9 @@ export async function finalizeApplicationDetails(args: {
   }
   if (args.portfolioLinks !== undefined) {
     appUpdateSet.portfolioLinks = args.portfolioLinks;
+  }
+  if (args.applicationPhotoFileId !== undefined) {
+    appUpdateSet.applicationPhotoFileId = args.applicationPhotoFileId;
   }
   if (Object.keys(appUpdateSet).length > 0) {
     await db.update(applications).set(appUpdateSet).where(eq(applications.id, args.applicationId));

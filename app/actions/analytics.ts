@@ -44,6 +44,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
         sourceId: applications.sourceId,
         motivationLetter: applications.motivationLetter,
         portfolioLinks: applications.portfolioLinks,
+        applicationPhotoFileId: applications.applicationPhotoFileId,
       })
       .from(applications)
       .innerJoin(

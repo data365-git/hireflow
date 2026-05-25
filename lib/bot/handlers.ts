@@ -49,6 +49,7 @@ const ANKETA_STATES = new Set([
   "awaiting_work_period",
   "awaiting_work_leave_reason",
   "awaiting_photo",
+  "awaiting_application_photo",
 ]);
 
 async function clearSessionAndAbandon(telegramUserId: string, applicationId?: string | null) {
@@ -297,8 +298,8 @@ async function startVacancyFlow(ctx: Context, vacancyId: string, lang: Lang, sou
     .where(eq(screeningQuestions.vacancyId, vacancyId))
     .orderBy(asc(screeningQuestions.orderIndex));
 
-  // +2 for name + email, +3 for portfolio + motivation + consent/review
-  const totalSteps = 2 + questions.length + 3;
+  // +2 for name + email, +4 for portfolio + photo + motivation + consent/review
+  const totalSteps = 2 + questions.length + 4;
   const minutes = Math.max(2, Math.ceil(totalSteps * 0.5));
 
   const salaryText = vacancy.salaryMin > 0 && vacancy.salaryMax > 0
@@ -518,7 +519,7 @@ export async function handleCallbackQuery(ctx: Context) {
     const questions = await db.select().from(screeningQuestions)
       .where(eq(screeningQuestions.vacancyId, reapplyVacancyId))
       .orderBy(asc(screeningQuestions.orderIndex));
-    const totalSteps = 2 + questions.length + 3;
+    const totalSteps = 2 + questions.length + 4;
     const collectedData: Record<string, unknown> = {
       totalSteps,
       fullName: candRows[0].fullName,
@@ -880,6 +881,21 @@ export async function handlePhoto(ctx: Context) {
   const candidate = await getCandidateByTelegramId(telegramUserId);
   const lang = candidate ? candidateLang(candidate, await resolveBotLang(ctx)) : await resolveBotLang(ctx);
 
+  if (session?.state === "awaiting_application_photo") {
+    const photo = ctx.message?.photo;
+    if (!photo || photo.length === 0 || !candidate) {
+      return ctx.reply(tr(lang, "err_photo_required"), { parse_mode: "Markdown" });
+    }
+    const largest = photo[photo.length - 1];
+    const appPhotoData = (session.collectedData as Record<string, unknown>) ?? {};
+    appPhotoData.applicationPhotoFileId = largest.file_id;
+    const totalSteps = (appPhotoData.totalSteps as number) ?? 6;
+    const motivationStep = totalSteps - 1;
+    await saveBotSession(telegramUserId, { state: "awaiting_motivation", collectedData: appPhotoData });
+    await ctx.reply(tr(lang, "got_photo"), { parse_mode: "Markdown" });
+    return ctx.reply(tr(lang, "ask_motivation", { step: motivationStep, total: totalSteps }), { parse_mode: "Markdown" });
+  }
+
   if (session?.state === "awaiting_photo") {
     const photo = ctx.message?.photo;
     if (!photo || photo.length === 0 || !candidate) {
@@ -1045,6 +1061,9 @@ export async function handleText(ctx: Context) {
     return;
   }
 
+  // CONVENTION: bot-handled steps (photo, portfolio, motivation, CV) must NOT be duplicated
+  // as screening questions in vacancy templates. If a template question asks for portfolio
+  // links or a photo, delete it — the bot collects these in dedicated states.
   if (session.state === "awaiting_portfolio") {
     const links = text.split("\n").map((l) => l.trim()).filter(Boolean);
     const valid = links.filter((l) => /^https?:\/\//i.test(l));
@@ -1052,9 +1071,14 @@ export async function handleText(ctx: Context) {
       return ctx.reply(tr(lang, "err_portfolio_min"), { parse_mode: "Markdown" });
     }
     data.portfolioLinks = valid;
-    const motivationStep = totalSteps - 1;
-    await saveBotSession(telegramUserId, { state: "awaiting_motivation", collectedData: data });
-    return ctx.reply(tr(lang, "ask_motivation", { step: motivationStep, total: totalSteps }), { parse_mode: "Markdown" });
+    const photoStep = totalSteps - 2;
+    await saveBotSession(telegramUserId, { state: "awaiting_application_photo", collectedData: data });
+    return ctx.reply(tr(lang, "ask_application_photo", { step: photoStep, total: totalSteps }), { parse_mode: "Markdown" });
+  }
+
+  if (session.state === "awaiting_application_photo") {
+    // Candidate sent text instead of a photo — remind them to send a photo
+    return ctx.reply(tr(lang, "err_photo_required"), { parse_mode: "Markdown" });
   }
 
   if (session.state === "awaiting_motivation") {
@@ -1128,7 +1152,7 @@ async function startApplicationScreening(
   const questions = await db.select().from(screeningQuestions)
     .where(eq(screeningQuestions.vacancyId, vacancyId))
     .orderBy(asc(screeningQuestions.orderIndex));
-  const totalSteps = 2 + questions.length + 3;
+  const totalSteps = 2 + questions.length + 4;
 
   const candidateId = ((ctx as any).state?.candidateId as string | undefined) ?? candidate?.id;
   let applicationId: string | undefined;

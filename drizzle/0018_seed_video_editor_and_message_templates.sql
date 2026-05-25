@@ -24,7 +24,6 @@ VALUES
 👤 Lavozimingiz
 📅 Ishlagan davringiz
 📝 Ishdan ketish sababi', 'long-text', NULL, 9),
-  ('qt-video-editor-full-q10', 'qt-video-editor-full', 'Eng yaxshi 3 ta editingiz va portfoliongiz linkini yuboring', 'long-text', NULL, 10),
   ('qt-video-editor-full-q11', 'qt-video-editor-full', 'Nega aynan sizni ushbu lavozimga munosib nomzod sifatida tanlashimiz kerak? 100 so''zdan iborat motivatsion xat yozing. E''tibor bering: ushbu xat saralash jarayonida muhim rol o''ynaydi.', 'long-text', NULL, 11)
 ON CONFLICT (id) DO NOTHING;
 

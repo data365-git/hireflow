@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CandidatePhoto } from "@/components/candidates/CandidatePhoto";
+import { getFileUrl } from "@/app/actions/telegram-files";
 import type { Candidate, Application } from "@/lib/types";
 
 function LangDots({ level }: { level: string | null | undefined }) {
@@ -44,6 +45,7 @@ type AnketaData = {
   application: Application & {
     motivationLetter?: string | null;
     portfolioLinks?: string[] | null;
+    applicationPhotoFileId?: string | null;
   };
 };
 
@@ -128,9 +130,16 @@ export function AnketaTab({ data }: Props) {
   const { candidate: cand, application: app } = data;
   const [motExpanded, setMotExpanded] = useState(false);
   const [view, setView] = useState<"detailed" | "compact">("detailed");
+  const [appPhotoUrl, setAppPhotoUrl] = useState<string | null>(null);
 
   const portfolioLinks = (app as AnketaData["application"]).portfolioLinks ?? [];
   const motivationLetter = (app as AnketaData["application"]).motivationLetter ?? null;
+  const applicationPhotoFileId = (app as AnketaData["application"]).applicationPhotoFileId ?? null;
+
+  useEffect(() => {
+    if (!applicationPhotoFileId) return;
+    getFileUrl(applicationPhotoFileId).then((url) => setAppPhotoUrl(url));
+  }, [applicationPhotoFileId]);
 
   // Cast to access new fields without TypeScript errors until Agent A's schema lands
   const photoFileId = (cand as AnketaData["candidate"]).photoFileId ?? null;
@@ -163,7 +172,7 @@ export function AnketaTab({ data }: Props) {
   const hasWork = workExp.length > 0;
 
   // Application section
-  const hasApplication = portfolioLinks.length > 0 || Boolean(motivationLetter);
+  const hasApplication = portfolioLinks.length > 0 || Boolean(motivationLetter) || Boolean(applicationPhotoFileId);
 
   // Consent
   const hasConsent = Boolean(consentedAt);
@@ -316,6 +325,24 @@ export function AnketaTab({ data }: Props) {
       {/* ── This application ── */}
       {hasApplication && view === "detailed" && (
         <Section title="This application">
+          {applicationPhotoFileId && (
+            <div className="mb-3">
+              <p className="text-micro text-subtle uppercase tracking-wide mb-1.5">
+                Application photo
+              </p>
+              {appPhotoUrl ? (
+                <img
+                  src={appPhotoUrl}
+                  alt="Application photo"
+                  className="w-32 h-32 object-cover rounded-lg border border-border"
+                />
+              ) : (
+                <p className="text-body-sm text-muted">
+                  📸 Application photo: <span className="font-mono text-xs">{applicationPhotoFileId}</span>
+                </p>
+              )}
+            </div>
+          )}
           {portfolioLinks.length > 0 && (
             <div className="mb-3">
               <p className="text-micro text-subtle uppercase tracking-wide mb-1.5">
