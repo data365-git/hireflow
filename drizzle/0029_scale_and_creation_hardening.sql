@@ -1,7 +1,15 @@
 -- T0.1: Unique constraint — prevents duplicate (candidate, vacancy) applications under concurrent /start webhooks
-ALTER TABLE applications
-  ADD CONSTRAINT IF NOT EXISTS applications_candidate_vacancy_uniq
-  UNIQUE (candidate_id, vacancy_id);
+-- Note: Postgres does not support IF NOT EXISTS on ADD CONSTRAINT; use DO block instead.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'applications_candidate_vacancy_uniq'
+  ) THEN
+    ALTER TABLE applications
+      ADD CONSTRAINT applications_candidate_vacancy_uniq
+      UNIQUE (candidate_id, vacancy_id);
+  END IF;
+END$$;
 
 -- T0.2: Hot indexes — required for 100+ applicant load
 CREATE INDEX IF NOT EXISTS applications_vacancy_id_idx        ON applications(vacancy_id);
