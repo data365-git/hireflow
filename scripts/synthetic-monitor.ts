@@ -15,8 +15,7 @@
  *   - Recovery → alert once.
  *
  * Schedule: run every 15 minutes via Railway cron or GitHub Actions schedule.
- * Add to railway.json:
- *   { "deploy": { "cronJobs": [{ "schedule": "*/15 * * * *", "command": "tsx scripts/synthetic-monitor.ts" }] } }
+ * (See railway.json for cronJobs config with schedule "every 15 mins")
  *
  * Required env vars (set in Railway prod service):
  *   SYNTHETIC_WEBHOOK_URL     — e.g. https://hireflow.up.railway.app/api/tg-webhook
