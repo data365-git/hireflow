@@ -1173,14 +1173,23 @@ async function startApplicationScreening(
   const candidateId = ((ctx as any).state?.candidateId as string | undefined) ?? candidate?.id;
   let applicationId: string | undefined;
   if (candidateId) {
-    const session = await getBotSession(telegramUserId);
-    const browsingSourceId = session?.applicationId
-      ? (await db
-          .select({ sourceId: applications.sourceId })
-          .from(applications)
-          .where(eq(applications.id, session.applicationId)))[0]?.sourceId
-      : null;
-    applicationId = await createInProgressApplication({ candidateId, vacancyId, sourceId: browsingSourceId });
+    // Migration 0029 added UNIQUE(candidate_id, vacancy_id). startAnketa clears
+    // session.applicationId before this runs, so we can't rely on the session.
+    // Query the DB directly: if a browsing app already exists for this pair,
+    // upgrade it in-place. Otherwise create a fresh in_progress application.
+    const [existingApp] = await db
+      .select({ id: applications.id })
+      .from(applications)
+      .where(and(eq(applications.candidateId, candidateId), eq(applications.vacancyId, vacancyId)))
+      .limit(1);
+    if (existingApp) {
+      await ensureApplicationInProgress(existingApp.id).catch((err) => {
+        console.error("[startApplicationScreening] upgrade browsing→in_progress failed:", err);
+      });
+      applicationId = existingApp.id;
+    } else {
+      applicationId = await createInProgressApplication({ candidateId, vacancyId });
+    }
   }
 
   const existingName = options.forceReaskStable ? undefined : candidate?.fullName;
@@ -1825,7 +1834,16 @@ async function handleSubmitConfirm(ctx: Context, lang: Lang) {
       // Telegram has no data-mode cookie: bot-created candidates/applications are Live-only.
       const candidateId = (ctx as any).state?.candidateId as string | undefined;
       if (candidateId) {
-        const liveAppId = await createInProgressApplication({ candidateId, vacancyId: session.vacancyId! });
+        // Migration 0029 added UNIQUE(candidate_id, vacancy_id). A browsing/in_progress
+        // application may already exist — look it up and upgrade it instead of inserting.
+        const [existingBrowsingApp] = await db
+          .select({ id: applications.id })
+          .from(applications)
+          .where(and(eq(applications.candidateId, candidateId), eq(applications.vacancyId, session.vacancyId!)))
+          .limit(1);
+        const liveAppId = existingBrowsingApp
+          ? (await ensureApplicationInProgress(existingBrowsingApp.id).catch(() => {}), existingBrowsingApp.id)
+          : await createInProgressApplication({ candidateId, vacancyId: session.vacancyId! });
         const answers = (data.answers as Record<string, string>) ?? {};
         for (const [questionId, answerText] of Object.entries(answers)) {
           if (!answerText) continue;

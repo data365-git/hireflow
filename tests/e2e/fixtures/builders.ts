@@ -21,6 +21,8 @@ export async function seedHrUser(opts: {
   const id = `user-${crypto.randomUUID()}`;
   const email = opts.email ?? `hr-${id}@test.com`;
   const role = opts.role ?? "admin";
+  const name = opts.fullName ?? "Test HR";
+  const avatarInitials = name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
   await db.insert(users).values({
     id,
@@ -28,6 +30,9 @@ export async function seedHrUser(opts: {
     fullName: opts.fullName ?? "Test HR",
     passwordHash: "not-a-real-hash",
     isActive: true,
+    name,
+    avatarInitials,
+    role,
   });
   await db.insert(userRoles).values({
     id: `role-${crypto.randomUUID()}`,

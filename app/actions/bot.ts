@@ -139,38 +139,34 @@ export async function upsertCandidateFromTelegram(args: {
   telegramUsername?: string;
   telegramFirstName: string;
 }): Promise<string> {
-  const existing = await db
-    .select()
-    .from(candidates)
-    .where(eq(candidates.telegramUserId, args.telegramUserId));
-
-  if (existing[0]) {
-    await db
-      .update(candidates)
-      .set({
-        telegramUsername: args.telegramUsername ?? existing[0].telegramUsername,
+  // Atomic UPSERT — handles concurrent /start calls for the same candidate without
+  // the TOCTOU race of a SELECT-then-INSERT pattern.
+  const candidateId = crypto.randomUUID();
+  const [row] = await db
+    .insert(candidates)
+    .values({
+      id: candidateId,
+      fullName: args.telegramFirstName,
+      telegramUserId: args.telegramUserId,
+      telegramUsername: args.telegramUsername ?? "",
+      telegramFirstName: args.telegramFirstName,
+      phone: "",
+      language: "en",
+      city: "",
+      isDemo: false,
+      createdAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: candidates.telegramUserId,
+      // isDemo: false — Telegram bot always writes to Live data, never Demo
+      set: {
+        telegramUsername: args.telegramUsername ?? "",
         telegramFirstName: args.telegramFirstName,
         isDemo: false,
-      })
-      .where(eq(candidates.id, existing[0].id));
-    return existing[0].id;
-  }
-
-  const candidateId = crypto.randomUUID();
-  // isDemo: false — Telegram bot always writes to Live data, never Demo
-  await db.insert(candidates).values({
-    id: candidateId,
-    fullName: args.telegramFirstName,
-    telegramUserId: args.telegramUserId,
-    telegramUsername: args.telegramUsername ?? "",
-    telegramFirstName: args.telegramFirstName,
-    phone: "",
-    language: "en",
-    city: "",
-    isDemo: false,
-    createdAt: new Date(),
-  });
-  return candidateId;
+      },
+    })
+    .returning({ id: candidates.id });
+  return row.id;
 }
 
 export async function saveBotMessage(args: {

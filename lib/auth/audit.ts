@@ -16,12 +16,12 @@ export function audit(entry: {
   ip?: string;
   userAgent?: string;
   vacancyId?: string;
-}): void {
+}): Promise<void> {
   const clean = (o: unknown) => {
     if (!o || typeof o !== "object") return o;
     return Object.fromEntries(Object.entries(o as object).filter(([k]) => !STRIP.includes(k)));
   };
-  db.insert(auditLogs).values({
+  return db.insert(auditLogs).values({
     id: crypto.randomUUID(),
     action: entry.action,
     actorId: entry.actorId,
@@ -35,5 +35,5 @@ export function audit(entry: {
     ip: entry.ip,
     userAgent: entry.userAgent,
     vacancyId: entry.vacancyId,
-  }).catch((e) => console.error("audit failed", e));
+  }).then(() => void 0).catch((e) => console.error("audit failed", e));
 }

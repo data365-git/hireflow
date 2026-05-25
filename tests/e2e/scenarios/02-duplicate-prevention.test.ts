@@ -4,6 +4,7 @@ import { seedHrUser, seedVacancy, seedSources, makeCandidate } from "../fixtures
 import { countApplications, assertNoDuplicateApplications } from "../harness/verify";
 import { sendUpdate } from "../harness/send-update";
 import { makeStartUpdate } from "../fixtures/payloads/start";
+import { makeCallbackUpdate } from "../fixtures/payloads/callback";
 
 describe("02 — Duplicate Prevention", () => {
   test("two concurrent /start for same candidate+vacancy → exactly 1 application row", async () => {
@@ -11,13 +12,17 @@ describe("02 — Duplicate Prevention", () => {
     const vacancyId = await seedVacancy({ hrId: hr.id });
     const cand = makeCandidate({ telegramUserId: 102_001 });
 
+    // Both /start calls race to create the candidate (UPSERT handles the race) and ask for language.
     const [r1, r2] = await Promise.all([
       sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: vacancyId })),
       sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: vacancyId })),
     ]);
-
     expect(r1.status).toBe(200);
     expect(r2.status).toBe(200);
+
+    // Pick language once → startVacancyFlow → getOrCreateBrowsingApplication (UPSERT) → 1 row.
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: cand.telegramUserId, data: "first_lang_uz" }));
+
     expect(await countApplications(vacancyId)).toBe(1);
     await assertNoDuplicateApplications(vacancyId);
   });
@@ -25,12 +30,15 @@ describe("02 — Duplicate Prevention", () => {
   test("same update_id sent twice → processed exactly once", async () => {
     const hr = await seedHrUser();
     const vacancyId = await seedVacancy({ hrId: hr.id });
+    const uid = 102_002;
 
-    const update = makeStartUpdate({ telegramUserId: 102_002, payload: vacancyId });
+    const update = makeStartUpdate({ telegramUserId: uid, payload: vacancyId });
     const r1 = await sendUpdate(update);
-    const r2 = await sendUpdate(update); // identical update_id
-
     expect(r1.status).toBe(200);
+    // Pick language → 1 browsing app created.
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: uid, data: "first_lang_uz" }));
+
+    const r2 = await sendUpdate(update); // identical update_id → dedup table → 200, no processing
     expect(r2.status).toBe(200);
     expect(await countApplications(vacancyId)).toBe(1);
   });
@@ -41,7 +49,11 @@ describe("02 — Duplicate Prevention", () => {
 
     await Promise.all(
       Array.from({ length: 10 }, (_, i) =>
-        sendUpdate(makeStartUpdate({ telegramUserId: 102_100 + i, payload: vacancyId }))
+        (async () => {
+          const uid = 102_100 + i;
+          await sendUpdate(makeStartUpdate({ telegramUserId: uid, payload: vacancyId }));
+          await sendUpdate(makeCallbackUpdate({ telegramUserId: uid, data: "first_lang_uz" }));
+        })()
       )
     );
 
@@ -55,6 +67,13 @@ describe("02 — Duplicate Prevention", () => {
     const [srcA, srcB] = await seedSources(vacancyId, ["A", "B"]);
     const cand = makeCandidate({ telegramUserId: 102_201 });
 
+    // Establish candidate with languagePref so subsequent /start calls skip language selection
+    // and go directly to startVacancyFlow → getOrCreateBrowsingApplication.
+    await sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: `${vacancyId}_${srcA.id}` }));
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: cand.telegramUserId, data: "first_lang_uz" }));
+
+    // Now candidate has languagePref → two concurrent /start calls both call
+    // getOrCreateBrowsingApplication (UPSERT) → exactly 1 row survives.
     await Promise.all([
       sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: `${vacancyId}_${srcA.id}` })),
       sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: `${vacancyId}_${srcB.id}` })),

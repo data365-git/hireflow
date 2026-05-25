@@ -47,7 +47,7 @@ describe("03 — Vacancy Lifecycle", () => {
       ],
     }));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("VALIDATION");
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION");
   });
 
   test("createVacancy with isRejected+!isFinal stage → VALIDATION error", async () => {
@@ -59,7 +59,7 @@ describe("03 — Vacancy Lifecycle", () => {
       ],
     }));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("VALIDATION");
+    if (!result.ok) expect(result.error.code).toBe("VALIDATION");
   });
 
   test("createVacancy seeds Direct + user-supplied sources inside the transaction", async () => {
@@ -94,8 +94,8 @@ describe("03 — Vacancy Lifecycle", () => {
     const hr = await seedHrUser();
     const vacancyId = await seedVacancy({ hrId: hr.id });
 
-    const { deleteVacancy } = await import("@/app/actions/vacancies");
-    await deleteVacancy(vacancyId);
+    const { softDeleteVacancy } = await import("@/app/actions/vacancies");
+    await softDeleteVacancy(vacancyId);
 
     const uid = 103_001;
     await sendUpdate(makeStartUpdate({ telegramUserId: uid, payload: vacancyId }));

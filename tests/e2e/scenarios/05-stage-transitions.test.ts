@@ -2,7 +2,7 @@
 import { describe, test, expect } from "vitest";
 import { seedHrUser, seedVacancy, seedSources, makeCandidate } from "../fixtures/builders";
 import { driveFullApplication } from "../harness/drive-flow";
-import { getApplication, getAuditEvents } from "../harness/verify";
+import { getApplication, getTimelineEvents } from "../harness/verify";
 import { moveApplicationToStage } from "@/app/actions/applications";
 import { db } from "@/lib/db/client";
 import { vacancyStages } from "@/lib/db/schema";
@@ -28,8 +28,9 @@ describe("05 — Stage Transitions", () => {
 
     await moveApplicationToStage(app!.id, screeningStage!.id);
 
-    const audits = await getAuditEvents(vacancyId);
-    expect(audits.length).toBeGreaterThan(0);
+    // moveApplicationToStage writes to timeline_events (not audit_logs which is for admin events).
+    const events = await getTimelineEvents(app!.id);
+    expect(events.length).toBeGreaterThan(0);
   });
 
   test("moving to Hired stage (isFinal+!isRejected) increments hired count in source stats", async () => {

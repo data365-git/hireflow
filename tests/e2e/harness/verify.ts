@@ -1,6 +1,6 @@
 // tests/e2e/harness/verify.ts
 import { db, pool } from "@/lib/db/client";
-import { applications, candidates, auditLogs } from "@/lib/db/schema";
+import { applications, candidates, auditLogs, timelineEvents } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
@@ -67,6 +67,11 @@ export async function getAuditEvents(vacancyId: string, action?: string) {
   const conditions = [eq(auditLogs.vacancyId, vacancyId)];
   if (action) conditions.push(eq(auditLogs.action, action));
   return db.select().from(auditLogs).where(and(...conditions));
+}
+
+/** Returns timeline_events rows for a given applicationId (stage changes, etc.) */
+export async function getTimelineEvents(applicationId: string) {
+  return db.select().from(timelineEvents).where(eq(timelineEvents.applicationId, applicationId));
 }
 
 export async function getApplicationStatus(candidateTelegramId: number, vacancyId: string) {

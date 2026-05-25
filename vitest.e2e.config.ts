@@ -7,13 +7,10 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["tests/e2e/setup/global-setup.ts"],
     pool: "forks",
-    poolOptions: {
-      forks: {
-        // Single fork = all test files share one process and one DB connection pool.
-        // Required because tests share a real Postgres DB.
-        singleFork: true,
-      },
-    },
+    singleFork: true,
+    // Run test FILES one at a time — required because beforeEach resets the
+    // shared DB, and concurrent files would race against each other's resets.
+    fileParallelism: false,
     // Per-test timeout: 30s for scenario tests. Load tests override per-test.
     testTimeout: 30_000,
     hookTimeout: 120_000, // runMigrations can be slow on a cold Docker DB
@@ -25,6 +22,10 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: { "@": resolve(__dirname, ".") },
+    alias: {
+      "@": resolve(__dirname, "."),
+      "next/cache": resolve(__dirname, "tests/mocks/next-cache.ts"),
+      "next/headers": resolve(__dirname, "tests/mocks/next-headers.ts"),
+    },
   },
 });

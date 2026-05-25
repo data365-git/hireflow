@@ -42,7 +42,9 @@ export async function POST(req: Request) {
   try {
     return await handleUpdate(req);
   } catch (err) {
+    // Standard practice: always return 200 so Telegram stops retrying.
+    // The error is logged server-side for investigation.
     console.error("Webhook error:", err);
-    return new Response("Error", { status: 500 });
+    return new Response("OK", { status: 200 });
   }
 }

@@ -6,7 +6,7 @@ import { makeStartUpdate } from "../fixtures/payloads/start";
 import { makeCallbackUpdate } from "../fixtures/payloads/callback";
 import { countApplications } from "../harness/verify";
 import { _installTestSessionHook } from "@/lib/auth/session";
-import { getVacancies } from "@/app/actions/vacancies";
+import { getAllVacancies } from "@/app/actions/vacancies";
 
 describe("07 — RBAC and Isolation", () => {
   test("demo vacancy is NOT returned by getVacancies in live mode", async () => {
@@ -14,7 +14,7 @@ describe("07 — RBAC and Isolation", () => {
     const demoId = await seedVacancy({ hrId: hr.id, isDemo: true });
     const liveId = await seedVacancy({ hrId: hr.id, isDemo: false });
 
-    const vacancies = await getVacancies();
+    const vacancies = await getAllVacancies();
     const ids = vacancies.map((v: { id: string }) => v.id);
     expect(ids).not.toContain(demoId);
     expect(ids).toContain(liveId);

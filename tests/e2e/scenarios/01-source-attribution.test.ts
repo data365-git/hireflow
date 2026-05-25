@@ -5,6 +5,7 @@ import { driveFullApplication } from "../harness/drive-flow";
 import { getApplication, getSourceDistribution } from "../harness/verify";
 import { sendUpdate } from "../harness/send-update";
 import { makeStartUpdate } from "../fixtures/payloads/start";
+import { makeCallbackUpdate } from "../fixtures/payloads/callback";
 
 describe("01 — Source Attribution", () => {
   test("first-touch attribution: 2nd source link click does not overwrite initial sourceId", async () => {
@@ -13,7 +14,11 @@ describe("01 — Source Attribution", () => {
     const [srcA, srcB] = await seedSources(vacancyId, ["Instagram", "Telegram"]);
     const cand = makeCandidate({ telegramUserId: 101_001 });
 
+    // First /start asks for language (candidate is new). Language pick → startVacancyFlow → creates browsing app with srcA.
     await sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: `${vacancyId}_${srcA.id}` }));
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: cand.telegramUserId, data: "first_lang_uz" }));
+    // Candidate now has languagePref → second /start goes directly to startVacancyFlow.
+    // getOrCreateBrowsingApplication is an UPSERT (ON CONFLICT preserves existing row) → sourceId stays srcA.
     await sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: `${vacancyId}_${srcB.id}` }));
 
     const app = await getApplication(cand.telegramUserId, vacancyId);
@@ -26,6 +31,7 @@ describe("01 — Source Attribution", () => {
     const cand = makeCandidate({ telegramUserId: 101_002 });
 
     await sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: vacancyId }));
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: cand.telegramUserId, data: "first_lang_uz" }));
 
     const app = await getApplication(cand.telegramUserId, vacancyId);
     expect(app?.sourceId).toBeNull();
@@ -39,6 +45,7 @@ describe("01 — Source Attribution", () => {
     const cand = makeCandidate({ telegramUserId: 101_003 });
 
     await sendUpdate(makeStartUpdate({ telegramUserId: cand.telegramUserId, payload: `${v1}_${srcV2.id}` }));
+    await sendUpdate(makeCallbackUpdate({ telegramUserId: cand.telegramUserId, data: "first_lang_uz" }));
 
     const app = await getApplication(cand.telegramUserId, v1);
     expect(app?.sourceId).toBeNull();
@@ -52,10 +59,14 @@ describe("01 — Source Attribution", () => {
 
     await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
-        sendUpdate(makeStartUpdate({
-          telegramUserId: 101_100 + i,
-          payload: `${vacancyId}_${srcIds[i % 4]}`,
-        }))
+        (async () => {
+          const uid = 101_100 + i;
+          await sendUpdate(makeStartUpdate({
+            telegramUserId: uid,
+            payload: `${vacancyId}_${srcIds[i % 4]}`,
+          }));
+          await sendUpdate(makeCallbackUpdate({ telegramUserId: uid, data: "first_lang_uz" }));
+        })()
       )
     );
 

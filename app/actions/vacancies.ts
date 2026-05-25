@@ -473,7 +473,7 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
     return createVacancyError("UNKNOWN", undefined, "Could not create vacancy. Try again.");
   }
 
-  audit({
+  await audit({
     action: "VACANCY_CREATE",
     actorId: session.sub,
     actorEmail: session.email,
@@ -557,7 +557,7 @@ export async function updateVacancyDetails(vacancyId: string, patch: VacancyPatc
 
   revalidateVacancy(vacancyId);
 
-  audit({
+  await audit({
     action: "VACANCY_UPDATE",
     actorId: session.sub,
     actorEmail: session.email,
@@ -957,7 +957,7 @@ export async function softDeleteVacancy(
     );
   }
 
-  audit({
+  await audit({
     action: "VACANCY_SOFT_DELETE",
     actorId: session.sub,
     actorEmail: session.email,
@@ -1004,7 +1004,7 @@ export async function restoreVacancy(vacancyId: string): Promise<VacancyDeleteRe
     });
   }
 
-  audit({
+  await audit({
     action: "VACANCY_RESTORE",
     actorId: session.sub,
     actorEmail: session.email,
@@ -1037,7 +1037,7 @@ export async function permanentlyDeleteVacancy(vacancyId: string): Promise<Vacan
     await tx.delete(vacancies).where(eq(vacancies.id, vacancyId));
   });
 
-  audit({
+  await audit({
     action: "VACANCY_HARD_DELETE",
     actorId: session.sub,
     actorEmail: session.email,
