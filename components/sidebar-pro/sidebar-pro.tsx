@@ -188,7 +188,7 @@ export function SidebarPro({
   return (
     <aside
       className={[
-        "bg-card border-r border-border flex flex-col shrink-0 relative overflow-hidden",
+        "bg-card border-r border-border flex flex-col shrink-0 relative overflow-hidden h-full",
         isResizing ? "" : "transition-[width] duration-200",
         className ?? "",
       ].filter(Boolean).join(" ")}
@@ -248,7 +248,7 @@ export function SidebarPro({
         </div>
       )}
 
-      <nav className="sidebar-pro-scroll flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      <nav className="sidebar-pro-scroll flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-6">
         {enablePins && pinnedItems.length > 0 && (
           <div>
             {!collapsed && (
@@ -407,7 +407,7 @@ export function SidebarPro({
       </nav>
 
       {footer && (
-        <div className={`shrink-0 ${collapsed ? "px-2 py-3" : "p-4"}`}>
+        <div className={`mt-auto shrink-0 border-t border-border ${collapsed ? "px-2 py-3" : "p-4"}`}>
           {footer}
         </div>
       )}
