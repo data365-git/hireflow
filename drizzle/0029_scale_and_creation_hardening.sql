@@ -1,13 +1,18 @@
 -- T0.1: Unique constraint — prevents duplicate (candidate, vacancy) applications under concurrent /start webhooks
 -- Note: Postgres does not support IF NOT EXISTS on ADD CONSTRAINT; use DO block instead.
 
--- Step 1 + 2 in a single PL/pgSQL block to guarantee sequential execution.
--- Removes duplicate (candidate_id, vacancy_id) rows (keeping the most recently active),
--- then adds the unique constraint. Cascades clean up linked screening_answers / timeline_events.
+-- Step 1 + 2 in a single PL/pgSQL block.
+-- We first acquire ACCESS EXCLUSIVE on applications to prevent the bot from inserting
+-- new rows (and thus new duplicates) between the DELETE and the ADD CONSTRAINT.
+-- Without the lock, a concurrent /start webhook could sneak in a duplicate in that gap.
 DO $$
 DECLARE
   deleted_count INTEGER;
 BEGIN
+  -- Block all concurrent INSERT/UPDATE/DELETE until the constraint is in place.
+  LOCK TABLE applications IN ACCESS EXCLUSIVE MODE;
+
+  -- Remove duplicates, keeping the most recently active row per (candidate_id, vacancy_id).
   DELETE FROM applications
   WHERE id IN (
     SELECT id FROM (
