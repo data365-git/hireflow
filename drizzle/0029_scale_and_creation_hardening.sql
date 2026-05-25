@@ -1,21 +1,28 @@
 -- T0.1: Unique constraint — prevents duplicate (candidate, vacancy) applications under concurrent /start webhooks
 -- Note: Postgres does not support IF NOT EXISTS on ADD CONSTRAINT; use DO block instead.
 
--- Step 1: Remove duplicate (candidate_id, vacancy_id) rows, keeping the most recent per pair.
--- Cascades via ON DELETE CASCADE to timeline_events, screening_answers, etc.
-WITH ranked AS (
-  SELECT id,
-    ROW_NUMBER() OVER (
-      PARTITION BY candidate_id, vacancy_id
-      ORDER BY created_at DESC NULLS LAST, id DESC
-    ) AS rn
-  FROM applications
-)
-DELETE FROM applications WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
-
--- Step 2: Now safe to add the unique constraint.
+-- Step 1 + 2 in a single PL/pgSQL block to guarantee sequential execution.
+-- Removes duplicate (candidate_id, vacancy_id) rows (keeping the most recently active),
+-- then adds the unique constraint. Cascades clean up linked screening_answers / timeline_events.
 DO $$
+DECLARE
+  deleted_count INTEGER;
 BEGIN
+  DELETE FROM applications
+  WHERE id IN (
+    SELECT id FROM (
+      SELECT id,
+        ROW_NUMBER() OVER (
+          PARTITION BY candidate_id, vacancy_id
+          ORDER BY last_activity_at DESC NULLS LAST, id DESC
+        ) AS rn
+      FROM applications
+    ) ranked
+    WHERE rn > 1
+  );
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RAISE NOTICE 'Removed % duplicate application rows', deleted_count;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'applications_candidate_vacancy_uniq'
   ) THEN
