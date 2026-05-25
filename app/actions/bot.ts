@@ -255,23 +255,6 @@ export async function getOrCreateBrowsingApplication(args: {
   vacancyId: string;
   sourceId?: string;
 }): Promise<string> {
-  const existing = await db
-    .select()
-    .from(applications)
-    .where(
-      and(
-        eq(applications.candidateId, args.candidateId),
-        eq(applications.vacancyId, args.vacancyId)
-      )
-    );
-  if (existing[0]) {
-    await db
-      .update(applications)
-      .set({ lastActivityAt: new Date() })
-      .where(eq(applications.id, existing[0].id));
-    return existing[0].id;
-  }
-
   // Validate sourceId belongs to this vacancy — null it out if mismatched/missing
   let validatedSourceId: string | null = null;
   if (args.sourceId) {
@@ -290,28 +273,41 @@ export async function getOrCreateBrowsingApplication(args: {
     }
   }
 
-  const appId = crypto.randomUUID();
-  await db.insert(applications).values({
-    id: appId,
-    candidateId: args.candidateId,
-    vacancyId: args.vacancyId,
-    currentStageId: await getFirstVacancyStageId(args.vacancyId),
-    appliedAt: new Date(),
-    lastActivityAt: new Date(),
-    status: "browsing",
-    sourceId: validatedSourceId,
-  });
+  const newId = crypto.randomUUID();
+  const now = new Date();
 
-  await db.insert(timelineEvents).values({
-    id: crypto.randomUUID(),
-    applicationId: appId,
-    type: "application_started",
-    description: "Viewed vacancy via Telegram bot",
-    createdAt: new Date(),
-  });
+  const [row] = await db
+    .insert(applications)
+    .values({
+      id: newId,
+      candidateId: args.candidateId,
+      vacancyId: args.vacancyId,
+      currentStageId: await getFirstVacancyStageId(args.vacancyId),
+      appliedAt: now,
+      lastActivityAt: now,
+      status: "browsing",
+      sourceId: validatedSourceId,
+    })
+    .onConflictDoUpdate({
+      target: [applications.candidateId, applications.vacancyId],
+      set: { lastActivityAt: now },
+    })
+    .returning({ id: applications.id });
 
-  revalidatePath(`/vacancies/${args.vacancyId}`);
-  return appId;
+  const isNew = row.id === newId;
+
+  if (isNew) {
+    await db.insert(timelineEvents).values({
+      id: crypto.randomUUID(),
+      applicationId: row.id,
+      type: "application_started",
+      description: "Viewed vacancy via Telegram bot",
+      createdAt: now,
+    });
+    revalidatePath(`/vacancies/${args.vacancyId}`);
+  }
+
+  return row.id;
 }
 
 export async function createInProgressApplication(args: {
