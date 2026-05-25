@@ -191,8 +191,14 @@ export async function getSourceStatsForVacancy(
   const sourceIds = sourceRows.map((r) => r.id);
 
   const appRows = await db
-    .select({ sourceId: applications.sourceId, status: applications.status })
+    .select({
+      sourceId: applications.sourceId,
+      status: applications.status,
+      stageIsFinal: vacancyStages.isFinal,
+      stageIsRejected: vacancyStages.isRejected,
+    })
     .from(applications)
+    .leftJoin(vacancyStages, eq(applications.currentStageId, vacancyStages.id))
     .where(
       and(
         eq(applications.vacancyId, vacancyId),
@@ -211,11 +217,12 @@ export async function getSourceStatsForVacancy(
     const entry = map.get(row.sourceId);
     if (!entry) continue;
     entry.views += 1;
-    const s = row.status as string;
-    if (s === "submitted" || s === "in_pipeline" || s === "hired" || s === "rejected") {
+    if (row.status === "in_progress" || row.status === "submitted") {
       entry.submitted += 1;
     }
-    if (s === "hired") entry.hired += 1;
+    if (row.stageIsFinal === true && row.stageIsRejected === false) {
+      entry.hired += 1;
+    }
   }
 
   return Array.from(map.values());
