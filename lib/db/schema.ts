@@ -5,6 +5,7 @@ import {
   date,
   boolean,
   integer,
+  bigint,
   jsonb,
   uniqueIndex,
   index,
@@ -55,6 +56,7 @@ export const vacancies = pgTable("vacancies", {
   isDemo: boolean("is_demo").notNull().default(false),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   deletedBy: text("deleted_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   deletedAtIdx: index("vacancies_deleted_at_idx").on(t.deletedAt),
 }));
@@ -69,6 +71,13 @@ export const vacancyStatusChanges = pgTable("vacancy_status_changes", {
 }, (t) => ({
   vacancyChangedAtIdx: index("vacancy_status_changes_vacancy_changed_at_idx").on(t.vacancyId, t.changedAt),
 }));
+
+// ─── Received Updates (webhook idempotency) ───────────────────────────────────
+
+export const receivedUpdates = pgTable("received_updates", {
+  updateId: bigint("update_id", { mode: "number" }).primaryKey(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ─── Vacancy Stages ───────────────────────────────────────────────────────────
 
@@ -159,7 +168,9 @@ export const applications = pgTable("applications", {
   motivationLetter: text("motivation_letter"),
   portfolioLinks: jsonb("portfolio_links").$type<string[]>(),
   applicationPhotoFileId: text("application_photo_file_id"),
-});
+}, (t) => ({
+  candidateVacancyUniq: uniqueIndex("applications_candidate_vacancy_uniq").on(t.candidateId, t.vacancyId),
+}));
 
 // ─── Screening Answers ────────────────────────────────────────────────────────
 
