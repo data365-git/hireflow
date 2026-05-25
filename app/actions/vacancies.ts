@@ -201,11 +201,12 @@ function departmentIdForName(value: string): string {
   return `dept_${slug || "general"}`;
 }
 
-async function upsertDepartmentFromVacancyName(name: string) {
+async function upsertDepartmentFromVacancyName(name: string, tx?: Parameters<Parameters<typeof db.transaction>[0]>[0]) {
   const displayName = name.trim();
   if (!displayName) return;
   const normalizedName = normalizeDepartmentName(displayName);
-  await db
+  const dbOrTx = tx ?? db;
+  await dbOrTx
     .insert(departments)
     .values({
       id: departmentIdForName(normalizedName),
@@ -353,6 +354,16 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
     return createVacancyError("VALIDATION", "salaryMin", "Minimum salary cannot be greater than maximum salary.");
   }
 
+  // Validate stage semantics
+  const hasHireStage = stageRows.some((s) => s.isFinal && !s.isRejected);
+  if (!hasHireStage) {
+    return createVacancyError("VALIDATION", "stages", "At least one stage must be the final 'Hired' stage (isFinal=true, isRejected=false).");
+  }
+  const rejectedNotFinal = stageRows.some((s) => s.isRejected && !s.isFinal);
+  if (rejectedNotFinal) {
+    return createVacancyError("VALIDATION", "stages", "Rejection stages must also be marked as final.");
+  }
+
   let responsibleHrId = input.responsibleHrId || null;
   if (responsibleHrId) {
     const [responsibleHr] = await db
@@ -370,9 +381,9 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
   }
 
   try {
-    await upsertDepartmentFromVacancyName(input.department);
-
     await db.transaction(async (tx) => {
+      await upsertDepartmentFromVacancyName(input.department, tx);
+
       await tx.insert(vacancies).values({
         id: vacancyId,
         title: input.title.trim(),
@@ -424,6 +435,26 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
         name: "Direct",
         botLink: `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${directSourceId}`,
       });
+
+      // Seed user-supplied sources from wizard step (skip any named "Direct" since we already created it)
+      if (input.sources && input.sources.length > 0) {
+        const extraSources = input.sources.filter(
+          (s) => s.name.trim().toLowerCase() !== "direct" && s.name.trim()
+        );
+        if (extraSources.length > 0) {
+          await tx.insert(sources).values(
+            extraSources.map((s) => {
+              const srcId = `src-${crypto.randomUUID()}`;
+              return {
+                id: srcId,
+                vacancyId,
+                name: s.name.trim(),
+                botLink: `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "data365_HR_bot"}?start=${vacancyId}_${srcId}`,
+              };
+            })
+          );
+        }
+      }
     });
   } catch (error) {
     const code = getDbErrorCode(error);
@@ -441,6 +472,22 @@ export async function createVacancy(input: CreateVacancyInput): Promise<CreateVa
     console.error("createVacancy unexpected failure", error);
     return createVacancyError("UNKNOWN", undefined, "Could not create vacancy. Try again.");
   }
+
+  audit({
+    action: "VACANCY_CREATE",
+    actorId: session.sub,
+    actorEmail: session.email,
+    entityType: "vacancy",
+    entityId: vacancyId,
+    entityName: input.title.trim(),
+    vacancyId,
+    after: {
+      title: input.title.trim(),
+      department: input.department.trim(),
+      status: "active",
+      stageCount: stageRows.length,
+    },
+  });
 
   revalidatePath("/vacancies");
   revalidatePath(`/vacancies/${vacancyId}`);
@@ -486,6 +533,8 @@ export async function updateVacancyDetails(vacancyId: string, patch: VacancyPatc
   const salaryMax = update.salaryMax ?? current.salaryMax;
   if (salaryMin > salaryMax) throw new Error("Minimum salary cannot be greater than maximum salary.");
 
+  update.updatedAt = new Date();
+
   const [row] = await db
     .update(vacancies)
     .set(update)
@@ -507,6 +556,18 @@ export async function updateVacancyDetails(vacancyId: string, patch: VacancyPatc
   }
 
   revalidateVacancy(vacancyId);
+
+  audit({
+    action: "VACANCY_UPDATE",
+    actorId: session.sub,
+    actorEmail: session.email,
+    entityType: "vacancy",
+    entityId: vacancyId,
+    vacancyId,
+    before: { title: current.title, status: current.status, department: current.department },
+    after: { ...patch },
+  });
+
   return serializeVacancy(row);
 }
 
