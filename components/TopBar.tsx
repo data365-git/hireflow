@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BellIcon, ChevronDownIcon } from "lucide-react";
+import { BellIcon, ChevronDownIcon, Menu as MenuIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
 import { useState, useEffect, useRef } from "react";
@@ -61,7 +61,7 @@ function formatUserChip(name: string | undefined): string {
   return lastInitial ? `${first} ${lastInitial}.` : first;
 }
 
-export function TopBar() {
+export function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const pathname = usePathname();
   const breadcrumb = useBreadcrumb(pathname);
   const { user, signOut } = useAuth();
@@ -88,8 +88,21 @@ export function TopBar() {
 
   return (
     <header className="bg-surface border-b border-border h-11 px-6 flex items-center justify-between shrink-0">
-      {/* Left: breadcrumb */}
-      <span className="text-body font-semibold text-text truncate">{breadcrumb}</span>
+      {/* Left: mobile menu toggle + breadcrumb */}
+      <div className="flex items-center min-w-0">
+        {/* Mobile menu toggle — lg:hidden */}
+        {onMobileMenuToggle && (
+          <button
+            type="button"
+            onClick={onMobileMenuToggle}
+            className="lg:hidden mr-3 flex items-center justify-center size-8 rounded-md text-muted hover:bg-surface-2 hover:text-text transition-colors shrink-0"
+            aria-label="Open menu"
+          >
+            <MenuIcon className="size-4" />
+          </button>
+        )}
+        <span className="text-body font-semibold text-text truncate">{breadcrumb}</span>
+      </div>
 
       {/* Right: actions */}
       <div className="flex items-center gap-2">
