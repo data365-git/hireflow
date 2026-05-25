@@ -27,7 +27,11 @@
     "purge:vacancies": "tsx scripts/purge-old-deleted-vacancies.ts",
     "backup:run": "tsx scripts/backup-cron.ts",
     "check:i18n": "tsx scripts/check-i18n.ts",
-    "expire:test-users": "tsx scripts/expire-bot-test-users.ts"
+    "expire:test-users": "tsx scripts/expire-bot-test-users.ts",
+    "test:e2e": "dotenv -e .env.test -- vitest run --config vitest.e2e.config.ts",
+    "test:e2e:watch": "dotenv -e .env.test -- vitest --config vitest.e2e.config.ts",
+    "test:e2e:load": "dotenv -e .env.test -- vitest run --config vitest.e2e.config.ts tests/e2e/load",
+    "test:e2e:ui": "dotenv -e .env.test -- vitest --ui --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -58,11 +62,14 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.7",
+    "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "tsx": "^4.22.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.7"
   }
 }

@@ -1,6 +1,7 @@
 .env
 .env.local
 .env*.local
+.env.test
 node_modules/
 .next/
 drizzle/*
